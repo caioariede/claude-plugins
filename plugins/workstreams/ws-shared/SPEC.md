@@ -39,10 +39,11 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
   use it; more than one → list the matches and require the `<ws-id>:` prefix; none
   → error. Skills reference this rule; never restate it.
 - **slug** = lowercase; non-alnum → `-`; collapse repeats; trim.
-- **branch** = `feat-<slug>` unless the caller supplies one. Git refnames disallow
-  `:`, so the branch is not the canonical id. If `feat-<slug>` already exists in
-  the target repo (local or remote), disambiguate with `-N` — a repo-scoped git
-  check, separate from unit-id uniqueness.
+- **branch** = `<slug>` unless the caller supplies one. Git refnames disallow
+  `:`, so the branch is not the canonical id. If `<slug>` already exists in the
+  target repo (local or remote) — including when the slug matches the base
+  branch — disambiguate with `-N`, a repo-scoped git check separate from
+  unit-id uniqueness.
 - **base** = the repo's default branch — the active `forge` flavor's `default-branch` (SPEC §Flavors) — unless a base is supplied. A supplied base may be a unit-id → that unit's branch (stacking).
 - **repo** (`ws-start`) = resolved by precedence: (1) explicit `--repo org/repo`;
   (2) if `--base` is a unit-id, that unit's repo (stacking requires the same repo);
