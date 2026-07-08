@@ -11,7 +11,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md` first. **Read-only** — it deriv
 
 Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status rules) and prints THE single next command and any units unblocked in parallel. It does not mutate the store — the command it names does.
 
-## Decision ladder (first match wins)
+## Decision table (first match wins)
 
 | # | If | Then |
 |---|----|------|
@@ -21,15 +21,15 @@ Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status ru
 | 4 | a **backlog** planned unit whose base is **merged/`main`** and it's **not yet on the ledger** | `ws-start <ws> "<what>" --base <dep>` |
 | 5 | every unit is merged | workstream done — close it |
 
-Rung 4's planned units live in `backlog.md` `## Planned units`. When the stack is otherwise idle, a **deferred follow-up** (`WF#` in `backlog.md`) worth doing is promotable — recommend `ws-start` a unit for it (then check it off in `backlog.md`).
+Rule 4's planned units live in `backlog.md` `## Planned units`. When the stack is otherwise idle, a **deferred follow-up** (`WF#` in `backlog.md`) worth doing is promotable — recommend `ws-start` a unit for it (then check it off in `backlog.md`).
 
 ## Emitting the command
 
-Walk the ladder first; write the `Next:` line **last** — never lead with a guess you then reason away. The emitted line must be the winning rung's command, verbatim.
+Walk the rules first; write the `Next:` line **last** — never lead with a guess you then reason away. The emitted line must be the winning rule's command, verbatim.
 
 ```
 Next: <one resolved command>   (unit: <slug>)   ← name the unit when the command is unit-scoped
-Also unblocked (parallel): <unit>, <unit>       ← only when rung 4 has >1 qualifying unit
+Also unblocked (parallel): <unit>, <unit>       ← only when rule 4 has >1 qualifying unit
 ```
 
 Emit exactly **one** clean, executable line:
@@ -37,9 +37,9 @@ Emit exactly **one** clean, executable line:
 - no retracted or false-start lines, no "wait"/"hold on" in the final answer; if you revise mid-reasoning, re-emit the whole command cleanly from the final decision;
 - `ws-start <ws-id> "<what>" [--base <unit-id|branch>]` — the **first positional is the workstream id**, the unit is slugged from the quoted `"<what>"`, and `--base` is a merged dependency's unit-id or branch. Never put a unit name in the first slot.
 
-Rung 2 (open the PR) fires **only** when a unit has **no PR AND every task checked**. Any unchecked task ⇒ rung 3 (`ws-resume`), not a PR.
+Rule 2 (open the PR) fires **only** when a unit has **no PR AND every task checked**. Any unchecked task ⇒ rule 3 (`ws-resume`), not a PR.
 
-## Two rungs agents get wrong — say the counter out loud
+## Two rules agents get wrong — say the counter out loud
 
 - **Tasks done + no PR ⇒ SHIP, don't spin.** 6/6 checked with no PR means **open the PR** in the unit's window. Do NOT `ws-resume` it again (the work is done), and do NOT `ws-start` the next unit yet — an un-opened PR is unshipped work.
 - **A merged base ⇒ START the dependent, not restack it.** When a base PR merged and its dependents are **not yet created**, `ws-start` them. `ws-restack` is ONLY for a dependent that **already exists** and drifted. And when more than one unit shares a satisfied base, **list them all** (each its own window) — do not tunnel onto one.
