@@ -14,15 +14,15 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 2. Ensure the worktree exists and self-locate into it (SPEC "Command scope"):
    - already inside it (branch matches) → continue;
    - worktree exists but you're elsewhere → `cd` into it in the current session;
-   - worktree gone but branch exists → `wmx worktree create <branch> --base <base>` (or open a window on it via `wmx window open <branch>`), then work there;
+   - worktree gone but branch exists → recreate it via the active `worktree-management` flavor's `create` for `<branch>` off `<base>` (then `open-window` if defined), then work there;
    - branch also gone → fresh start off the repo default branch (per SPEC); the store's progress is your restart baseline.
-3. Reconcile base per SPEC Restack reconciliation — if `gh pr view --json baseRefName` differs from the unit's recorded base, realign and append a `restack` line.
+3. Reconcile base per SPEC Restack reconciliation — if the active `forge` flavor's `pr-status` base differs from the unit's recorded base, realign and append a `restack` line.
 4. Load state: read `charter.md` (why this unit exists + its `design:`), `progress.md` (Tasks + Follow-ups), and `log.md` (recent notes); run `git log -5` and the repo's verification command to confirm the code state.
 5. Detect the unit's state and take the one right next action — **announce it first, then act.** Actions are conditioned on the state, so re-running is safe: it never repeats a finished step, and it writes to the store only on a genuine transition (never a bare "resumed" line — see SPEC idempotency note).
-   - **Unplanned** (`## Tasks` empty): read `charter.md` and its `design:` spec, note what the base branch already ships (build on it, don't redo it), then plan with **superpowers:writing-plans** — write the tasks as `T1..` into `progress.md`. Then proceed as "in progress".
-   - **In progress** (some `T#` unchecked): continue at the first unchecked task via **superpowers:subagent-driven-development** — update `progress.md`, append decisions/notes to `log.md`, record follow-ups per SPEC "Follow-up placement" (deferred → `backlog.md`).
-   - **Done** (every `T#` checked) **with no PR** (per `gh`): the work is finished but unshipped — ship it (opens the PR) with **superpowers:finishing-a-development-branch**.
-   - If a `stacked-on` unit is not yet merged (per `gh`), surface it and let the user decide before proceeding.
+   - **Unplanned** (`## Tasks` empty): read `charter.md` and its `design:` spec, note what the base branch already ships (build on it, don't redo it), then plan via the active `spec-driven-development` flavor's `plan` (SPEC §Flavors) — write the tasks as `T1..` into `progress.md`. Then proceed as "in progress".
+   - **In progress** (some `T#` unchecked): continue at the first unchecked task via the active `spec-driven-development` flavor's `execute` — then update `progress.md`, append decisions/notes to `log.md`, record follow-ups per SPEC "Follow-up placement" (deferred → `backlog.md`).
+   - **Done** (every `T#` checked) **with no PR** (per the active `forge` flavor's `pr-status`): the work is finished but unshipped — ship it via the active `spec-driven-development` flavor's `ship` (which opens the PR via the `forge` flavor's `pr-create` + `pr-ready`).
+   - If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide before proceeding.
 
 ## Next
 After the action, `ws-next` — it runs from any session; offer to run it now (default yes) (SPEC Next-step chaining).
