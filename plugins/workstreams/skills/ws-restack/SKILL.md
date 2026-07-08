@@ -11,7 +11,7 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 
 ## Steps
 1. Resolve `unit-id` → `branch`, worktree, `repo`, current PR.
-2. Resolve `<new-base>`: if **omitted**, use the PR's live `baseRefName` (the GitHub auto-retarget case — the base a merged parent left behind); if it matches a roster unit-id, use that unit's branch; else treat it as a branch. Error only if none resolves.
+2. Resolve `<new-base>`: if **omitted**, use the PR's live `baseRefName` (the GitHub auto-retarget case — the base a merged parent left behind); if it matches a ledger unit-id, use that unit's branch; else treat it as a branch. Error only if none resolves.
 3. Reconcile per SPEC Restack reconciliation. When *we* initiate (the PR's `baseRefName` is unchanged remotely), also run `gh pr edit <pr> --base <new-base>` first. On conflicts, stop and report.
 
 Auto case (GitHub already retargeted): skip the `gh pr edit` — see SPEC Restack reconciliation.

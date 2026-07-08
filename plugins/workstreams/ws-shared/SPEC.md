@@ -6,7 +6,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 ```
 ~/.claude/workstreams/<ws-id>/
   workstream.md          # metadata only
-  units.md               # append-only roster (unit ↔ repo/branch identity map)
+  units.md               # append-only ledger (unit ↔ repo/branch identity map)
   backlog.md             # workstream future work: planned units + deferred follow-ups (mutable)
   units/<unit-id>/
     charter.md           # static: why this unit exists (unit-level workstream.md); set at ws-start, read by ws-resume
@@ -21,13 +21,13 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | base / did GitHub retarget | GitHub | `gh pr view --json baseRefName` |
 | PR number + draft/ready/merged | GitHub | `gh pr view --json number,isDraft,state` |
 | status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. PR merged → `merged` · 3. PR ready → `in-review` · 4. PR draft or no PR → `building` |
-| unit ↔ repo/branch | `units.md` roster | set once at `ws-start` |
+| unit ↔ repo/branch | `units.md` ledger | set once at `ws-start` |
 | unit purpose / scope (why it exists) | unit `charter.md` | set once at `ws-start`; read by `ws-resume` |
 | tasks + in-flight follow-ups | unit `progress.md` | resolved before this unit's PR merges |
 | deferred follow-ups + planned units | `backlog.md` | outlive the unit (see Follow-up placement) |
 | decisions / notes / drop / restack history | `log.md` | append-only |
 
-**Invariants:** log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a roster slug matches it (dedup vs roster) — "not started" is not a derived unit *status*, it is a backlog item without a roster line yet.
+**Invariants:** log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a ledger slug matches it (dedup vs ledger) — "not started" is not a derived unit *status*, it is a backlog item without a ledger line yet.
 
 ## IDs & conventions
 - **ws-id** = `<YYYY-MM-DD>-<slug(name)>` = the store dir name (`date -u +%Y-%m-%d`).
@@ -35,7 +35,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 - **slug** = lowercase; non-alnum → `-`; collapse repeats; trim.
 - **branch** = `feat-<unit-id>` unless the caller supplies one.
 - **base** = the repo's default branch — `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` — unless a base is supplied. A supplied base may be another unit-id → that unit's branch (stacking).
-- **restart** = re-running `ws-start` with an intent whose slug already exists: the new unit takes the next `-N` suffix and records `restart-of=<original-unit-id>` on its roster line.
+- **restart** = re-running `ws-start` with an intent whose slug already exists: the new unit takes the next `-N` suffix and records `restart-of=<original-unit-id>` on its ledger line.
 - **timestamps** = `date -u +%Y-%m-%dT%H:%MZ`.
 
 ## File formats
@@ -49,7 +49,7 @@ design: <optional path to umbrella spec>
 created: <ts>
 ---
 ```
-**`units.md`** (append-only roster; one line per `ws-start`, never edit prior lines):
+**`units.md`** (append-only ledger; one line per `ws-start`, never edit prior lines):
 ```
 # Units — <ws-id> (append-only)
 - <ts>  <unit-id>  "<title>"  repo=<org/repo>  branch=<b>  [restart-of=<id>]  [stacked-on=<id>]
@@ -61,7 +61,7 @@ created: <ts>
 ## Follow-ups
 - [ ] WF<n>  <desc>  (from <unit-id>, <ts>)
 ```
-Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a roster unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream.
+Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a ledger unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream.
 
 **`units/<unit-id>/charter.md`** (static — the unit-level `workstream.md`; no log, no status, nothing volatile). Written once at `ws-start`, read by `ws-resume` to reconstruct the unit's intent with no chat scrollback:
 ```
@@ -119,4 +119,4 @@ After `ws-start` creates a unit, the work happens in its window — not the hub.
 Every `ws-*` skill ends by naming the single best next command. **Same-session** (hub→hub): offer to run it now (default yes), then run it. **Cross-window** (hub→unit or unit→hub): name the command + its window — never auto-run. `ws-next` is the router; defer to it when the next step isn't singular.
 
 ## Worktree = code only
-Never write store files into a worktree. Find a unit's worktree via the roster branch (+ wmx). Drop and recreate worktrees freely — progress survives in the store.
+Never write store files into a worktree. Find a unit's worktree via the ledger branch (+ wmx). Drop and recreate worktrees freely — progress survives in the store.

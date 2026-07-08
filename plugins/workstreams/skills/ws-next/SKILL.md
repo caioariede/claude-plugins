@@ -9,7 +9,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md` first. **Read-only** — it deriv
 
 ## What it does
 
-Reads the roster (`units.md`) and each unit's **derived status** (SPEC status rules) and prints THE single next command, which session to run it in, and any units that are unblocked in parallel. It does not mutate the store — the command it names does.
+Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status rules) and prints THE single next command, which session to run it in, and any units that are unblocked in parallel. It does not mutate the store — the command it names does.
 
 ## Decision ladder (first match wins)
 
@@ -18,7 +18,7 @@ Reads the roster (`units.md`) and each unit's **derived status** (SPEC status ru
 | 1 | a **created** unit's base PR merged / GitHub retargeted it, and its branch isn't rebased yet | `ws-restack <unit>` | hub |
 | 2 | a unit's tasks are **all checked** but it has **no PR** | **open its PR** (`gh pr create`, or superpowers:finishing-a-development-branch) | unit window |
 | 3 | a unit is **in progress** (unchecked tasks) | `ws-resume <unit>` | unit window |
-| 4 | a **backlog** planned unit whose base is **merged/`main`** and it's **not yet on the roster** | `ws-start <ws> "<what>" --base <dep>` | hub |
+| 4 | a **backlog** planned unit whose base is **merged/`main`** and it's **not yet on the ledger** | `ws-start <ws> "<what>" --base <dep>` | hub |
 | 5 | every unit is merged | workstream done — close it | hub |
 
 Rung 4's planned units live in `backlog.md` `## Planned units`. When the stack is otherwise idle, a **deferred follow-up** (`WF#` in `backlog.md`) worth doing is promotable — recommend `ws-start` a unit for it (then check it off in `backlog.md`).

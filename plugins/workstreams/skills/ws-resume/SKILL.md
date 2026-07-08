@@ -10,7 +10,7 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 **Input:** `$ARGUMENTS` = `[unit-id]`. If omitted, infer it from the current worktree's branch by scanning `~/.claude/workstreams/*/units.md`.
 
 ## Steps
-1. Resolve `unit-id` → `ws-id`, `repo`, `branch` from the roster.
+1. Resolve `unit-id` → `ws-id`, `repo`, `branch` from the ledger.
 2. Ensure the worktree exists:
    - already inside it (branch matches) → continue;
    - worktree gone but branch exists → `wmx window open <branch>` (or `wmx worktree create <branch> --base <base>`);

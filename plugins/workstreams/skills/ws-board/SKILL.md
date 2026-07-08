@@ -12,7 +12,7 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 This skill is **read-only** — it derives everything and writes nothing.
 
 ## Steps
-1. Read the `units.md` roster and `backlog.md`. For each roster unit derive its **status** per SPEC status rules and its **task/follow-up counts** from `progress.md`.
+1. Read the `units.md` ledger and `backlog.md`. For each ledger unit derive its **status** per SPEC status rules and its **task/follow-up counts** from `progress.md`.
 2. Render markdown grouped by state — copy-paste ready:
    ```
    *<name>* — <merged>/<total> units done
@@ -23,7 +23,7 @@ This skill is **read-only** — it derives everything and writes nothing.
    🗑 Dropped       • <title>
    ```
    "Not started" = `backlog.md` `## Planned units` whose `<slug>` has **no
-   matching roster unit** (dedup vs roster — starting one drops it from this
+   matching ledger unit** (dedup vs ledger — starting one drops it from this
    row automatically). Then list open follow-ups: per-unit in-flight
    (`F#` + unit) and workstream-deferred from `backlog.md` (`WF#`).
 3. With a `unit-id`: print that unit's full `progress.md` checklist plus recent `log.md` notes.
