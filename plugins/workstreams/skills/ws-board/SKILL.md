@@ -7,7 +7,7 @@ description: Use when the user wants to see or share where a workstream stands â
 
 Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 
-**Input:** `$ARGUMENTS` = `[ws-id] [unit-id]`. A lone token that matches a store dir name is the `ws-id`, else it is a `unit-id`. With 0 args and one workstream, use it; with 0 args and more than one, list them and ask which.
+**Input:** `$ARGUMENTS` = `[ws-id] [unit-id]`. A lone token that matches a store dir name is the `ws-id`, else it is a `unit-id` resolved via the SPEC bare-slug resolver. With 0 args and one workstream, use it; with 0 args and more than one, list them and ask which.
 
 This skill is **read-only** â€” it derives everything and writes nothing.
 
