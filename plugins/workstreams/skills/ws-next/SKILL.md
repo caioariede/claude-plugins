@@ -9,17 +9,17 @@ Read `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md` first. **Read-only** — it deriv
 
 ## What it does
 
-Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status rules) and prints THE single next command, which session to run it in, and any units that are unblocked in parallel. It does not mutate the store — the command it names does.
+Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status rules) and prints THE single next command and any units unblocked in parallel. It does not mutate the store — the command it names does.
 
 ## Decision ladder (first match wins)
 
-| # | If | Then | Session |
-|---|----|------|---------|
-| 1 | a **created** unit's base PR merged / GitHub retargeted it, and its branch isn't rebased yet | `ws-restack <unit>` | hub |
-| 2 | a unit's tasks are **all checked** but it has **no PR** | **open its PR** (`gh pr create`, or superpowers:finishing-a-development-branch) | unit window |
-| 3 | a unit is **in progress** (unchecked tasks) | `ws-resume <unit>` | unit window |
-| 4 | a **backlog** planned unit whose base is **merged/`main`** and it's **not yet on the ledger** | `ws-start <ws> "<what>" --base <dep>` | hub |
-| 5 | every unit is merged | workstream done — close it | hub |
+| # | If | Then |
+|---|----|------|
+| 1 | a **created** unit's base PR merged / GitHub retargeted it, and its branch isn't rebased yet | `ws-restack <unit>` |
+| 2 | a unit's tasks are **all checked** but it has **no PR** | **open its PR** (`gh pr create`, or superpowers:finishing-a-development-branch) |
+| 3 | a unit is **in progress** (unchecked tasks) | `ws-resume <unit>` |
+| 4 | a **backlog** planned unit whose base is **merged/`main`** and it's **not yet on the ledger** | `ws-start <ws> "<what>" --base <dep>` |
+| 5 | every unit is merged | workstream done — close it |
 
 Rung 4's planned units live in `backlog.md` `## Planned units`. When the stack is otherwise idle, a **deferred follow-up** (`WF#` in `backlog.md`) worth doing is promotable — recommend `ws-start` a unit for it (then check it off in `backlog.md`).
 
@@ -28,8 +28,8 @@ Rung 4's planned units live in `backlog.md` `## Planned units`. When the stack i
 Walk the ladder first; write the `Next:` line **last** — never lead with a guess you then reason away. The emitted line must be the winning rung's command, verbatim.
 
 ```
-Next: <one resolved command> — run in <the hub | the unit's window>.
-Also unblocked (parallel): <unit>, <unit>   ← only when rung 4 has >1 qualifying unit
+Next: <one resolved command>   (unit: <slug>)   ← name the unit when the command is unit-scoped
+Also unblocked (parallel): <unit>, <unit>       ← only when rung 4 has >1 qualifying unit
 ```
 
 Emit exactly **one** clean, executable line:
@@ -50,9 +50,12 @@ Rung 2 (open the PR) fires **only** when a unit has **no PR AND every task check
 - Recommending `ws-restack` for a dependent that isn't created yet → that's a `ws-start`.
 - Naming one startable unit when two share a satisfied base → **list both**.
 
-## Session model
+## Scope
 
-Orchestration (`ws-init`, `ws-start`, `ws-restack`, `ws-next`, `ws-board`) runs in the **hub** (your launch session). Execution (`ws-resume`, opening the PR, coding) runs in the **unit's own window**. `ws-next` names both the command and where it belongs.
+Every command here runs from any session (SPEC "Command scope"). Unit-scoped
+commands (`ws-resume`, `ws-restack`) self-locate their worktree; the rest touch
+only the store + GitHub. Name the unit for a unit-scoped recommendation so a
+parallel-session user knows which one — never mandate a place to run it.
 
 ## Chain
-After naming the command: hub command (`ws-start`/`ws-restack`) → offer to run it now (default yes), then run it. Unit-window command (`ws-resume` / open PR) → name the window; don't auto-run (SPEC Next-step chaining).
+After naming the command, offer to run it now (default yes), then run it — it works from the current session. Mention the unit for a unit-scoped command (SPEC Next-step chaining).
