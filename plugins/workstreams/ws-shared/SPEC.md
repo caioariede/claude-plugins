@@ -106,17 +106,27 @@ Then append `restack base=<new-base> was=<recorded-base>` to `log.md`.
 
 **Gate:** compare `gh pr view --json baseRefName` to the recorded base. If it is **unchanged** remotely, we are initiating — also run `gh pr edit <pr> --base <new-base>` first. If it has **already changed** (GitHub auto-retargeted when a base PR merged), skip the `gh pr edit`. Only `ws-restack` (explicit) and `ws-resume` (on detecting drift) reconcile; `ws-board` is read-only and never reconciles.
 
-## Sessions — hub vs unit
+## Command scope
 
-Two roles, two places — this is where work actually runs:
+Every `ws-*` command runs from **any session** and self-locates — the workflow
+reads identically whether you use one session or many. This contract defines no
+central "hub" and never says "run this here, that there." A dedicated
+orchestration terminal is your own convention to name, not a role defined here.
 
-- **Hub** = your launch session (in the main repo). **Orchestration only:** `ws-init`, `ws-start`, `ws-restack`, `ws-next`, `ws-board`, `ws-drop`. No code work here.
-- **Unit window** = the tmux window `ws-start --focus` opened, cwd = that unit's worktree. **Execution:** `ws-resume`, opening the PR, coding.
-
-After `ws-start` creates a unit, the work happens in its window — not the hub. `ws-resume` runs there. `ws-next` names both the command and which of the two to run it in.
+- **Workstream-scoped** — touches only the global store + GitHub (`ws-init`,
+  `ws-start`, `ws-next`, `ws-board`, `ws-drop`). Runs from anywhere.
+- **Unit-scoped** — git operations on one unit's branch, so it resolves that
+  unit's worktree first (`ws-resume`, `ws-restack`). `ws-resume` `cd`s into the
+  worktree in the current session (already inside → continue); `ws-restack`
+  operates via `git -C <worktree>`. A window per unit is optional ergonomics for
+  parallel work, never required.
 
 ## Next-step chaining
-Every `ws-*` skill ends by naming the single best next command. **Same-session** (hub→hub): offer to run it now (default yes), then run it. **Cross-window** (hub→unit or unit→hub): name the command + its window — never auto-run. `ws-next` is the router; defer to it when the next step isn't singular.
+Every `ws-*` skill ends by naming the single best next command and **offering to
+run it now (default yes)**. It may *mention* the relevant unit so a
+parallel-session user knows where they would go — informational, not a
+precondition to running. `ws-next` is the router; defer to it when the next step
+isn't singular.
 
 ## Worktree = code only
 Never write store files into a worktree. Find a unit's worktree via the ledger branch (+ wmx). Drop and recreate worktrees freely — progress survives in the store.
