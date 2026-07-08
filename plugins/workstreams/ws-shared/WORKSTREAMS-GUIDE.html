@@ -391,8 +391,8 @@
 
 <ol class="steps">
 <li><b>Create a workstream</b> with <code>ws-init</code>. Give it a name; it computes a dated <code>ws-id</code>, scaffolds the store, and reports the id you'll pass to every later command. It creates no units or worktrees — just the container.</li>
-<li><b>Spin the first unit</b> with <code>ws-start &lt;ws-id&gt; "&lt;what&gt;"</code>. It slugs the intent into a <code>unit-id</code>, cuts a <code>feat-&lt;unit-id&gt;</code> branch off the repo's default branch, and opens a focused worktree + window via <code>wmx</code>.</li>
-<li><b>Let the fresh agent plan and build</b> in that new window. <code>ws-start</code> prints a bootstrap prompt telling it to read the workstream spec, plan tasks as <code>T1..</code> into <code>progress.md</code>, execute, and append decisions to <code>log.md</code>.</li>
+<li><b>Spin the first unit</b> with <code>ws-start &lt;ws-id&gt; "&lt;what&gt;"</code>. It mints a globally-unique <code>unit-id</code> (<code>&lt;ws-id&gt;:&lt;slug&gt;</code>), cuts a <code>feat-&lt;slug&gt;</code> branch off the base, and creates a worktree via <code>wmx</code> (a per-unit window is optional).</li>
+<li><b>Plan and build the unit</b> with <code>ws-resume</code> — from the current session or the unit's window. It reads the charter + design, plans tasks as <code>T1..</code> into <code>progress.md</code>, executes, and appends decisions to <code>log.md</code>.</li>
 <li><b>Check status</b> anytime with <code>ws-board</code>. It's read-only: it reads the ledger, derives each unit's status live from git and GitHub, and renders a copy-paste-ready board grouped by state.</li>
 <li><b>Pick work back up</b> with <code>ws-resume &lt;unit-id&gt;</code> — it finds the unit's worktree, reconciles any base drift, and drops you back into context.</li>
 </ol>
@@ -409,22 +409,15 @@
 <div class="cmd">
 <div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; "&lt;what&gt;" [--base &lt;unit-id|branch&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> starting a new unit of work in an existing workstream.</p>
-<div class="cmd-body">Resolves the workstream, slugs the intent into a <code>unit-id</code>, and creates the worktree + window:
-<pre class="code">wmx worktree create feat-&lt;unit-id&gt; --base &lt;base&gt; --focus</pre>
-It appends the ledger line, seeds <code>progress.md</code> and <code>log.md</code>, then prints the agent's bootstrap prompt. Pass <code>--base &lt;unit-id&gt;</code> to stack on another unit's branch. Omit <code>&lt;ws-id&gt;</code> when exactly one workstream exists.</div>
+<div class="cmd-body">Resolves the workstream, mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, and creates the worktree:
+<pre class="code">wmx worktree create feat-&lt;slug&gt; --base &lt;base&gt;</pre>
+It appends the ledger line and seeds <code>progress.md</code> and <code>log.md</code>; run <code>ws-resume</code> next to plan and build. Pass <code>--base &lt;unit-id&gt;</code> to stack on another unit's branch (its repo is inherited); <code>--repo &lt;org/repo&gt;</code> overrides the cwd repo. Omit <code>&lt;ws-id&gt;</code> when exactly one workstream exists.</div>
 <pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "template list page"</pre>
 </div>
 
-<p>Inside the new window, the fresh agent receives this prompt and takes over — planning with <b>writing-plans</b>, executing with <b>subagent-driven-development</b>:</p>
-<pre class="diagram">You are unit &lt;unit-id&gt; of workstream &lt;ws-id&gt;.
-Read ~/.claude/workstreams/&lt;ws-id&gt;/workstream.md and its design: spec.
-Plan this unit with superpowers writing-plans, writing tasks as T1..
-  into units/&lt;unit-id&gt;/progress.md.
-Then execute via subagent-driven-development, checking off tasks in
-  that progress.md and appending decisions/notes to log.md.
-Never write progress files into the worktree.</pre>
+<p><code>ws-resume</code> takes over from here — no bootstrap prompt is printed. It reconstructs the unit's intent from its <code>charter.md</code> and the workstream's <code>design:</code> spec, plans with <b>writing-plans</b> (tasks as <code>T1..</code> in <code>progress.md</code>), then executes with <b>subagent-driven-development</b>, appending decisions to <code>log.md</code>. Store files never live in the worktree.</p>
 
-<aside class="note note-warn"><b>Gotcha.</b> Launching <code>claude</code> in the new window is manual unless <code>wmx</code> autostarts it — if the window opens empty, start the agent there yourself.</aside>
+<aside class="note note-tip"><b>Optional window.</b> Run <code>ws-resume</code> in the current session, or open a per-unit <code>wmx</code> window for parallel work — if that window opens empty, launch <code>claude</code> there yourself.</aside>
 
 <div class="cmd">
 <div class="cmd-head"><span class="cmd-name">ws-board</span><span class="cmd-sig">[ws-id] [unit-id]</span></div>
@@ -463,7 +456,7 @@ Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) a
 <div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; &lt;what this unit does&gt; [--base &lt;unit-id|branch&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> starting a new unit of work in an existing workstream — its own worktree plus ledger entry. Run <code>ws-init</code> first if no workstream exists.</p>
 <div class="cmd-body">
-Derives <code>unit-id = slug(what)</code>, resolves the base (repo default, or another unit's branch to stack on), then creates the worktree and window via <code>wmx worktree create feat-&lt;unit-id&gt; --base &lt;base&gt; --focus</code>. Appends the ledger line, seeds <code>progress.md</code> and <code>log.md</code>, and prints a bootstrap prompt for the fresh agent.
+Mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, resolves the repo (<code>--repo</code> › a <code>--base</code> unit's repo › cwd) and the base, then creates the worktree via <code>wmx worktree create feat-&lt;slug&gt; --base &lt;base&gt;</code>. Appends the ledger line and seeds <code>progress.md</code> and <code>log.md</code>; <code>ws-resume</code> plans and builds.
 </div>
 <pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "add is_template flag" --base schema-migration</pre>
 </div>
@@ -550,9 +543,10 @@ Shows exactly what will be removed and requires explicit confirmation, then remo
 <p>Identity is deterministic, so the same intent always resolves to the same place:</p>
 <ol class="steps">
 <li><b>ws-id</b> = <code>&lt;YYYY-MM-DD&gt;-&lt;slug(name)&gt;</code> (from <code>date -u +%Y-%m-%d</code>) — this is the store directory name.</li>
-<li><b>unit-id</b> = <code>slug(what)</code>; if the directory already exists, the next unit takes a <code>-N</code> suffix (<code>-2</code>, <code>-3</code>…) and the old one is kept as history.</li>
-<li><b>branch</b> = <code>feat-&lt;unit-id&gt;</code> unless the caller supplies one.</li>
+<li><b>unit-id</b> = <code>&lt;ws-id&gt;:&lt;slug(what)&gt;</code>, globally unique by construction. A bare <code>&lt;slug&gt;</code> works as shorthand — resolved across all workstreams (one match wins; several prompt for the <code>&lt;ws-id&gt;:</code> prefix). Re-running the same intent takes a <code>-N</code> suffix and records <code>restart-of</code> (restart only).</li>
+<li><b>branch</b> = <code>feat-&lt;slug&gt;</code> unless the caller supplies one; disambiguated with <code>-N</code> on a git-branch collision in the target repo (<code>:</code> is illegal in refnames, so the branch is not the canonical id).</li>
 <li><b>base</b> = the repo's default branch, resolved via <code>gh repo view --json defaultBranchRef -q .defaultBranchRef.name</code> — unless a base is supplied. A supplied base may name another unit-id, resolving to that unit's branch (stacking).</li>
+<li><b>repo</b> (<code>ws-start</code>) resolves by precedence: explicit <code>--repo</code> › a <code>--base</code> unit's repo › the cwd repo. An explicit <code>--repo</code> that contradicts a <code>--base</code> unit's repo is an error.</li>
 </ol>
 
 <aside class="note note-tip"><b>Recorded base, not live base.</b> A unit's recorded base is the base on its last <code>created</code> or <code>restack</code> line in <code>log.md</code> — never the live PR <code>baseRefName</code>, which GitHub may have moved when a base PR merged. Restack reconciles the two.</aside>
@@ -562,14 +556,14 @@ Shows exactly what will be removed and requires explicit confirmation, then remo
 <aside class="note note-rule"><b>Golden rule.</b> Worktrees are disposable code checkouts; all durable state lives in the store at <code>~/.claude/workstreams/&lt;ws-id&gt;/</code>. Drop and recreate worktrees freely — progress survives because it was never stored in them.</aside>
 
 <h3>1 · Run two units in parallel</h3>
-<p>Each unit gets its own worktree and window off a shared store, so two units run at once without stepping on each other. Start them from the same <code>ws-id</code>; the ledger and per-unit <code>progress.md</code> keep them separate.</p>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; "&lt;what&gt;" [--base &lt;unit-id|branch&gt;]</span></div><p class="cmd-when"><b>Use when</b> starting a new unit in an existing workstream — its own worktree, window, and ledger entry.</p><div class="cmd-body">Run it once per unit. Each call creates <code>feat-&lt;unit-id&gt;</code> via <code>wmx worktree create … --focus</code>, appends a ledger line, and seeds that unit's <code>progress.md</code> + <code>log.md</code>. The two units share only the store dir — code stays isolated per worktree.</div><pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "template CRUD api"
+<p>Each unit gets its own worktree off a shared store, so two units run at once without stepping on each other — open a per-unit window if you want them side by side. Start them from the same <code>ws-id</code>; the ledger and per-unit <code>progress.md</code> keep them separate.</p>
+<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; "&lt;what&gt;" [--base &lt;unit-id|branch&gt;] [--repo &lt;org/repo&gt;]</span></div><p class="cmd-when"><b>Use when</b> starting a new unit in an existing workstream — its own worktree and ledger entry.</p><div class="cmd-body">Run it once per unit. Each call creates <code>feat-&lt;slug&gt;</code> via <code>wmx worktree create</code>, appends a ledger line, and seeds that unit's <code>progress.md</code> + <code>log.md</code>. Units share only the store dir — code stays isolated per worktree.</div><pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "template CRUD api"
 $ /ws-start 2026-07-03-task-templates "template picker ui"</pre></div>
 <aside class="note note-tip"><b>Tip.</b> To stack the second unit on the first instead of running truly parallel, pass <code>--base &lt;unit-id&gt;</code>; it resolves to that unit's branch and records <code>stacked-on</code> on the ledger line.</aside>
 
 <h3>2 · Resume a unit cold — new window or next day</h3>
 <p>Nothing is carried in your head or the shell: <code>ws-resume</code> reads the store and reconstructs the unit. Run it from inside the worktree (id inferred from the branch) or name the unit explicitly.</p>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id]</span></div><p class="cmd-when"><b>Use when</b> picking work back up — a fresh window, the next day, or after the worktree was dropped.</p><div class="cmd-body"><ol class="steps"><li>Resolves <code>unit-id</code> → <code>ws-id</code>, repo, branch from the ledger (or infers it from the current branch).</li><li>Ensures a worktree: reuses it, reopens via <code>wmx</code> if the branch survives, or fresh-starts off the default branch using stored progress as the baseline if the branch is gone.</li><li>Reconciles the base if the live PR base drifted from the recorded base (see recipe 4).</li><li>Loads <code>progress.md</code> + recent <code>log.md</code>, runs <code>git log -5</code> and verification, then continues at the first unchecked task.</li></ol></div><pre class="cmd-ex">$ /ws-resume template-crud-api</pre></div>
+<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id]</span></div><p class="cmd-when"><b>Use when</b> picking work back up — a fresh window, the next day, or after the worktree was dropped.</p><div class="cmd-body"><ol class="steps"><li>Resolves the unit via the bare-slug resolver → <code>ws-id</code>, repo, branch (or infers it from the current branch).</li><li>Self-locates the worktree: reuses it in place, <code>cd</code>s in if you're elsewhere, reopens via <code>wmx</code> if the branch survives, or fresh-starts off the default branch using stored progress as the baseline if the branch is gone.</li><li>Reconciles the base if the live PR base drifted from the recorded base (see recipe 4).</li><li>Loads <code>progress.md</code> + recent <code>log.md</code>, runs <code>git log -5</code> and verification, then continues at the first unchecked task.</li></ol></div><pre class="cmd-ex">$ /ws-resume template-crud-api</pre></div>
 
 <h3>3 · Drop and restart from scratch</h3>
 <p>Tear the worktree down, then re-run <code>ws-start</code> with the same intent — the id versions to <code>-2</code> and the old unit is kept as history.</p>
@@ -620,7 +614,7 @@ git rebase --onto origin/&lt;new-base&gt; $OLD</pre></div><pre class="cmd-ex">$ 
         ├── progress.md     # MUTABLE work-state: Tasks + Follow-ups checklists
         └── log.md          # APPEND-ONLY: created · dropped · restack · decision · note</pre>
 
-<p><code>ws-id</code> = <code>&lt;YYYY-MM-DD&gt;-&lt;slug(name)&gt;</code> · <code>unit-id</code> = <code>slug(what)</code> (collisions take a <code>-N</code> suffix) · <code>branch</code> = <code>feat-&lt;unit-id&gt;</code>. The store is global, not per repo.</p>
+<p><code>ws-id</code> = <code>&lt;YYYY-MM-DD&gt;-&lt;slug(name)&gt;</code> · <code>unit-id</code> = <code>&lt;ws-id&gt;:&lt;slug(what)&gt;</code> (bare <code>&lt;slug&gt;</code> shorthand; <code>-N</code> = restart) · <code>branch</code> = <code>feat-&lt;slug&gt;</code>. The store is global, not per repo.</p>
 
 <aside class="note note-rule">
 <b>Worktree = code only.</b> Never write store files into a worktree. Find a unit's worktree via its ledger branch; drop and recreate worktrees freely — progress survives in the store.
@@ -663,8 +657,8 @@ git rebase --onto origin/&lt;new-base&gt; $OLD</pre></div><pre class="cmd-ex">$ 
 <td><b>A:</b> The realign still happens, but the <code>gh pr edit</code> step is skipped since GitHub already moved the base. <code>/ws-resume</code> also auto-reconciles: if the live <code>baseRefName</code> differs from the recorded base, it realigns and records a <code>restack</code> line before continuing.</td>
 </tr>
 <tr>
-<td><b>Q:</b> The new window didn't auto-start the agent.</td>
-<td><b>A:</b> Launch <code>claude</code> in the window yourself. <code>ws-start</code> creates the worktree and window, but starting the agent is manual unless wmx is configured to autostart it.</td>
+<td><b>Q:</b> I opened a per-unit window and it didn't auto-start the agent.</td>
+<td><b>A:</b> Windows are optional — run <code>ws-resume</code> in your current session, or launch <code>claude</code> in the window yourself. wmx only autostarts the agent when configured to.</td>
 </tr>
 <tr>
 <td><b>Q:</b> Can a workstream span multiple repos?</td>
@@ -673,7 +667,7 @@ git rebase --onto origin/&lt;new-base&gt; $OLD</pre></div><pre class="cmd-ex">$ 
 </tbody>
 </table>
 
-<aside class="note note-warn"><b>Gotcha.</b> A new window does not always start the agent. If nothing greets you, run <code>claude</code> manually — wmx only autostarts when configured to.</aside>
+<aside class="note note-tip"><b>Optional window.</b> A per-unit window is optional — run <code>ws-resume</code> in your current session instead. If you do open one and it doesn't start the agent, run <code>claude</code> manually (wmx only autostarts when configured to).</aside>
 
 <aside class="note note-tip"><b>Tip.</b> Read-only by design: <code>ws-board</code> never reconciles a base. Only <code>ws-restack</code> (explicit) and <code>ws-resume</code> (on detecting drift) move a branch onto a new base.</aside>
 </section>
