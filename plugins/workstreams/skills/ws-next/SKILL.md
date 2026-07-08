@@ -16,7 +16,7 @@ Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status ru
 | # | If | Then |
 |---|----|------|
 | 1 | a **created** unit's base PR merged / GitHub retargeted it, and its branch isn't rebased yet | `ws-restack <unit>` |
-| 2 | a unit's tasks are **all checked** but it has **no PR** | **open its PR** (`gh pr create`, or superpowers:finishing-a-development-branch) |
+| 2 | a unit's tasks are **all checked** but it has **no PR** | `ws-resume <unit>` — it ships a done unit (opens the PR) |
 | 3 | a unit is **in progress** (unchecked tasks) | `ws-resume <unit>` |
 | 4 | a **backlog** planned unit whose base is **merged/`main`** and it's **not yet on the ledger** | `ws-start <ws> "<what>" --base <dep>` |
 | 5 | every unit is merged | workstream done — close it |
@@ -37,16 +37,16 @@ Emit exactly **one** clean, executable line:
 - no retracted or false-start lines, no "wait"/"hold on" in the final answer; if you revise mid-reasoning, re-emit the whole command cleanly from the final decision;
 - `ws-start <ws-id> "<what>" [--base <unit-id|branch>]` — the **first positional is the workstream id**, the unit is slugged from the quoted `"<what>"`, and `--base` is a merged dependency's unit-id or branch. Never put a unit name in the first slot.
 
-Rule 2 (open the PR) fires **only** when a unit has **no PR AND every task checked**. Any unchecked task ⇒ rule 3 (`ws-resume`), not a PR.
+Rule 2 fires **only** when a unit has **no PR AND every task checked** — emit `ws-resume <unit>`, which ships a done unit. Any unchecked task ⇒ rule 3, also `ws-resume <unit>` — the verb is idempotent, so state decides ship vs. continue. `ws-next` never opens the PR itself; it names the verb that does.
 
 ## Two rules agents get wrong — say the counter out loud
 
-- **Tasks done + no PR ⇒ SHIP, don't spin.** 6/6 checked with no PR means **open the PR** in the unit's window. Do NOT `ws-resume` it again (the work is done), and do NOT `ws-start` the next unit yet — an un-opened PR is unshipped work.
-- **A merged base ⇒ START the dependent, not restack it.** When a base PR merged and its dependents are **not yet created**, `ws-start` them. `ws-restack` is ONLY for a dependent that **already exists** and drifted. And when more than one unit shares a satisfied base, **list them all** (each its own window) — do not tunnel onto one.
+- **Tasks done + no PR ⇒ SHIP, don't spin.** 6/6 checked with no PR ⇒ `ws-resume <unit>` — it ships a done unit (opens the PR). Do NOT `ws-start` the next unit yet — an un-opened PR is unshipped work.
+- **A merged base ⇒ START the dependent, not restack it.** When a base PR merged and its dependents are **not yet created**, `ws-start` them. `ws-restack` is ONLY for a dependent that **already exists** and drifted. And when more than one unit shares a satisfied base, **list them all** — do not tunnel onto one.
 
 ## Red flags — you're about to answer wrong
 
-- Recommending `ws-resume` on a unit that's 6/6 with no PR → **open the PR** instead.
+- Emitting a raw `gh pr create` / `finishing-a-development-branch` for a 6/6-no-PR unit → name `ws-resume <unit>` instead; the router emits `ws-*` verbs only.
 - Recommending `ws-restack` for a dependent that isn't created yet → that's a `ws-start`.
 - Naming one startable unit when two share a satisfied base → **list both**.
 

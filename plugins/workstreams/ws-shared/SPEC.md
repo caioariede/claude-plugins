@@ -139,8 +139,8 @@ orchestration terminal is your own convention to name, not a role defined here.
 - **Unit-scoped** — git operations on one unit's branch, so it resolves that
   unit's worktree first (`ws-resume`, `ws-restack`). `ws-resume` `cd`s into the
   worktree in the current session (already inside → continue); `ws-restack`
-  operates via `git -C <worktree>`. A window per unit is optional ergonomics for
-  parallel work, never required.
+  operates via `git -C <worktree>`. A per-unit multiplexer window is optional
+  ergonomics for parallel work, never required.
 
 ## Next-step chaining
 Every `ws-*` skill ends by naming the single best next command and **offering to
