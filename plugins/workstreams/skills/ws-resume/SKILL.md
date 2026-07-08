@@ -10,10 +10,11 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 **Input:** `$ARGUMENTS` = `[unit-id]`. If omitted, infer it from the current worktree's branch by scanning `~/.claude/workstreams/*/units.md`.
 
 ## Steps
-1. Resolve `unit-id` → `ws-id`, `repo`, `branch` from the ledger.
-2. Ensure the worktree exists:
+1. Resolve the unit via the SPEC bare-slug resolver → `ws-id`, `repo`, `branch`. (With no argument, infer the unit from the current worktree's branch.)
+2. Ensure the worktree exists and self-locate into it (SPEC "Command scope"):
    - already inside it (branch matches) → continue;
-   - worktree gone but branch exists → `wmx window open <branch>` (or `wmx worktree create <branch> --base <base>`);
+   - worktree exists but you're elsewhere → `cd` into it in the current session;
+   - worktree gone but branch exists → `wmx window open <branch>` (or `wmx worktree create <branch> --base <base>`), then work there;
    - branch also gone → fresh start off the repo default branch (per SPEC); the store's progress is your restart baseline.
 3. Reconcile base per SPEC Restack reconciliation — if `gh pr view --json baseRefName` differs from the unit's recorded base, realign and append a `restack` line.
 4. Load state: read `charter.md` (why this unit exists + its `design:`), `progress.md` (Tasks + Follow-ups), and `log.md` (recent notes); run `git log -5` and the repo's verification command to confirm the code state.
@@ -24,4 +25,4 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
    - If a `stacked-on` unit is not yet merged (per `gh`), surface it and let the user decide before proceeding.
 
 ## Next
-After the action, name the hub follow-up: back in the **hub**, `ws-next` (cross-window — name it, don't auto-run here; SPEC Next-step chaining).
+After the action, `ws-next` — it runs from any session; offer to run it now (default yes) (SPEC Next-step chaining).
