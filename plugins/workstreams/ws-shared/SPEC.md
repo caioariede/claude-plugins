@@ -31,11 +31,28 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 
 ## IDs & conventions
 - **ws-id** = `<YYYY-MM-DD>-<slug(name)>` = the store dir name (`date -u +%Y-%m-%d`).
-- **unit-id** = `slug(what)`; if `units/<slug>/` exists, append `-2`, `-3`… (old kept as history).
+- **unit-id** = `<ws-id>:<slug(what)>` — globally unique by construction. On disk
+  the unit lives at `~/.claude/workstreams/<ws-id>/units/<slug>/`; the `<ws-id>:`
+  prefix is the typed, global handle.
+- **bare-slug resolver** — any command taking a unit accepts a bare `<slug>` and
+  resolves it by scanning `~/.claude/workstreams/*/units.md`: exactly one match →
+  use it; more than one → list the matches and require the `<ws-id>:` prefix; none
+  → error. Skills reference this rule; never restate it.
 - **slug** = lowercase; non-alnum → `-`; collapse repeats; trim.
-- **branch** = `feat-<unit-id>` unless the caller supplies one.
-- **base** = the repo's default branch — `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` — unless a base is supplied. A supplied base may be another unit-id → that unit's branch (stacking).
-- **restart** = re-running `ws-start` with an intent whose slug already exists: the new unit takes the next `-N` suffix and records `restart-of=<original-unit-id>` on its ledger line.
+- **branch** = `feat-<slug>` unless the caller supplies one. Git refnames disallow
+  `:`, so the branch is not the canonical id. If `feat-<slug>` already exists in
+  the target repo (local or remote), disambiguate with `-N` — a repo-scoped git
+  check, separate from unit-id uniqueness.
+- **base** = the repo's default branch — `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` — unless a base is supplied. A supplied base may be a unit-id → that unit's branch (stacking).
+- **repo** (`ws-start`) = resolved by precedence: (1) explicit `--repo org/repo`;
+  (2) if `--base` is a unit-id, that unit's repo (stacking requires the same repo);
+  (3) else the git repo `ws-start` runs in (cwd). Error only when an explicit
+  `--repo` contradicts a `--base` unit's repo.
+- **restart** = re-running `ws-start` with an intent whose slug already exists in
+  the same workstream: the new unit takes the next `-N` slug suffix (`<slug>-2`)
+  and records `restart-of=<slug>` on its ledger line. `-N` means restart only —
+  reused slugs in different workstreams do not collide, because the `<ws-id>`
+  namespace separates them.
 - **timestamps** = `date -u +%Y-%m-%dT%H:%MZ`.
 
 ## File formats
@@ -49,10 +66,14 @@ design: <optional path to umbrella spec>
 created: <ts>
 ---
 ```
-**`units.md`** (append-only ledger; one line per `ws-start`, never edit prior lines):
+**`units.md`** (append-only ledger; one line per `ws-start`, never edit prior lines).
+The line's own id is the bare `<slug>` (canonical id = `<this-ws-id>:<slug>`).
+`restart-of` is always same-workstream → bare `<slug>`. `stacked-on` uses the
+canonical `<ws-id>:<slug>` when the base is in another workstream, bare `<slug>`
+when the base is in this one:
 ```
 # Units — <ws-id> (append-only)
-- <ts>  <unit-id>  "<title>"  repo=<org/repo>  branch=<b>  [restart-of=<id>]  [stacked-on=<id>]
+- <ts>  <slug>  "<title>"  repo=<org/repo>  branch=<b>  [restart-of=<slug>]  [stacked-on=<ws-id>:<slug> | <slug>]
 ```
 **`backlog.md`** (workstream future work; mutable):
 ```
