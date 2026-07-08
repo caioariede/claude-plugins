@@ -369,6 +369,7 @@
       <li><a href="#quickstart">Quickstart</a></li>
       <li><a href="#commands">The six commands</a></li>
       <li><a href="#model">How it works</a></li>
+      <li><a href="#flavors">Flavors</a></li>
       <li><a href="#runbooks">Runbooks</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
@@ -548,6 +549,20 @@ Shows exactly what will be removed and requires explicit confirmation, then remo
 </ol>
 
 <aside class="note note-tip"><b>Recorded base, not live base.</b> A unit's recorded base is the base on its last <code>created</code> or <code>restack</code> line in <code>log.md</code> — never the live PR <code>baseRefName</code>, which GitHub may have moved when a base PR merged. Restack reconciles the two.</aside>
+</section>
+<section id="flavors"><h2>Flavors</h2>
+<p class="lead">External tools are pluggable. The skills never hardwire a worktree tool, a planning methodology, or a forge — each is a <b>flavor</b> you choose, so the same <code>ws-*</code> commands drive whatever you've configured.</p>
+<p>A <b>group</b> is a fixed behavior category the skills define; a <b>flavor</b> is one implementation of it; an <b>operation</b> is a named slot a flavor fills with a one-line instruction (a shell command, or a skill to invoke). Exactly one flavor per group is active, globally. Swapping a flavor changes only mechanism — the ws bookkeeping (progress, log, ledger, PR-ready) is intrinsic and never moves.</p>
+<table class="grid">
+<thead><tr><th>Group</th><th>Operations</th><th>Built-in flavors (default first)</th></tr></thead>
+<tbody>
+<tr><td><code>worktree-management</code></td><td>create · remove · locate · open-window (optional)</td><td><code>git-worktree</code>, <code>wmx</code></td></tr>
+<tr><td><code>spec-driven-development</code></td><td>plan · execute · ship</td><td><code>none</code>, <code>superpowers</code></td></tr>
+<tr><td><code>forge</code></td><td>default-branch · pr-status · pr-create · pr-ready · pr-retarget</td><td><code>gh</code></td></tr>
+</tbody>
+</table>
+<p>Your selection and any custom flavors live in <code>~/.claude/workstreams/flavors.ini</code>, merged over the plugin's built-in defs; an optional overrides file layers on top. View or change all of it with <code>ws-config</code>.</p>
+<aside class="note note-tip"><b>Configure with <code>/ws-config</code>.</b> <code>ws-config show</code> prints the active flavor per group; <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> switches one; <code>ws-config add</code> scaffolds a custom flavor to fill in. <code>gh</code> is the assumed forge baseline — a non-GitHub user adds a custom <code>forge</code> flavor via the overrides file.</aside>
 </section>
 <section id="runbooks"><h2>Runbooks</h2><p class="lead">Five recipes for the everyday shape of workstream work — running units side by side, picking one up cold, restarting a dead-end, restacking after a merge, and sharing status.</p>
 
