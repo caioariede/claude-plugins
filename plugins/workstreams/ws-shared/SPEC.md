@@ -18,8 +18,8 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | datum | source of truth | how |
 |---|---|---|
 | current branch | git (the worktree) | `git rev-parse --abbrev-ref HEAD` |
-| base / did GitHub retarget | GitHub | `gh pr view --json baseRefName` |
-| PR number + draft/ready/merged | GitHub | `gh pr view --json number,isDraft,state` |
+| base / did GitHub retarget | GitHub | active `forge` flavor `pr-status` (SPEC §Flavors) |
+| PR number + draft/ready/merged | GitHub | active `forge` flavor `pr-status` |
 | status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. PR merged → `merged` · 3. PR ready → `in-review` · 4. PR draft or no PR → `building` |
 | unit ↔ repo/branch | `units.md` ledger | set once at `ws-start` |
 | unit purpose / scope (why it exists) | unit `charter.md` | set once at `ws-start`; read by `ws-resume` |
@@ -43,7 +43,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
   `:`, so the branch is not the canonical id. If `feat-<slug>` already exists in
   the target repo (local or remote), disambiguate with `-N` — a repo-scoped git
   check, separate from unit-id uniqueness.
-- **base** = the repo's default branch — `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` — unless a base is supplied. A supplied base may be a unit-id → that unit's branch (stacking).
+- **base** = the repo's default branch — the active `forge` flavor's `default-branch` (SPEC §Flavors) — unless a base is supplied. A supplied base may be a unit-id → that unit's branch (stacking).
 - **repo** (`ws-start`) = resolved by precedence: (1) explicit `--repo org/repo`;
   (2) if `--base` is a unit-id, that unit's repo (stacking requires the same repo);
   (3) else the git repo `ws-start` runs in (cwd). Error only when an explicit
@@ -125,7 +125,7 @@ git rebase --onto origin/<new-base> $OLD
 ```
 Then append `restack base=<new-base> was=<recorded-base>` to `log.md`.
 
-**Gate:** compare `gh pr view --json baseRefName` to the recorded base. If it is **unchanged** remotely, we are initiating — also run `gh pr edit <pr> --base <new-base>` first. If it has **already changed** (GitHub auto-retargeted when a base PR merged), skip the `gh pr edit`. Only `ws-restack` (explicit) and `ws-resume` (on detecting drift) reconcile; `ws-board` is read-only and never reconciles.
+**Gate:** compare the active `forge` flavor's `pr-status` base to the recorded base. If it is **unchanged** remotely, we are initiating — also run the `forge` flavor's `pr-retarget` first. If it has **already changed** (GitHub auto-retargeted when a base PR merged), skip the `pr-retarget`. Only `ws-restack` (explicit) and `ws-resume` (on detecting drift) reconcile; `ws-board` is read-only and never reconciles.
 
 ## Command scope
 
