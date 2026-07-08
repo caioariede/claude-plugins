@@ -5,7 +5,7 @@ description: The single verb for advancing a unit at any stage — run it right 
 
 # ws-resume — resume a unit
 
-Read the shared contract first: `~/.claude/skills/ws-shared/SPEC.md`.
+Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 
 **Input:** `$ARGUMENTS` = `[unit-id]`. If omitted, infer it from the current worktree's branch by scanning `~/.claude/workstreams/*/units.md`.
 

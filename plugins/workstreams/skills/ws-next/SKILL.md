@@ -5,7 +5,7 @@ description: Use when unsure which ws-* command or which unit to act on next in 
 
 # ws-next — recommend the next workstream action
 
-Read `~/.claude/skills/ws-shared/SPEC.md` first. **Read-only** — it derives and recommends; it writes nothing.
+Read `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md` first. **Read-only** — it derives and recommends; it writes nothing.
 
 ## What it does
 

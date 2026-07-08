@@ -5,7 +5,7 @@ description: Use when the user needs a new workstream and none exists yet — be
 
 # ws-init — create a workstream
 
-Read the shared contract first: `~/.claude/skills/ws-shared/SPEC.md`.
+Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 
 **Input:** `$ARGUMENTS` = the workstream name (e.g. `task templates`).
 

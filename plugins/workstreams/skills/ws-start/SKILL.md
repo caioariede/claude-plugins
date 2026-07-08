@@ -5,7 +5,7 @@ description: Use when starting a new unit of work in an existing workstream (its
 
 # ws-start — start a unit
 
-Read the shared contract first: `~/.claude/skills/ws-shared/SPEC.md`.
+Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 
 **Input:** `$ARGUMENTS` = `<ws-id> <what this unit does>` with optional `--base <unit-id|branch>`.
 If `ws-id` is omitted and exactly one workstream exists, use it; otherwise ask which.

@@ -5,7 +5,7 @@ description: Use when the user wants to abandon or tear down a workstream unit w
 
 # ws-drop — drop (abandon) a unit
 
-Read the shared contract first: `~/.claude/skills/ws-shared/SPEC.md`.
+Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 
 **Input:** `$ARGUMENTS` = `<unit-id>`.
 

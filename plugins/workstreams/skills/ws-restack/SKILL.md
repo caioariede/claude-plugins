@@ -5,7 +5,7 @@ description: Use when a unit's base PR merged and its branch must move onto a ne
 
 # ws-restack — restack a unit
 
-Read the shared contract first: `~/.claude/skills/ws-shared/SPEC.md`.
+Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 
 **Input:** `$ARGUMENTS` = `<unit-id> [<new-base>]` (new-base = a branch or another unit-id).
 
