@@ -366,11 +366,9 @@
     <h2>Contents</h2>
     <ol>
       <li><a href="#idea">The idea</a></li>
-      <li><a href="#quickstart">Quickstart</a></li>
+      <li><a href="#installation">Installation</a></li>
       <li><a href="#commands">The eight commands</a></li>
-      <li><a href="#model">How it works</a></li>
       <li><a href="#flavors">Flavors</a></li>
-      <li><a href="#runbooks">Runbooks</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
     </ol>
@@ -382,60 +380,35 @@
   units/&lt;unit-id&gt;/
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
     log.md               # APPEND-ONLY: created, dropped, restack, decision, note</pre><aside class="note note-rule"><b>Golden rule.</b> The worktree holds only code. Drop and recreate it freely — all progress, history, and identity survive in the store.</aside></section>
-<section id="quickstart">
-<h2>Quickstart</h2>
-<p class="lead">Five minutes from nothing to a fresh agent building your first unit in its own worktree — then a board to watch it and a one-command way back in.</p>
+<section id="installation">
+<h2>Installation</h2>
+<p class="lead">Two commands add the plugin from the <code>caio</code> marketplace; the store and its config scaffold themselves on first use.</p>
 
-<p>The <code>ws-*</code> suite tracks multi-unit work in a durable, cross-repo store at <code>~/.claude/workstreams/</code>. A <b>workstream</b> is the container; each <b>unit</b> is one shippable slice of work with its own worktree and branch. Worktrees are disposable — all durable state lives in the store, so you can drop and recreate a checkout without losing progress.</p>
+<p>Workstreams ships as a Claude Code plugin — eight <code>ws-*</code> skills plus a shared contract. Install it once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
 
-<aside class="note note-rule"><b>Golden rule.</b> Worktrees hold code only. Never write store files (<code>progress.md</code>, <code>log.md</code>) into a worktree — the store, not the checkout, is the source of truth.</aside>
+<h3>Prerequisites</h3>
+<ul>
+<li><b>git</b> with worktree support (2.5+) — every unit is a separate <code>git worktree</code>.</li>
+<li><b>GitHub CLI</b> (<code>gh</code>), authenticated with <code>gh auth login</code> — the default <code>forge</code> flavor derives PR state and base from it.</li>
+<li><b>Claude Code</b> with plugin marketplaces enabled.</li>
+</ul>
 
+<h3>Add the plugin</h3>
 <ol class="steps">
-<li><b>Create a workstream</b> with <code>ws-init</code>. Give it a name; it computes a dated <code>ws-id</code>, scaffolds the store, and reports the id you'll pass to every later command. It creates no units or worktrees — just the container.</li>
-<li><b>Spin the first unit</b> with <code>ws-start &lt;ws-id&gt; "&lt;what&gt;"</code>. It mints a globally-unique <code>unit-id</code> (<code>&lt;ws-id&gt;:&lt;slug&gt;</code>), cuts a <code>&lt;slug&gt;</code> branch off the base, and creates a worktree via the active <code>worktree-management</code> flavor (a per-unit window is optional if the flavor defines one).</li>
-<li><b>Plan and build the unit</b> with <code>ws-resume</code> — from the current session or the unit's worktree. It reads the charter + design, plans tasks as <code>T1..</code> into <code>progress.md</code>, executes, and appends decisions to <code>log.md</code>.</li>
-<li><b>Check status</b> anytime with <code>ws-board</code>. It's read-only: it reads the ledger, derives each unit's status live from git and GitHub, and renders a copy-paste-ready board grouped by state.</li>
-<li><b>Pick work back up</b> with <code>ws-resume &lt;unit-id&gt;</code> — it finds the unit's worktree, reconciles any base drift, and drops you back into context.</li>
+<li><b>Add the marketplace</b> — point Claude Code at this repo.</li>
+<li><b>Install the plugin</b> — pull <code>workstreams</code> from the <code>caio</code> marketplace.</li>
+<li><b>Verify</b> — the eight <code>/ws-*</code> commands now resolve; <code>/ws-init</code> is the entry point.</li>
 </ol>
 
-<div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-init</span><span class="cmd-sig">"&lt;name&gt;"</span></div>
-<p class="cmd-when"><b>Use when</b> you need a new workstream and none exists yet.</p>
-<div class="cmd-body">Computes <code>ws-id = &lt;YYYY-MM-DD&gt;-&lt;slug(name)&gt;</code>, creates <code>workstream.md</code> plus an empty ledger, and reports the id. Give it more than one word so it can set the goal without asking.</div>
-<pre class="cmd-ex">$ /ws-init task templates
-→ created workstream 2026-07-03-task-templates
-  next: ws-start 2026-07-03-task-templates "&lt;what the first unit does&gt;"</pre>
-</div>
+<pre class="code">/plugin marketplace add caioariede/claude-plugins
+/plugin install workstreams@caio</pre>
 
-<div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; "&lt;what&gt;" [--base &lt;unit-id|branch&gt;]</span></div>
-<p class="cmd-when"><b>Use when</b> starting a new unit of work in an existing workstream.</p>
-<div class="cmd-body">Resolves the workstream, mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, and creates the <code>&lt;slug&gt;</code> branch and worktree off the base via the active <code>worktree-management</code> flavor's <code>create</code>. It appends the ledger line and seeds <code>progress.md</code> and <code>log.md</code>; run <code>ws-resume</code> next to plan and build. Pass <code>--base &lt;unit-id&gt;</code> to stack on another unit's branch (its repo is inherited); <code>--repo &lt;org/repo&gt;</code> overrides the cwd repo. Omit <code>&lt;ws-id&gt;</code> when exactly one workstream exists.</div>
-<pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "template list page"</pre>
-</div>
+<aside class="note note-tip"><b>State scaffolds itself.</b> The global store at <code>~/.claude/workstreams/</code> and its <code>flavors.ini</code> are created on the first <code>ws-init</code> — nothing to set up by hand.</aside>
 
-<p><code>ws-resume</code> takes over from here — no bootstrap prompt is printed. It reconstructs the unit's intent from its <code>charter.md</code> and the workstream's <code>design:</code> spec, plans with <b>writing-plans</b> (tasks as <code>T1..</code> in <code>progress.md</code>), then executes with <b>subagent-driven-development</b>, appending decisions to <code>log.md</code>. Store files never live in the worktree.</p>
-
-<aside class="note note-tip"><b>Optional window.</b> Run <code>ws-resume</code> in the current session, or — if your <code>worktree-management</code> flavor defines a window op — open a per-unit window for parallel work; if that window opens empty, launch <code>claude</code> there yourself.</aside>
-
-<div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-board</span><span class="cmd-sig">[ws-id] [unit-id]</span></div>
-<p class="cmd-when"><b>Use when</b> you want to see or share where a workstream stands.</p>
-<div class="cmd-body">Reads the ledger and derives every unit's status live — no stored status, ever. Status is first-match-wins: dropped, then merged, then in-review (PR ready), then building (draft or no PR). Pass a <code>unit-id</code> to print that unit's full checklist plus recent log notes.</div>
-<pre class="cmd-ex">$ /ws-board 2026-07-03-task-templates
-*Task templates* — 0/1 units done
-
-🔄 In progress   • template list page — #4160 (draft) · 2/5 tasks</pre>
-</div>
-
-<div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">&lt;unit-id&gt;</span></div>
-<p class="cmd-when"><b>Use when</b> resuming an existing unit, or picking work back up from inside its worktree.</p>
-<div class="cmd-body">Locates the unit's worktree via its ledger branch, reconciles any base drift (GitHub auto-retargets when a base PR merges), and restores you into the unit's live task state.</div>
-<pre class="cmd-ex">$ /ws-resume template-list-page</pre>
-</div>
-
-<aside class="note note-tip"><b>Tip.</b> Everything after step 1 keys off the <code>ws-id</code> and <code>unit-id</code>. If a single workstream exists, most commands let you drop the <code>ws-id</code> and infer it.</aside>
+<h3>Configure flavors (optional)</h3>
+<p>Defaults are <code>git-worktree</code> for worktree management, <code>gh</code> for the forge, and <code>none</code> for spec-driven development. Change any of them with <code>ws-config</code>; see the <a href="#flavors">Flavors</a> section.</p>
+<pre class="cmd-ex">$ /ws-config show
+$ /ws-config set worktree-management wmx</pre>
 </section>
 <section id="commands"><h2>The eight commands</h2>
 <p class="lead">Eight skills cover the full life of a unit of work — from spinning up a container to tearing a branch down, plus deciding what's next and configuring flavors — while every durable fact lives in the global store, never in a worktree.</p>
@@ -518,56 +491,6 @@ Edits only <code>~/.claude/workstreams/flavors.ini</code> — never a worktree. 
 <pre class="cmd-ex">$ /ws-config set worktree-management wmx</pre>
 </div>
 </section>
-<section id="model"><h2>The durable model</h2>
-<p class="lead">Worktrees are disposable code checkouts; every durable fact lives in the store, and everything volatile is derived live from git and GitHub.</p>
-
-<p>The suite splits every fact about a unit into two camps: what git and GitHub already own, and what only the workstream tracks. It never stores the former — branch, base, PR number, and status are read on demand, so the board can never drift out of sync with reality.</p>
-
-<table class="grid">
-<thead><tr><th>Datum</th><th>Where it lives</th><th>Note</th></tr></thead>
-<tbody>
-<tr><td>Current branch</td><td>git (the worktree)</td><td><code>git rev-parse --abbrev-ref HEAD</code> — never stored</td></tr>
-<tr><td>Base / did GitHub retarget</td><td>GitHub</td><td><code>gh pr view --json baseRefName</code> — never stored</td></tr>
-<tr><td>PR number + draft/ready/merged</td><td>GitHub</td><td><code>gh pr view --json number,isDraft,state</code> — never stored</td></tr>
-<tr><td>Status</td><td>derived</td><td>Computed live from the log + PR state (see precedence below)</td></tr>
-<tr><td>Unit &harr; repo/branch identity</td><td><code>units.md</code> ledger</td><td>Append-only; set once at <code>ws-start</code>, prior lines never edited</td></tr>
-<tr><td>Tasks + completion, follow-ups</td><td><code>progress.md</code></td><td>The only home; mutable work-state SoT</td></tr>
-<tr><td>Decisions, notes, drop, restack history</td><td><code>log.md</code></td><td>Append-only history</td></tr>
-</tbody>
-</table>
-
-<p>Status is never written down — it is resolved on every read by walking four rules and taking the <b>first match</b>:</p>
-<ol class="steps">
-<li>A <code>dropped</code> line in <code>log.md</code> &rarr; <code>dropped</code></li>
-<li>PR merged &rarr; <code>merged</code></li>
-<li>PR ready &rarr; <code>in-review</code></li>
-<li>PR draft, or no PR &rarr; <code>building</code></li>
-</ol>
-
-<h3>Mutable state vs append-only history</h3>
-<p>The two per-unit files answer different questions and never overlap. <code>progress.md</code> is the mutable work-state source of truth — its Tasks and Follow-ups checklists always reflect the present, and task/follow-up ids (<code>T1</code>, <code>F1</code>) are monotonic per unit and never reused, even after check-off or removal. <code>log.md</code> is append-only history — <code>created</code>, <code>dropped</code>, <code>restack</code>, <code>decision</code>, <code>note</code> — a permanent record you add to but never rewrite.</p>
-
-<pre class="diagram">~/.claude/workstreams/&lt;ws-id&gt;/
-  workstream.md          # metadata only
-  units.md               # append-only ledger (unit &harr; repo/branch)
-  units/&lt;unit-id&gt;/
-    progress.md          # MUTABLE work-state SoT — Tasks + Follow-ups
-    log.md               # APPEND-ONLY history</pre>
-
-<aside class="note note-rule"><b>The invariant.</b> The log never stores current state; progress never stores history; nothing volatile — branch, base, PR, status — is stored at all. Derive it live.</aside>
-
-<h3>IDs &amp; base conventions</h3>
-<p>Identity is deterministic, so the same intent always resolves to the same place:</p>
-<ol class="steps">
-<li><b>ws-id</b> = <code>&lt;YYYY-MM-DD&gt;-&lt;slug(name)&gt;</code> (from <code>date -u +%Y-%m-%d</code>) — this is the store directory name.</li>
-<li><b>unit-id</b> = <code>&lt;ws-id&gt;:&lt;slug(what)&gt;</code>, globally unique by construction. A bare <code>&lt;slug&gt;</code> works as shorthand — resolved across all workstreams (one match wins; several prompt for the <code>&lt;ws-id&gt;:</code> prefix). Re-running the same intent takes a <code>-N</code> suffix and records <code>restart-of</code> (restart only).</li>
-<li><b>branch</b> = <code>&lt;slug&gt;</code> unless the caller supplies one; disambiguated with <code>-N</code> on a git-branch collision in the target repo — including a slug that matches the base branch (<code>:</code> is illegal in refnames, so the branch is not the canonical id).</li>
-<li><b>base</b> = the repo's default branch, resolved via <code>gh repo view --json defaultBranchRef -q .defaultBranchRef.name</code> — unless a base is supplied. A supplied base may name another unit-id, resolving to that unit's branch (stacking).</li>
-<li><b>repo</b> (<code>ws-start</code>) resolves by precedence: explicit <code>--repo</code> › a <code>--base</code> unit's repo › the cwd repo. An explicit <code>--repo</code> that contradicts a <code>--base</code> unit's repo is an error.</li>
-</ol>
-
-<aside class="note note-tip"><b>Recorded base, not live base.</b> A unit's recorded base is the base on its last <code>created</code> or <code>restack</code> line in <code>log.md</code> — never the live PR <code>baseRefName</code>, which GitHub may have moved when a base PR merged. Restack reconciles the two.</aside>
-</section>
 <section id="flavors"><h2>Flavors</h2>
 <p class="lead">External tools are pluggable. The skills never hardwire a worktree tool, a planning methodology, or a forge — each is a <b>flavor</b> you choose, so the same <code>ws-*</code> commands drive whatever you've configured.</p>
 <p>A <b>group</b> is a fixed behavior category the skills define; a <b>flavor</b> is one implementation of it; an <b>operation</b> is a named slot a flavor fills with a one-line instruction (a shell command, or a skill to invoke). Exactly one flavor per group is active, globally. Swapping a flavor changes only mechanism — the ws bookkeeping (progress, log, ledger, PR-ready) is intrinsic and never moves.</p>
@@ -581,42 +504,16 @@ Edits only <code>~/.claude/workstreams/flavors.ini</code> — never a worktree. 
 </table>
 <p>Your selection and any custom flavors live in <code>~/.claude/workstreams/flavors.ini</code>, merged over the plugin's built-in defs; an optional overrides file layers on top. View or change all of it with <code>ws-config</code>.</p>
 <aside class="note note-tip"><b>Configure with <code>/ws-config</code>.</b> <code>ws-config show</code> prints the active flavor per group; <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> switches one; <code>ws-config add</code> scaffolds a custom flavor to fill in. <code>gh</code> is the assumed forge baseline — a non-GitHub user adds a custom <code>forge</code> flavor via the overrides file.</aside>
-</section>
-<section id="runbooks"><h2>Runbooks</h2><p class="lead">Five recipes for the everyday shape of workstream work — running units side by side, picking one up cold, restarting a dead-end, restacking after a merge, and sharing status.</p>
 
-<aside class="note note-rule"><b>Golden rule.</b> Worktrees are disposable code checkouts; all durable state lives in the store at <code>~/.claude/workstreams/&lt;ws-id&gt;/</code>. Drop and recreate worktrees freely — progress survives because it was never stored in them.</aside>
-
-<h3>1 · Run two units in parallel</h3>
-<p>Each unit gets its own worktree off a shared store, so two units run at once without stepping on each other — open a per-unit window if you want them side by side. Start them from the same <code>ws-id</code>; the ledger and per-unit <code>progress.md</code> keep them separate.</p>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; "&lt;what&gt;" [--base &lt;unit-id|branch&gt;] [--repo &lt;org/repo&gt;]</span></div><p class="cmd-when"><b>Use when</b> starting a new unit in an existing workstream — its own worktree and ledger entry.</p><div class="cmd-body">Run it once per unit. Each call creates the <code>&lt;slug&gt;</code> branch and worktree via the active <code>worktree-management</code> flavor, appends a ledger line, and seeds that unit's <code>progress.md</code> + <code>log.md</code>. Units share only the store dir — code stays isolated per worktree.</div><pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "template CRUD api"
-$ /ws-start 2026-07-03-task-templates "template picker ui"</pre></div>
-<aside class="note note-tip"><b>Tip.</b> To stack the second unit on the first instead of running truly parallel, pass <code>--base &lt;unit-id&gt;</code>; it resolves to that unit's branch and records <code>stacked-on</code> on the ledger line.</aside>
-
-<h3>2 · Resume a unit cold — new session or next day</h3>
-<p>Nothing is carried in your head or the shell: <code>ws-resume</code> reads the store and reconstructs the unit. Run it from inside the worktree (id inferred from the branch) or name the unit explicitly.</p>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id]</span></div><p class="cmd-when"><b>Use when</b> picking work back up — a fresh session, the next day, or after the worktree was dropped.</p><div class="cmd-body"><ol class="steps"><li>Resolves the unit via the bare-slug resolver → <code>ws-id</code>, repo, branch (or infers it from the current branch).</li><li>Self-locates the worktree: reuses it in place, <code>cd</code>s in if you're elsewhere, reopens via the active <code>worktree-management</code> flavor if the branch survives, or fresh-starts off the default branch using stored progress as the baseline if the branch is gone.</li><li>Reconciles the base if the live PR base drifted from the recorded base (see recipe 4).</li><li>Loads <code>progress.md</code> + recent <code>log.md</code>, runs <code>git log -5</code> and verification, then continues at the first unchecked task.</li></ol></div><pre class="cmd-ex">$ /ws-resume template-crud-api</pre></div>
-
-<h3>3 · Drop and restart from scratch</h3>
-<p>Tear the worktree down, then re-run <code>ws-start</code> with the same intent — the id versions to <code>-2</code> and the old unit is kept as history.</p>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-drop</span><span class="cmd-sig">&lt;unit-id&gt;</span></div><p class="cmd-when"><b>Use when</b> abandoning a unit's worktree and local branch — a dead-end approach you want to redo cleanly.</p><div class="cmd-body">Shows exactly what it will remove and requires confirmation, then removes the worktree/window and the <b>local</b> branch. It appends a <code>dropped</code> log line but <b>keeps</b> <code>progress.md</code> and the ledger line as the reconciliation record. The remote branch and PR stay unless you ask.</div><pre class="cmd-ex">$ /ws-drop template-crud-api</pre></div>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; "&lt;same what&gt;"</span></div><p class="cmd-when"><b>Use when</b> restarting the dropped unit fresh.</p><div class="cmd-body">Re-running with an intent whose slug already exists takes the next <code>-N</code> suffix and records <code>restart-of=&lt;original-unit-id&gt;</code> on the new ledger line — history stays intact.</div><pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "template CRUD api"
-  # → unit template-crud-api-2  (restart-of=template-crud-api)</pre></div>
-
-<h3>4 · Restack after a base PR merges</h3>
-<p>When a unit is stacked on another and that base merges, the dependent branch must move onto its new base. A unit's <b>recorded base</b> is the base on its last <code>created</code>/<code>restack</code> log line — never the live PR base, which GitHub may have moved.</p>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-restack</span><span class="cmd-sig">&lt;unit-id&gt; &lt;new-base&gt;</span></div><p class="cmd-when"><b>Use when</b> a unit's base PR merged, or GitHub auto-retargeted a dependent PR and the local branch needs realigning.</p><div class="cmd-body">Rebases onto the recorded base via the pinned command, then appends a <code>restack</code> line. <code>&lt;new-base&gt;</code> may be a branch or another unit-id (resolved to its branch).<pre class="code">OLD=$(git merge-base HEAD origin/&lt;recorded-base&gt;)
-git fetch
-git rebase --onto origin/&lt;new-base&gt; $OLD</pre></div><pre class="cmd-ex">$ /ws-restack template-picker-ui template-crud-api</pre></div>
-<aside class="note note-warn"><b>Auto vs we-initiate gate.</b> Compare <code>gh pr view --json baseRefName</code> to the recorded base. If it is <b>unchanged</b> remotely, <i>we</i> initiate — run <code>gh pr edit &lt;pr&gt; --base &lt;new-base&gt;</code> first, then rebase. If it has <b>already changed</b> (GitHub auto-retargeted when the base PR merged), skip the <code>gh pr edit</code> and just rebase. On conflicts, stop and report.</aside>
-<aside class="note note-tip"><b>Tip.</b> Only <code>ws-restack</code> (explicit) and <code>ws-resume</code> (on detecting drift) reconcile. <code>ws-board</code> is read-only and never rebases.</aside>
-
-<h3>5 · Share status</h3>
-<p>Print a copy-paste-ready markdown board grouped by state — done, in progress, not started, dropped — with per-unit task counts and open follow-ups.</p>
-<div class="cmd"><div class="cmd-head"><span class="cmd-name">ws-board</span><span class="cmd-sig">[ws-id] [unit-id]</span></div><p class="cmd-when"><b>Use when</b> you want to see or share where a workstream stands — "show the board", "what's done".</p><div class="cmd-body">Derives every status live (nothing stored) and renders markdown you can paste into Slack. With a <code>unit-id</code>, it prints that unit's full <code>progress.md</code> checklist plus recent <code>log.md</code> notes.<pre class="diagram">*Task templates* — 1/3 units done
-
-✅ Done          • template CRUD api — #4160
-🔄 In progress   • template picker ui — #4162 (draft) · 2/5 tasks
-⏳ Not started   • bulk import   (deps: template-crud-api)</pre></div><pre class="cmd-ex">$ /ws-board 2026-07-03-task-templates</pre></div>
+<h3 id="superpowers-flavor">Using with Superpowers</h3>
+<p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out: a feature is many units, and each unit plans itself.</p>
+<ol class="steps">
+<li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
+<li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. It creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan.</li>
+<li><b>Split the spec into units</b> with <code>ws-start</code>, one per shippable slice.</li>
+<li><b>Let each unit plan itself.</b> <code>ws-resume</code> runs <code>writing-plans</code> scoped to that unit (tasks land as <code>T1..</code> in its <code>progress.md</code>), then executes with <code>subagent-driven-development</code>.</li>
+</ol>
+<aside class="note note-rule"><b>Planning lives in units, not above them.</b> After the spec, go straight to <code>ws-init</code> → <code>ws-start</code>. The <code>writing-plans</code> step is deferred into each unit's <code>ws-resume</code>, so every plan is scoped to one worktree.</aside>
 </section>
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>
@@ -630,10 +527,12 @@ git rebase --onto origin/&lt;new-base&gt; $OLD</pre></div><pre class="cmd-ex">$ 
 <tbody>
 <tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger). Run before any unit exists.</td></tr>
 <tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>.</td></tr>
-<tr><td><code>ws-resume</code></td><td>Pick a unit back up: reattach the worktree, reconcile base drift, continue at the first unchecked task.</td></tr>
-<tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record.</td></tr>
-<tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
+<tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, continue its tasks, or ship it — reopening a gone worktree and reconciling base drift as needed.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>
+<tr><td><code>ws-next</code></td><td>Name the single next action and the command to run it across units. Read-only — decides, doesn't do.</td></tr>
+<tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
+<tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record.</td></tr>
+<tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only.</td></tr>
 </tbody>
 </table>
 
