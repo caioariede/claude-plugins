@@ -46,7 +46,7 @@ Rule 2 fires **only** when a unit has **no PR AND every task checked** — emit 
 
 ## Red flags — you're about to answer wrong
 
-- Emitting a raw `gh pr create` / `finishing-a-development-branch` for a 6/6-no-PR unit → name `ws-resume <unit>` instead; the router emits `ws-*` verbs only.
+- Emitting a raw PR-open command or methodology skill (whatever the active flavors resolve to) for a 6/6-no-PR unit → name `ws-resume <unit>` instead; the router emits `ws-*` verbs only.
 - Recommending `ws-restack` for a dependent that isn't created yet → that's a `ws-start`.
 - Naming one startable unit when two share a satisfied base → **list both**.
 
