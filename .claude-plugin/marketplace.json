@@ -1,0 +1,10 @@
+{
+  "name": "caio",
+  "owner": { "name": "Caio Ariede" },
+  "plugins": [
+    {
+      "name": "workstreams",
+      "source": "./plugins/workstreams"
+    }
+  ]
+}
