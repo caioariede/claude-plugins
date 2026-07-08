@@ -1,0 +1,10 @@
+# Regenerate the Workstreams guide PDF from its HTML source
+gen-guide-pdf:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="{{justfile_directory()}}/ws-shared"
+    chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    "$chrome" --headless --disable-gpu --no-pdf-header-footer \
+        --print-to-pdf="$dir/WORKSTREAMS-GUIDE.pdf" \
+        "file://$dir/WORKSTREAMS-GUIDE.html"
+    echo "wrote $dir/WORKSTREAMS-GUIDE.pdf"
