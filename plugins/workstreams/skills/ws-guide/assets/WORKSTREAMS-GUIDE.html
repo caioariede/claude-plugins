@@ -382,6 +382,8 @@
     <ol>
       <li><a href="#idea">The idea</a></li>
       <li><a href="#installation">Installation</a></li>
+      <li class="toc-sub"><a href="#install-skills-cli">Agent Skills CLI (skills.sh)</a></li>
+      <li class="toc-sub"><a href="#install-marketplace">Claude Code marketplace</a></li>
       <li><a href="#commands">The eight workflow commands</a></li>
       <li><a href="#flavors">Flavors</a></li>
       <li class="toc-sub"><a href="#customizing">Customizing</a></li>
@@ -401,26 +403,28 @@
     log.md               # APPEND-ONLY: created, dropped, restack, decision, note</pre><aside class="note note-rule"><b>Golden rule.</b> The worktree holds only code. Drop and recreate it freely — all progress, history, and identity survive in the store.</aside></section>
 <section id="installation">
 <h2>Installation</h2>
-<p class="lead">Two commands add the plugin from the <code>caioariede</code> marketplace; the store and its config scaffold themselves on first use.</p>
+<p class="lead">One command installs all ten skills — through the Agent Skills CLI or the Claude Code plugin marketplace; the store and its config scaffold themselves on first use.</p>
 
-<p>Workstreams ships as a Claude Code plugin — ten <code>ws-*</code> skills: eight workflow commands, the shared contract (<code>ws</code>), and this guide (<code>ws-guide</code>). Install it once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
+<p>Workstreams ships as ten <code>ws-*</code> skills in the portable <b>Agent Skills</b> format: eight workflow commands, the shared contract (<code>ws</code>), and this guide (<code>ws-guide</code>). Install once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
 
 <h3>Prerequisites</h3>
 <ul>
 <li><b>git</b> with worktree support (2.5+) — every unit is a separate <code>git worktree</code>.</li>
 <li><b>GitHub CLI</b> (<code>gh</code>), authenticated with <code>gh auth login</code> — the default <code>forge</code> flavor derives PR state and base from it.</li>
-<li><b>Claude Code</b> with plugin marketplaces enabled.</li>
+<li>An agent that supports <b>Agent Skills</b> — Claude Code, Cursor, Codex, and others.</li>
 </ul>
 
-<h3>Add the plugin</h3>
-<ol class="steps">
-<li><b>Add the marketplace</b> — point Claude Code at this repo.</li>
-<li><b>Install the plugin</b> — pull <code>workstreams</code> from the <code>caioariede</code> marketplace.</li>
-<li><b>Verify</b> — the <code>/ws-*</code> commands now resolve; <code>/ws-init</code> is the entry point.</li>
-</ol>
+<h3 id="install-skills-cli">Option A — Agent Skills CLI (skills.sh)</h3>
+<p>Works with any agent on the Agent Skills standard — Claude Code, Cursor, Codex, and 20+ others. Installs all ten skills and keeps them updatable.</p>
+<pre class="code">npx skills add caioariede/claude-plugins
+npx skills update    # refresh installed skills later</pre>
 
+<h3 id="install-marketplace">Option B — Claude Code plugin marketplace</h3>
+<p>Claude Code only. Point it at this repo's marketplace and install the plugin.</p>
 <pre class="code">/plugin marketplace add caioariede/claude-plugins
 /plugin install workstreams@caioariede</pre>
+
+<aside class="note note-warn"><b>Pick one channel.</b> Installing through both registers the skills twice in Claude Code. Either way, verify: the <code>/ws-*</code> commands resolve, and <code>/ws-init</code> is the entry point.</aside>
 
 <aside class="note note-tip"><b>State scaffolds itself.</b> The global store at <code>~/.local/share/workstreams/</code> and its <code>flavors.ini</code> are created on the first <code>ws-init</code> — nothing to set up by hand.</aside>
 
