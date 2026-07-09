@@ -29,6 +29,8 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 
 **Invariants:** log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a ledger slug matches it (dedup vs ledger) — "not started" is not a derived unit *status*, it is a backlog item without a ledger line yet.
 
+**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building` or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>`. Any open item ⇒ **not done**. Dropped units are terminal, not blockers.
+
 ## IDs & conventions
 - **ws-id** = `<YYYY-MM-DD>-<slug(name)>` = the store dir name (`date -u +%Y-%m-%d`).
 - **unit-id** = `<ws-id>:<slug(what)>` — globally unique by construction. On disk
