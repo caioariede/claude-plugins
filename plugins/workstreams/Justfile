@@ -1,10 +1,31 @@
-# Regenerate the Workstreams guide PDF from its HTML source
+# Regenerate the Workstreams guide PDF from its HTML source.
+# The version line in the HTML is injected from plugin.json —
+# plugin.json is the single source of truth; never hand-edit it.
 gen-guide-pdf:
     #!/usr/bin/env bash
     set -euo pipefail
     dir="{{justfile_directory()}}/skills/ws-guide/assets"
+    version=$(jq -r .version "{{justfile_directory()}}/.claude-plugin/plugin.json")
+    stamp=$(date +"%B %Y")
+    sed -i '' -E "s|<p class=\"version\">Version [^<]*</p>|<p class=\"version\">Version $version · $stamp</p>|" \
+        "$dir/WORKSTREAMS-GUIDE.html"
     chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     "$chrome" --headless --disable-gpu --no-pdf-header-footer \
         --print-to-pdf="$dir/WORKSTREAMS-GUIDE.pdf" \
         "file://$dir/WORKSTREAMS-GUIDE.html"
-    echo "wrote $dir/WORKSTREAMS-GUIDE.pdf"
+    echo "wrote $dir/WORKSTREAMS-GUIDE.pdf (version $version)"
+
+# Fail when the guide HTML's version line disagrees with plugin.json.
+# CI runs this; fix by running `just gen-guide-pdf` and committing.
+check-guide:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(jq -r .version "{{justfile_directory()}}/.claude-plugin/plugin.json")
+    if grep -q "Version $version" "{{justfile_directory()}}/skills/ws-guide/assets/WORKSTREAMS-GUIDE.html"; then
+        echo "guide version OK ($version)"
+    else
+        echo "guide version drift: plugin.json=$version, HTML has:" >&2
+        grep -o "Version [^<]*" "{{justfile_directory()}}/skills/ws-guide/assets/WORKSTREAMS-GUIDE.html" >&2
+        echo "run: just gen-guide-pdf" >&2
+        exit 1
+    fi
