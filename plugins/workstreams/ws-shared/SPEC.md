@@ -159,7 +159,7 @@ Never write store files into a worktree. Find a unit's worktree via the ledger b
 External tools are pluggable via **flavors** — skills never hardwire wmx / superpowers / gh. A **group** is a fixed behavior category (defined by the skills); a **flavor** is one implementation; an **operation** is a named slot a flavor fills with a one-line instruction (a shell command, or a `skill:id` to invoke). Exactly one flavor per group is **active** (global). Skills resolve an operation at each coupling point and follow it — read here, never restated in skills. A flavor swaps only mechanism/methodology; ws bookkeeping (progress/log/ledger/PR-ready) is intrinsic and stays in the skills.
 
 **Groups & operations**
-- `worktree-management` — `create` (worktree+branch `<branch>` off `<base>`) · `remove` (`<branch>`) · `locate` (worktree path for `<branch>`) · `open-window` (optional; `<branch>`).
+- `worktree-management` — `create` (worktree+branch `<branch>` off `<base>`) · `remove` (`<branch>`) · `locate` (worktree path for `<branch>`).
 - `spec-driven-development` — `plan` (charter+design → `T1..`) · `execute` (first unchecked task) · `ship` (open the PR).
 - `forge` — `default-branch` · `pr-status` (number+draft/ready/merged+base for `<branch>`) · `pr-create` (`<branch>`→`<base>`) · `pr-ready` (`<pr>`) · `pr-retarget` (`<pr>`→`<new-base>`).
 
@@ -175,5 +175,7 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 2. instruction = `[G/<flavor>] O` merged **per key** across layers (overrides > store > built-in).
 3. missing after merge → the group **default flavor's** `O`; an optional op no layer defines → skip.
 4. `word:word` → invoke as a skill; else run as shell, filling `<branch> <base> <path> <repo> <pr> <new-base>` from context.
+
+**Flavor hooks** — a flavor may react at a skill's lifecycle point. A **hook** is an optional operation named `hook-<skill>-<event>` (e.g. `hook-ws-start-after`); each skill documents the events it fires. At an event, and **only in an interactive session** (never a subagent/headless run), the skill fires that hook from every **active** flavor — across all groups, in group order (`worktree-management`, `spec-driven-development`, `forge`) — that defines it. Companion keys, valid only on `hook-*` operations: `<hook>.prompt` (a question; its presence makes the hook interactive) · `<hook>.choices.<name>` (an option's instruction; empty = skip) · `<hook>.choices.<name>.desc` (its picker description — label is `<name>`). **Modes:** no `.prompt` → run the base instruction unconditionally · `.prompt` without `.choices` → binary (Yes runs the base instruction, No skips) · `.prompt` with `.choices` → present the 2–4 options and run the chosen one (base ignored). A dismissed prompt skips. Base and `.choices` values resolve as any instruction (rule 4). `hook-`, `.prompt` and `.choices.` are reserved on operation keys, and an option `<name>` may not be `prompt`.
 
 `overrides-file` set but unreadable → warn, skip that layer. `gh` is the assumed baseline — there is no git-only forge; a non-GitHub user adds a custom forge flavor via the overrides file. Configure with `/ws-config`.
