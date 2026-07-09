@@ -6,13 +6,13 @@ argument-hint: [ws-id] "[what this unit does]" [--base <unit-id|branch>] [--repo
 
 # ws-start — start a unit
 
-Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
+**Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
 **Input:** `$ARGUMENTS` = `<ws-id> <what this unit does>` with optional `--base <unit-id|branch>`.
 If `ws-id` is omitted and exactly one workstream exists, use it; otherwise ask which.
 
 ## Steps
-1. Resolve `ws-id` → `~/.claude/workstreams/<ws-id>/`. Compute `slug = slug(what)`; the unit-id is `<ws-id>:<slug>` (per SPEC IDs). If `units/<slug>/` already exists → **confirm**: resume the existing unit (`ws-resume`) or start fresh. A fresh start takes the next `-N` slug suffix and records `restart-of=<slug>` on its ledger line (per SPEC).
+1. Resolve `ws-id` → `<store>/<ws-id>/` (store root: SPEC). Compute `slug = slug(what)`; the unit-id is `<ws-id>:<slug>` (per SPEC IDs). If `units/<slug>/` already exists → **confirm**: resume the existing unit (`ws-resume`) or start fresh. A fresh start takes the next `-N` slug suffix and records `restart-of=<slug>` on its ledger line (per SPEC).
 2. Resolve `repo` by SPEC precedence: `--repo` wins; else if `--base` is a unit-id, use that unit's repo; else the cwd repo. Error if an explicit `--repo` contradicts a `--base` unit's repo. `base` = the repo default branch (per SPEC) unless `--base` is given; if `--base` is a unit-id, resolve it to that unit's branch (stacking → record `stacked-on` in canonical form when cross-workstream).
 3. Create the worktree via the active `worktree-management` flavor's `create` (SPEC §Flavors), for branch `<slug>` off `<base>`. Disambiguate the branch with `-N` if `<slug>` already exists in the target repo (per SPEC). Do not steal the current session's focus.
 4. **Append** the ledger line to `units.md` (SPEC format: bare `<slug>` id, `repo=`, `branch=`; include `restart-of=` / `stacked-on=` when applicable).

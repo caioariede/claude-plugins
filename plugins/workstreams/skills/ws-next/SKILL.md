@@ -6,7 +6,7 @@ argument-hint: [ws-id]
 
 # ws-next — recommend the next workstream action
 
-Read `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md` first. **Read-only** — it derives and recommends; it writes nothing.
+**Required first:** load the `ws` skill — the shared contract (SPEC). **Read-only** — it derives and recommends; it writes nothing.
 
 ## What it does
 

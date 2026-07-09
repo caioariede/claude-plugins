@@ -6,9 +6,9 @@ argument-hint: [unit-id]
 
 # ws-resume — resume a unit
 
-Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
+**Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
-**Input:** `$ARGUMENTS` = `[unit-id]`. If omitted, infer it from the current worktree's branch by scanning `~/.claude/workstreams/*/units.md`.
+**Input:** `$ARGUMENTS` = `[unit-id]`. If omitted, infer it from the current worktree's branch by scanning `<store>/*/units.md` (store root: SPEC).
 
 ## Steps
 1. Resolve the unit via the SPEC bare-slug resolver → `ws-id`, `repo`, `branch`. (With no argument, infer the unit from the current worktree's branch.)

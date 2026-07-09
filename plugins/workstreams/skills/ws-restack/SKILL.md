@@ -6,7 +6,7 @@ argument-hint: [unit-id] [new-base]
 
 # ws-restack — restack a unit
 
-Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
+**Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
 **Input:** `$ARGUMENTS` = `<unit-id> [<new-base>]` (new-base = a branch or another unit-id).
 

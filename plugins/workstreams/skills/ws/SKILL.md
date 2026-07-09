@@ -1,10 +1,16 @@
+---
+name: ws
+description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
+---
+
 # Workstreams — shared contract (`ws-*` skills)
 
-Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable code checkouts; all durable state lives in the store below.** This file is the single source for store layout, file formats, ids, status derivation, and restack — skills reference it, never restate it. Read it before any `ws-*` skill acts.
+Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable code checkouts; all durable state lives in the store below.** This contract is the single source for store layout, file formats, ids, status derivation, and restack — skills reference it, never restate it. Read it before any `ws-*` skill acts.
 
 ## Store layout (global — not per repo)
+**Store root** `<store>` = `$XDG_DATA_HOME/workstreams`; when `XDG_DATA_HOME` is unset (typical), `~/.local/share/workstreams`.
 ```
-~/.claude/workstreams/<ws-id>/
+<store>/<ws-id>/
   workstream.md          # metadata only
   units.md               # append-only ledger (unit ↔ repo/branch identity map)
   backlog.md             # workstream future work: planned units + deferred follow-ups (mutable)
@@ -34,10 +40,10 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 ## IDs & conventions
 - **ws-id** = `<YYYY-MM-DD>-<slug(name)>` = the store dir name (`date -u +%Y-%m-%d`).
 - **unit-id** = `<ws-id>:<slug(what)>` — globally unique by construction. On disk
-  the unit lives at `~/.claude/workstreams/<ws-id>/units/<slug>/`; the `<ws-id>:`
+  the unit lives at `<store>/<ws-id>/units/<slug>/`; the `<ws-id>:`
   prefix is the typed, global handle.
 - **bare-slug resolver** — any command taking a unit accepts a bare `<slug>` and
-  resolves it by scanning `~/.claude/workstreams/*/units.md`: exactly one match →
+  resolves it by scanning `<store>/*/units.md`: exactly one match →
   use it; more than one → list the matches and require the `<ws-id>:` prefix; none
   → error. Skills reference this rule; never restate it.
 - **slug** = lowercase; non-alnum → `-`; collapse repeats; trim.
@@ -164,8 +170,8 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 - `forge` — `default-branch` · `pr-status` (number+draft/ready/merged+base for `<branch>`) · `pr-create` (`<branch>`→`<base>`) · `pr-ready` (`<pr>`) · `pr-retarget` (`<pr>`→`<new-base>`).
 
 **Files (INI), merged low→high precedence**
-1. built-in — `${CLAUDE_PLUGIN_ROOT}/ws-shared/flavors.ini`
-2. store — `~/.claude/workstreams/flavors.ini` (`[config]`, `[active]`, custom sections)
+1. built-in — `references/flavors.ini`, bundled with this `ws` skill
+2. store — `<store>/flavors.ini` (`[config]`, `[active]`, custom sections)
 3. overrides — path from store `[config] overrides-file=<path>` (optional)
 
 `[active]` maps `group = flavor`; `[group/flavor]` maps `operation = instruction`.

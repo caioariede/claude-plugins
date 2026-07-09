@@ -6,7 +6,7 @@ argument-hint: [unit-id]
 
 # ws-drop — drop (abandon) a unit
 
-Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
+**Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
 **Input:** `$ARGUMENTS` = `<unit-id>`.
 

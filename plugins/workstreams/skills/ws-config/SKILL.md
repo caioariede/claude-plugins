@@ -6,7 +6,7 @@ argument-hint: [show | set <group> <flavor> | add <group> <flavor> | set-overrid
 
 # ws-config — configure flavors
 
-Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md` — §Flavors defines the groups, operations, file layers, and resolution this skill edits.
+**Required first:** load the `ws` skill — the shared contract (SPEC); its §Flavors defines the groups, operations, file layers, and resolution this skill edits.
 
 **Input:** `$ARGUMENTS`:
 - *(none)* / `show`
@@ -15,7 +15,7 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md` — §
 - `list [group]`
 - `add <group> <flavor>`
 
-Store file: `~/.claude/workstreams/flavors.ini`. Built-in defs (read-only): `${CLAUDE_PLUGIN_ROOT}/ws-shared/flavors.ini`.
+Store file: `<store>/flavors.ini` (store root: SPEC). Built-in defs (read-only): the `ws` skill's bundled `references/flavors.ini`.
 
 ## show (default)
 Print the effective `[active]` per group — store `[active]` if set, else the default (`worktree-management`=`git-worktree`, `spec-driven-development`=`none`, `forge`=`gh`) — and which layers are in play: built-in (always), store (if the file exists), overrides (if `[config] overrides-file` is set; mark it unreadable if the path is missing). Also surface any `hook-*` operations the active flavors define (base, `.prompt`, `.choices`), so the user sees which lifecycle prompts are live (SPEC §Flavors).
@@ -33,4 +33,4 @@ List the flavors per group (built-in + store + overrides) with each flavor's ope
 Scaffold a `[<group>/<flavor>]` section stub in the store file with the group's operation keys (per SPEC §Flavors) left empty, for the user to fill. Do not activate it — tell the user to run `ws-config set <group> <flavor>` when ready.
 
 ## Scope
-Edits touch only `~/.claude/workstreams/flavors.ini` — never a worktree, never the built-in defs. Everything here is config; nothing derives from git/GitHub.
+Edits touch only `<store>/flavors.ini` — never a worktree, never the built-in defs. Everything here is config; nothing derives from git/GitHub.

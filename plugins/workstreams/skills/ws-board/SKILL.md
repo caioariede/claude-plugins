@@ -6,7 +6,7 @@ argument-hint: [ws-id] [unit-id]
 
 # ws-board — workstream board
 
-Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
+**Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
 **Input:** `$ARGUMENTS` = `[ws-id] [unit-id]`. A lone token that matches a store dir name is the `ws-id`, else it is a `unit-id` resolved via the SPEC bare-slug resolver. With 0 args and one workstream, use it; with 0 args and more than one, list them and ask which.
 

@@ -2,7 +2,7 @@
 gen-guide-pdf:
     #!/usr/bin/env bash
     set -euo pipefail
-    dir="{{justfile_directory()}}/ws-shared"
+    dir="{{justfile_directory()}}/skills/ws-guide/assets"
     chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     "$chrome" --headless --disable-gpu --no-pdf-header-footer \
         --print-to-pdf="$dir/WORKSTREAMS-GUIDE.pdf" \
