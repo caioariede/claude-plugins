@@ -303,6 +303,72 @@
     border-color: var(--tip-bd);
   }
 
+  /* Workflow flow chart */
+  .flow-wrap {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin: 18px 0 0;
+  }
+  .flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+  .flow-step {
+    font-family: var(--mono);
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--rule-bd);
+    border-radius: 8px;
+    padding: 8px 12px;
+    white-space: nowrap;
+  }
+  .flow-plain {
+    font-family: var(--font);
+    font-size: 9pt;
+    font-weight: 500;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border-color: var(--line);
+    text-align: center;
+    line-height: 1.35;
+  }
+  .flow-arrow {
+    color: var(--accent);
+    font-size: 12pt;
+    flex: none;
+  }
+  .flow-loop {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    border: 1.5px dashed var(--rule-bd);
+    border-radius: 10px;
+    padding: 14px 12px 10px;
+  }
+  .flow-loop-label {
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    font-family: var(--mono);
+    font-size: 7.5pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--paper);
+    padding: 0 6px;
+  }
+  .flow-aside {
+    font-size: 9.5pt;
+    color: var(--muted);
+    margin: 0;
+  }
+
   /* Tables */
   table.grid {
     width: 100%;
@@ -400,7 +466,26 @@
   units/&lt;unit-id&gt;/
     charter.md           # STATIC: why this unit exists — the north star
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
-    log.md               # APPEND-ONLY: created, dropped, restack, decision, note</pre><aside class="note note-rule"><b>Golden rule.</b> The worktree holds only code. Drop and recreate it freely — all progress, history, and identity survive in the store.</aside></section>
+    log.md               # APPEND-ONLY: created, dropped, restack, decision, note</pre><aside class="note note-rule"><b>Golden rule.</b> The worktree holds only code. Drop and recreate it freely — all progress, history, and identity survive in the store.</aside>
+<div class="flow-wrap">
+<h3>The workflow at a glance</h3>
+<div class="flow">
+  <span class="flow-step flow-plain">brainstorm · spec ·<br>decide the splits</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">ws-init</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-loop">
+    <span class="flow-loop-label">repeat until shipped</span>
+    <span class="flow-step">ws-start</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">ws-resume</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">ws-next</span>
+    <span class="flow-arrow">↻</span>
+  </span>
+</div>
+<p class="flow-aside"><code>ws-board</code> — glance at status anytime, from any session; read-only.</p>
+</div></section>
 <section id="installation">
 <h2>Installation</h2>
 <p class="lead">One command installs all ten skills — through the Agent Skills CLI or the Claude Code plugin marketplace; the store and its config scaffold themselves on first use.</p>
