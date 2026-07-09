@@ -15,7 +15,7 @@ Read the shared contract first: `${CLAUDE_PLUGIN_ROOT}/ws-shared/SPEC.md`.
 2. Ensure the worktree exists and self-locate into it (SPEC "Command scope"):
    - already inside it (branch matches) → continue;
    - worktree exists but you're elsewhere → `cd` into it in the current session;
-   - worktree gone but branch exists → recreate it via the active `worktree-management` flavor's `create` for `<branch>` off `<base>` (then `open-window` if defined), then work there;
+   - worktree gone but branch exists → recreate it via the active `worktree-management` flavor's `create` for `<branch>` off `<base>`, then work there;
    - branch also gone → fresh start off the repo default branch (per SPEC); the store's progress is your restart baseline.
 3. Reconcile base per SPEC Restack reconciliation — if the active `forge` flavor's `pr-status` base differs from the unit's recorded base, realign and append a `restack` line.
 4. Load state: read `charter.md` (why this unit exists + its `design:`), `progress.md` (Tasks + Follow-ups), and `log.md` (recent notes); run `git log -5` and the repo's verification command to confirm the code state.
