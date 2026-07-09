@@ -382,7 +382,7 @@
     <ol>
       <li><a href="#idea">The idea</a></li>
       <li><a href="#installation">Installation</a></li>
-      <li><a href="#commands">The eight commands</a></li>
+      <li><a href="#commands">The eight workflow commands</a></li>
       <li><a href="#flavors">Flavors</a></li>
       <li class="toc-sub"><a href="#customizing">Customizing</a></li>
       <li class="toc-sub"><a href="#flavor-hooks">Flavor hooks</a></li>
@@ -403,7 +403,7 @@
 <h2>Installation</h2>
 <p class="lead">Two commands add the plugin from the <code>caioariede</code> marketplace; the store and its config scaffold themselves on first use.</p>
 
-<p>Workstreams ships as a Claude Code plugin — eight <code>ws-*</code> skills plus a shared contract. Install it once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
+<p>Workstreams ships as a Claude Code plugin — ten <code>ws-*</code> skills: eight workflow commands, the shared contract (<code>ws</code>), and this guide (<code>ws-guide</code>). Install it once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
 
 <h3>Prerequisites</h3>
 <ul>
@@ -416,7 +416,7 @@
 <ol class="steps">
 <li><b>Add the marketplace</b> — point Claude Code at this repo.</li>
 <li><b>Install the plugin</b> — pull <code>workstreams</code> from the <code>caioariede</code> marketplace.</li>
-<li><b>Verify</b> — the eight <code>/ws-*</code> commands now resolve; <code>/ws-init</code> is the entry point.</li>
+<li><b>Verify</b> — the <code>/ws-*</code> commands now resolve; <code>/ws-init</code> is the entry point.</li>
 </ol>
 
 <pre class="code">/plugin marketplace add caioariede/claude-plugins
@@ -429,8 +429,8 @@
 <pre class="cmd-ex">$ /ws-config show
 $ /ws-config set spec-driven-development superpowers</pre>
 </section>
-<section id="commands"><h2>The eight commands</h2>
-<p class="lead">Eight skills cover the full life of a unit of work — from spinning up a container to tearing a branch down, plus deciding what's next and configuring flavors — while every durable fact lives in the global store, never in a worktree.</p>
+<section id="commands"><h2>The eight workflow commands</h2>
+<p class="lead">Eight workflow commands cover the full life of a unit of work — from spinning up a container to tearing a branch down, plus deciding what's next and configuring flavors — while every durable fact lives in the global store, never in a worktree.</p>
 
 <aside class="note note-rule"><b>Golden rule.</b> Worktrees are disposable code checkouts; all durable state lives in the store. Every command loads the shared contract (the <code>ws</code> skill) before it acts, and never stores what git or GitHub already owns (branch, base, PR number, status — all derived live).</aside>
 
@@ -567,7 +567,7 @@ hook-ws-start-after.prompt = Open &lt;branch&gt; in a new window? (No = keep wor
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>
 
-<p class="lead">Eight skills, one durable store: worktrees hold code, the store holds truth, and status is always derived live from git and GitHub.</p>
+<p class="lead">Eight workflow commands, one durable store: worktrees hold code, the store holds truth, and status is always derived live from git and GitHub.</p>
 
 <table class="grid">
 <thead>
