@@ -1,7 +1,7 @@
 ---
 name: ws-start
 description: Use when starting a new unit of work in an existing workstream (its own worktree + ledger entry). Run ws-init first if no workstream exists.
-argument-hint: [ws-id] "[what this unit does]" [--base <unit-id|branch>] [--repo <org/repo>]
+argument-hint: '[ws-id] "[what this unit does]" [--base <unit-id|branch>] [--repo <org/repo>]'
 ---
 
 # ws-start — start a unit

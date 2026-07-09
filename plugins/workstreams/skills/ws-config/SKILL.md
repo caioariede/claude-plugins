@@ -1,7 +1,7 @@
 ---
 name: ws-config
 description: Use to view or change workstream flavors — which external tool backs each behavior group (worktree-management, spec-driven-development, forge). Show the active selection, set a flavor, point at an overrides file, or scaffold a custom flavor.
-argument-hint: [show | set <group> <flavor> | add <group> <flavor> | set-overrides <path> | list [group]]
+argument-hint: "[show | set <group> <flavor> | add <group> <flavor> | set-overrides <path> | list [group]]"
 ---
 
 # ws-config — configure flavors

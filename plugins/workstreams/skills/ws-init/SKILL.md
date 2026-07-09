@@ -1,7 +1,7 @@
 ---
 name: ws-init
 description: Use when the user needs a new workstream and none exists yet — before starting any unit with ws-start.
-argument-hint: [workstream name]
+argument-hint: "[workstream name]"
 ---
 
 # ws-init — create a workstream
