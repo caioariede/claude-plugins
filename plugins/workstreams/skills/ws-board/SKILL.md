@@ -16,7 +16,7 @@ This skill is **read-only** — it derives everything and writes nothing.
 1. Read the `units.md` ledger and `backlog.md`. For each ledger unit derive its **status** per SPEC status rules and its **done/total task counts** from `progress.md` `## Tasks` (checked / total).
 2. Render the board — copy-paste ready. This lands in a **terminal**, so every unit needs a real newline. Markdown table cells can't hold newlines, and `<br>` shows up as a literal `<br>` — so never stack units inside one cell. Give each unit its **own table row** instead: one unit per column per row, padding shorter columns with blank cells so the rows line up.
    ```
-   *<name>* — <merged>/<total> units done
+   *<name>* — <merged>/<total> units done[ · ✅ complete]
 
    | ⏳ Not started | 🔄 In progress | ✅ Done |
    | --- | --- | --- |
@@ -24,6 +24,8 @@ This skill is **read-only** — it derives everything and writes nothing.
    | <slug> |  | <slug> · #<pr> |
    ```
    The header's `<merged>/<total>` counts **board units**: `<merged>` = the Done column, `<total>` = every unit on the board (ledger units + not-started planned). It tracks the whole workstream, not just started units.
+
+   Append ` · ✅ complete` to the header **only when SPEC "Workstream done" holds** — defer to that definition, do not re-list its conditions here. Without the ✅, an N/N `<merged>/<total>` means the units merged but the workstream is **not** done: open backlog remains, shown in the 📋 Backlog section below.
 
    Column contents:
    - **Not started** — `backlog.md` `## Planned units` slugs with **no matching ledger unit** (dedup vs ledger — starting one drops it from this column automatically). Slug only.
