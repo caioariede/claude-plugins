@@ -131,6 +131,21 @@
     font-size: 12pt;
     font-weight: 500;
   }
+  .toc li.toc-sub {
+    counter-increment: none;
+    padding: 8px 0 8px 3em;
+  }
+  .toc li.toc-sub::before {
+    content: "\21B3";
+    width: 1.6em;
+    color: var(--muted);
+    font-size: 9pt;
+  }
+  .toc li.toc-sub a {
+    font-size: 10.5pt;
+    font-weight: 400;
+    color: var(--ink-soft);
+  }
 
   /* Sections */
   section {
@@ -369,20 +384,23 @@
       <li><a href="#installation">Installation</a></li>
       <li><a href="#commands">The eight commands</a></li>
       <li><a href="#flavors">Flavors</a></li>
+      <li class="toc-sub"><a href="#override-flavor">Overriding a flavor</a></li>
+      <li class="toc-sub"><a href="#superpowers-flavor">Using with Superpowers</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
     </ol>
   </nav>
 
-<section id="idea"><h2>The idea</h2><p class="lead">A workstream is one feature split into many small units of work, each living in its own throwaway git worktree.</p><p>When a feature is too big for a single branch, you break it into <b>units</b> — a slice, a follow-up, a stacked layer. Each unit gets an isolated git worktree and branch of its own, so units never step on each other and can be built, reviewed, and merged independently. The worktree is a pure code checkout: a scratch space you can create, abandon, and recreate at will.</p><p>The catch is that a checkout can vanish — dropped, garbage-collected, or replaced — so nothing you care about keeping can live inside it. Every durable datum — a unit's progress and follow-ups, its history of decisions and restacks, and its identity map from unit to repo and branch — lives in a single <b>global store</b> under <code>~/.claude/workstreams/</code>, one directory per workstream, shared across repos. Volatile facts that git and GitHub already own (current branch, base, PR number, status) are never copied in; they are derived live.</p><pre class="diagram">~/.claude/workstreams/&lt;ws-id&gt;/
+<section id="idea"><h2>The idea</h2><p class="lead">A workstream is one feature split into many small units of work, each living in its own throwaway git worktree.</p><p>When a feature is too big for a single branch, you break it into <b>units</b> — a slice, a follow-up, a stacked layer. Each unit gets an isolated git worktree and branch of its own, so units never step on each other and can be built, reviewed, and merged independently. The worktree is a pure code checkout: a scratch space you can create, abandon, and recreate at will.</p><p>The catch is that a checkout can vanish — dropped, garbage-collected, or replaced — so nothing you care about keeping can live inside it. Every durable datum — a unit's charter of intent, its progress and follow-ups, its history of decisions and restacks, and its identity map from unit to repo and branch — lives in a single <b>global store</b> under <code>~/.claude/workstreams/</code>, one directory per workstream, shared across repos. Volatile facts that git and GitHub already own (current branch, base, PR number, status) are never copied in; they are derived live.</p><pre class="diagram">~/.claude/workstreams/&lt;ws-id&gt;/
   workstream.md          # metadata only
   units.md               # append-only ledger (unit ↔ repo/branch identity map)
   units/&lt;unit-id&gt;/
+    charter.md           # STATIC: why this unit exists — the north star
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
     log.md               # APPEND-ONLY: created, dropped, restack, decision, note</pre><aside class="note note-rule"><b>Golden rule.</b> The worktree holds only code. Drop and recreate it freely — all progress, history, and identity survive in the store.</aside></section>
 <section id="installation">
 <h2>Installation</h2>
-<p class="lead">Two commands add the plugin from the <code>caio</code> marketplace; the store and its config scaffold themselves on first use.</p>
+<p class="lead">Two commands add the plugin from the <code>caioariede</code> marketplace; the store and its config scaffold themselves on first use.</p>
 
 <p>Workstreams ships as a Claude Code plugin — eight <code>ws-*</code> skills plus a shared contract. Install it once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
 
@@ -396,19 +414,19 @@
 <h3>Add the plugin</h3>
 <ol class="steps">
 <li><b>Add the marketplace</b> — point Claude Code at this repo.</li>
-<li><b>Install the plugin</b> — pull <code>workstreams</code> from the <code>caio</code> marketplace.</li>
+<li><b>Install the plugin</b> — pull <code>workstreams</code> from the <code>caioariede</code> marketplace.</li>
 <li><b>Verify</b> — the eight <code>/ws-*</code> commands now resolve; <code>/ws-init</code> is the entry point.</li>
 </ol>
 
 <pre class="code">/plugin marketplace add caioariede/claude-plugins
-/plugin install workstreams@caio</pre>
+/plugin install workstreams@caioariede</pre>
 
 <aside class="note note-tip"><b>State scaffolds itself.</b> The global store at <code>~/.claude/workstreams/</code> and its <code>flavors.ini</code> are created on the first <code>ws-init</code> — nothing to set up by hand.</aside>
 
 <h3>Configure flavors (optional)</h3>
 <p>Defaults are <code>git-worktree</code> for worktree management, <code>gh</code> for the forge, and <code>none</code> for spec-driven development. Change any of them with <code>ws-config</code>; see the <a href="#flavors">Flavors</a> section.</p>
 <pre class="cmd-ex">$ /ws-config show
-$ /ws-config set worktree-management wmx</pre>
+$ /ws-config set spec-driven-development superpowers</pre>
 </section>
 <section id="commands"><h2>The eight commands</h2>
 <p class="lead">Eight skills cover the full life of a unit of work — from spinning up a container to tearing a branch down, plus deciding what's next and configuring flavors — while every durable fact lives in the global store, never in a worktree.</p>
@@ -428,7 +446,7 @@ Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) a
 <div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; &lt;what this unit does&gt; [--base &lt;unit-id|branch&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> starting a new unit of work in an existing workstream — its own worktree plus ledger entry. Run <code>ws-init</code> first if no workstream exists.</p>
 <div class="cmd-body">
-Mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, resolves the repo (<code>--repo</code> › a <code>--base</code> unit's repo › cwd) and the base, then creates the <code>&lt;slug&gt;</code> branch and worktree off the base via the active <code>worktree-management</code> flavor's <code>create</code>. Appends the ledger line and seeds <code>progress.md</code> and <code>log.md</code>; <code>ws-resume</code> plans and builds.
+Mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, resolves the repo (<code>--repo</code> › a <code>--base</code> unit's repo › cwd) and the base, then creates the <code>&lt;slug&gt;</code> branch and worktree off the base via the active <code>worktree-management</code> flavor's <code>create</code>. Appends the ledger line and seeds <code>charter.md</code> (the unit's static intent), <code>progress.md</code>, and <code>log.md</code>; <code>ws-resume</code> plans and builds.
 </div>
 <pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "add is_template flag" --base schema-migration</pre>
 </div>
@@ -437,7 +455,7 @@ Mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, resolves the repo (<cod
 <div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id]</span></div>
 <p class="cmd-when"><b>Use when</b> resuming or continuing an existing unit, or picking work back up from inside its worktree.</p>
 <div class="cmd-body">
-With no argument, infers the unit from the current worktree's branch. Ensures the worktree exists (reopening or recreating it if gone), reconciles the base against the recorded one and realigns on drift, then loads <code>progress.md</code> and <code>log.md</code> and continues at the first unchecked task.
+With no argument, infers the unit from the current worktree's branch. Ensures the worktree exists (reopening or recreating it if gone), reconciles the base against the recorded one and realigns on drift, then reads <code>charter.md</code> to reconstruct the unit's intent and loads <code>progress.md</code> and <code>log.md</code> to continue at the first unchecked task.
 </div>
 <pre class="cmd-ex">$ /ws-resume add-is-template-flag</pre>
 </div>
@@ -505,12 +523,32 @@ Edits only <code>~/.claude/workstreams/flavors.ini</code> — never a worktree. 
 <p>Your selection and any custom flavors live in <code>~/.claude/workstreams/flavors.ini</code>, merged over the plugin's built-in defs; an optional overrides file layers on top. View or change all of it with <code>ws-config</code>.</p>
 <aside class="note note-tip"><b>Configure with <code>/ws-config</code>.</b> <code>ws-config show</code> prints the active flavor per group; <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> switches one; <code>ws-config add</code> scaffolds a custom flavor to fill in. <code>gh</code> is the assumed forge baseline — a non-GitHub user adds a custom <code>forge</code> flavor via the overrides file.</aside>
 
+<h3 id="override-flavor">Overriding a flavor</h3>
+<p>Flavor definitions merge across three layers, lowest to highest precedence — the plugin's built-in <code>flavors.ini</code>, your store <code>~/.claude/workstreams/flavors.ini</code>, then an optional external overrides file. Higher layers win <b>per operation</b>, so you redefine only the keys you care about and inherit the rest.</p>
+<ol class="steps">
+<li><b>Switch the active flavor</b> — the common case. <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> rewrites the group's line under <code>[active]</code> in your store file; nothing else changes.</li>
+<li><b>Customize or add a flavor</b> — <code>ws-config add &lt;group&gt; &lt;flavor&gt;</code> scaffolds a <code>[&lt;group&gt;/&lt;flavor&gt;]</code> section to fill in. Redefine only the operations you want to change.</li>
+<li><b>Layer an external file</b> — <code>ws-config set-overrides &lt;path&gt;</code> records <code>overrides-file=&lt;path&gt;</code> under <code>[config]</code>, so a file outside the store (a shared team config, say) wins over both lower layers.</li>
+</ol>
+<p>Each operation's instruction is either a <code>plugin:skill</code> id (invoked as a skill) or a shell command with <code>&lt;branch&gt;</code>, <code>&lt;base&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;repo&gt;</code>, <code>&lt;pr&gt;</code>, and <code>&lt;new-base&gt;</code> filled from context. A non-GitHub user, for instance, replaces the <code>forge</code> group with a custom flavor:</p>
+<pre class="code">; ~/.claude/workstreams/flavors.ini
+[active]
+forge = glab
+
+[forge/glab]
+default-branch = glab repo view -F json | jq -r .default_branch
+pr-status      = glab mr view &lt;branch&gt; -F json
+pr-create      = glab mr create --source-branch &lt;branch&gt; --target-branch &lt;base&gt; --draft
+pr-ready       = glab mr update &lt;pr&gt; --ready
+pr-retarget    = glab mr update &lt;pr&gt; --target-branch &lt;new-base&gt;</pre>
+<aside class="note note-warn"><b>Missing keys fall back.</b> An operation no layer defines resolves to the group's <b>default</b> flavor (<code>git-worktree</code> / <code>none</code> / <code>gh</code>); an unreadable <code>overrides-file</code> is warned and skipped. Define every operation your custom flavor needs — don't lean on a partial section.</aside>
+
 <h3 id="superpowers-flavor">Using with Superpowers</h3>
 <p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out: a feature is many units, and each unit plans itself.</p>
 <ol class="steps">
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
 <li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. It creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan.</li>
-<li><b>Split the spec into units</b> with <code>ws-start</code>, one per shippable slice.</li>
+<li><b>Split the spec into units</b> with <code>ws-start</code>, one per shippable slice — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
 <li><b>Let each unit plan itself.</b> <code>ws-resume</code> runs <code>writing-plans</code> scoped to that unit (tasks land as <code>T1..</code> in its <code>progress.md</code>), then executes with <code>subagent-driven-development</code>.</li>
 </ol>
 <aside class="note note-rule"><b>Planning lives in units, not above them.</b> After the spec, go straight to <code>ws-init</code> → <code>ws-start</code>. The <code>writing-plans</code> step is deferred into each unit's <code>ws-resume</code>, so every plan is scoped to one worktree.</aside>
@@ -541,6 +579,7 @@ Edits only <code>~/.claude/workstreams/flavors.ini</code> — never a worktree. 
 ├── units.md               # append-only ledger: unit ↔ repo/branch identity
 └── units/
     └── &lt;unit-id&gt;/
+        ├── charter.md      # STATIC: why this unit exists (the north star)
         ├── progress.md     # MUTABLE work-state: Tasks + Follow-ups checklists
         └── log.md          # APPEND-ONLY: created · dropped · restack · decision · note</pre>
 
