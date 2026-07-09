@@ -384,7 +384,7 @@
       <li><a href="#installation">Installation</a></li>
       <li><a href="#commands">The eight commands</a></li>
       <li><a href="#flavors">Flavors</a></li>
-      <li class="toc-sub"><a href="#override-flavor">Overriding a flavor</a></li>
+      <li class="toc-sub"><a href="#customizing">Customizing</a></li>
       <li class="toc-sub"><a href="#superpowers-flavor">Using with Superpowers</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
@@ -523,7 +523,7 @@ Edits only <code>~/.claude/workstreams/flavors.ini</code> — never a worktree. 
 <p>Your selection and any custom flavors live in <code>~/.claude/workstreams/flavors.ini</code>, merged over the plugin's built-in defs; an optional overrides file layers on top. View or change all of it with <code>ws-config</code>.</p>
 <aside class="note note-tip"><b>Configure with <code>/ws-config</code>.</b> <code>ws-config show</code> prints the active flavor per group; <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> switches one; <code>ws-config add</code> scaffolds a custom flavor to fill in. <code>gh</code> is the assumed forge baseline — a non-GitHub user adds a custom <code>forge</code> flavor via the overrides file.</aside>
 
-<h3 id="override-flavor">Overriding a flavor</h3>
+<h3 id="customizing">Customizing</h3>
 <p>Flavor definitions merge across three layers, lowest to highest precedence — the plugin's built-in <code>flavors.ini</code>, your store <code>~/.claude/workstreams/flavors.ini</code>, then an optional external overrides file. Higher layers win <b>per operation</b>, so you redefine only the keys you care about and inherit the rest.</p>
 <ol class="steps">
 <li><b>Switch the active flavor</b> — the common case. <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> rewrites the group's line under <code>[active]</code> in your store file; nothing else changes.</li>
