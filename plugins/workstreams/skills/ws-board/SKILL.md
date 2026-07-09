@@ -18,7 +18,7 @@ This skill is **read-only** — it derives everything and writes nothing.
    ```
    *<name>* — <merged>/<total> units done
 
-   | Not started | In progress | Done |
+   | ⏳ Not started | 🔄 In progress | ✅ Done |
    | --- | --- | --- |
    | <slug> | <slug> · #<pr> · <done>/<total> | <slug> · #<pr> |
    | <slug> |  | <slug> · #<pr> |
@@ -32,12 +32,12 @@ This skill is **read-only** — it derives everything and writes nothing.
 
    Then, **only when it has items**, below the table — Backlog first, Dropped last:
    ```
-   *Backlog*
-   - F<n> <desc> (<unit>)
-   - WF<n> <desc>
+   📋 *Backlog*
+   - F<n> <gist> (follow-up from <unit>)
+   - WF<n> <gist> (follow-up from <unit>)
 
-   *Dropped*
+   🗑 *Dropped*
    - <slug>
    ```
-   **Backlog** = open follow-ups: per-unit in-flight (`F<n>` from unit `progress.md`, tagged with its unit) plus workstream-deferred (`WF<n>` from `backlog.md`). Trim each `<desc>` to a one-line summary (the gist — first sentence or less) so the board stays glanceable; the full text lives in `backlog.md` / the unit's `progress.md`. **Dropped** = ledger units with status `dropped`. Omit a header entirely when it has nothing — an empty section is noise, not information.
+   **Backlog** = open follow-ups: per-unit in-flight (`F<n>` from a unit's `progress.md`) plus workstream-deferred (`WF<n>` from `backlog.md`). End each with `(follow-up from <unit>)` so its origin is visible — an `F<n>`'s origin is the unit whose `progress.md` holds it; a `WF<n>`'s is the `(from <unit-id>, <ts>)` recorded on its `backlog.md` line. Trim each `<desc>` to a one-line summary (the gist — first sentence or less) so the board stays glanceable; the full text lives in the source file. **Dropped** = ledger units with status `dropped`. Omit a header entirely when it has nothing — an empty section is noise, not information.
 3. With a `unit-id`: print that unit's full `progress.md` checklist plus recent `log.md` notes.
