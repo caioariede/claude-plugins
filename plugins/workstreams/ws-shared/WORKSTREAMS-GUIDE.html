@@ -385,6 +385,7 @@
       <li><a href="#commands">The eight commands</a></li>
       <li><a href="#flavors">Flavors</a></li>
       <li class="toc-sub"><a href="#customizing">Customizing</a></li>
+      <li class="toc-sub"><a href="#flavor-hooks">Flavor hooks</a></li>
       <li class="toc-sub"><a href="#superpowers-flavor">Using with Superpowers</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
@@ -515,7 +516,7 @@ Edits only <code>~/.claude/workstreams/flavors.ini</code> — never a worktree. 
 <table class="grid">
 <thead><tr><th>Group</th><th>Operations</th><th>Built-in flavors (default first)</th></tr></thead>
 <tbody>
-<tr><td><code>worktree-management</code></td><td>create · remove · locate · open-window (optional)</td><td><code>git-worktree</code>, <code>wmx</code></td></tr>
+<tr><td><code>worktree-management</code></td><td>create · remove · locate</td><td><code>git-worktree</code>, <code>wmx</code></td></tr>
 <tr><td><code>spec-driven-development</code></td><td>plan · execute · ship</td><td><code>none</code>, <code>superpowers</code></td></tr>
 <tr><td><code>forge</code></td><td>default-branch · pr-status · pr-create · pr-ready · pr-retarget</td><td><code>gh</code></td></tr>
 </tbody>
@@ -542,6 +543,16 @@ pr-create      = glab mr create --source-branch &lt;branch&gt; --target-branch &
 pr-ready       = glab mr update &lt;pr&gt; --ready
 pr-retarget    = glab mr update &lt;pr&gt; --target-branch &lt;new-base&gt;</pre>
 <aside class="note note-warn"><b>Missing keys fall back.</b> An operation no layer defines resolves to the group's <b>default</b> flavor (<code>git-worktree</code> / <code>none</code> / <code>gh</code>); an unreadable <code>overrides-file</code> is warned and skipped. Define every operation your custom flavor needs — don't lean on a partial section.</aside>
+
+<h3 id="flavor-hooks">Flavor hooks</h3>
+<p>A <b>hook</b> lets a flavor react at a skill's lifecycle point — an optional operation named <code>hook-&lt;skill&gt;-&lt;event&gt;</code>. Each skill documents the events it fires; at an event it runs that hook from every active flavor that defines it. Hooks fire <b>only in an interactive session</b> — a subagent or headless run fires none, so a hook never steals focus or blocks automation.</p>
+<p>Hooks can prompt. Companion keys (valid only on <code>hook-*</code> operations) make one interactive: with no <code>.prompt</code> the hook just runs; a <code>.prompt</code> and no choices is a yes/no (Yes runs the base instruction, No skips); adding <code>.choices.&lt;name&gt;</code> entries turns it into a 2–4-option pick, each with an optional <code>.choices.&lt;name&gt;.desc</code>.</p>
+<p>The built-in <code>wmx</code> flavor uses one: it creates worktrees windowless, then at the end of <code>ws-start</code> asks whether to open a new window — folded into the "where do you continue?" handoff.</p>
+<pre class="code">; built-in — worktree-management/wmx
+create                     = wmx worktree create &lt;branch&gt; --base &lt;base&gt; --no-window
+hook-ws-start-after        = wmx window open &lt;branch&gt;
+hook-ws-start-after.prompt = Open &lt;branch&gt; in a new window? (No = keep working here)</pre>
+<aside class="note note-tip"><b>Silence or force it to taste.</b> In your store <code>flavors.ini</code>, set <code>hook-ws-start-after.prompt =</code> (empty) to always open without asking, or <code>hook-ws-start-after =</code> (empty) to never open — one line each, merged over the built-in.</aside>
 
 <h3 id="superpowers-flavor">Using with Superpowers</h3>
 <p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out: a feature is many units, and each unit plans itself.</p>
