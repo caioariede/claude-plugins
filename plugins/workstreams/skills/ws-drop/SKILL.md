@@ -1,6 +1,7 @@
 ---
 name: ws-drop
 description: Use when the user wants to abandon or tear down a workstream unit whose work is NOT being kept — remove its worktree + local branch and log it dropped. Do NOT reach for this to "clean up" a unit that is already done or merged: dropping logs abandonment and mislabels shipped work — a completed unit's worktree is just removed via the active worktree-management flavor's remove, no drop. Trigger on "drop/abandon this unit", "kill this worktree", "give up on X" — but confirm the unit isn't already merged first.
+argument-hint: [unit-id]
 ---
 
 # ws-drop — drop (abandon) a unit

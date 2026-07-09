@@ -1,6 +1,7 @@
 ---
 name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status".
+argument-hint: [ws-id] [unit-id]
 ---
 
 # ws-board — workstream board
