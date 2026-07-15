@@ -9,6 +9,9 @@ description: >-
   no drop. Trigger on "drop/abandon this unit", "kill this worktree", "give up
   on X" — but confirm the unit isn't already merged first.
 argument-hint: "[unit-id]"
+metadata:
+  version: "0.3.0"
+  author: Caio Ariede
 ---
 
 # ws-drop — drop (abandon) a unit

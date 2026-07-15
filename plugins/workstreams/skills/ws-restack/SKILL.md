@@ -2,6 +2,9 @@
 name: ws-restack
 description: Use when a unit's base PR merged and its branch must move onto a new base, or when GitHub auto-retargeted a dependent PR and the local branch needs realigning.
 argument-hint: "[unit-id] [new-base]"
+metadata:
+  version: "0.3.0"
+  author: Caio Ariede
 ---
 
 # ws-restack — restack a unit

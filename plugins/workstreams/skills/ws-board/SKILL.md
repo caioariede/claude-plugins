@@ -2,6 +2,9 @@
 name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status".
 argument-hint: "[ws-id] [unit-id]"
+metadata:
+  version: "0.3.1"
+  author: Caio Ariede
 ---
 
 # ws-board — workstream board
@@ -14,7 +17,7 @@ This skill is **read-only** — it derives everything and writes nothing.
 
 ## Steps
 1. Read the `units.md` ledger and `backlog.md`. For each ledger unit derive its **status** per SPEC status rules and its **done/total task counts** from `progress.md` `## Tasks` (checked / total).
-2. Render the board — copy-paste ready. This lands in a **terminal**, so every unit needs a real newline. Markdown table cells can't hold newlines, and `<br>` shows up as a literal `<br>` — so never stack units inside one cell. Give each unit its **own table row** instead: one unit per column per row, padding shorter columns with blank cells so the rows line up.
+2. Render the board for on-screen reading — output it as **bare GFM markdown, never inside a fenced code block**. A code fence makes the terminal print literal `|` pipes instead of a rendered table; the fenced blocks below delimit the templates for this doc only — don't reproduce the fence in your output. This lands in a **terminal**, so every unit needs a real newline. Markdown table cells can't hold newlines, and `<br>` shows up as a literal `<br>` — so never stack units inside one cell. Give each unit its **own table row** instead: one unit per column per row, padding shorter columns with blank cells so the rows line up.
    ```
    *<name>* — <merged>/<total> units done[ · ✅ complete]
 

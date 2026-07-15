@@ -2,6 +2,9 @@
 name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Decides the next action; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
+metadata:
+  version: "0.3.0"
+  author: Caio Ariede
 ---
 
 # ws-next — recommend the next workstream action

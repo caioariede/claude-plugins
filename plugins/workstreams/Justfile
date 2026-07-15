@@ -1,6 +1,7 @@
 # Regenerate the Workstreams guide PDF from its HTML source.
-# The version line in the HTML is injected from plugin.json —
-# plugin.json is the single source of truth; never hand-edit it.
+# The version line in the HTML is injected from plugin.json, whose
+# version is derived as max() of the per-skill metadata.version.
+# After bumping a skill, run `just sync-plugin-version` first.
 gen-guide-pdf:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -27,5 +28,36 @@ check-guide:
         echo "guide version drift: plugin.json=$version, HTML has:" >&2
         grep -o "Version [^<]*" "{{justfile_directory()}}/skills/ws-guide/assets/WORKSTREAMS-GUIDE.html" >&2
         echo "run: just gen-guide-pdf" >&2
+        exit 1
+    fi
+
+# Set plugin.json version to max() of every skill's metadata.version.
+# Skills are the source of truth; the plugin umbrella tracks the
+# highest. Run after bumping any skill's version.
+sync-plugin-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="{{justfile_directory()}}"
+    max=$(grep -hE '^[[:space:]]*version:[[:space:]]*"' "$dir"/skills/*/SKILL.md \
+        | sed -E 's/.*"([^"]+)".*/\1/' | sort -V | tail -1)
+    plugin="$dir/.claude-plugin/plugin.json"
+    tmp=$(mktemp)
+    jq --arg v "$max" '.version = $v' "$plugin" > "$tmp" && mv "$tmp" "$plugin"
+    echo "plugin.json version = $max"
+
+# Fail when plugin.json version disagrees with max() of skill versions.
+# CI runs this; fix by running `just sync-plugin-version` and committing.
+check-plugin-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="{{justfile_directory()}}"
+    max=$(grep -hE '^[[:space:]]*version:[[:space:]]*"' "$dir"/skills/*/SKILL.md \
+        | sed -E 's/.*"([^"]+)".*/\1/' | sort -V | tail -1)
+    have=$(jq -r .version "$dir/.claude-plugin/plugin.json")
+    if [ "$have" = "$max" ]; then
+        echo "plugin version OK ($have = max skill version)"
+    else
+        echo "plugin version drift: plugin.json=$have, max skill version=$max" >&2
+        echo "run: just sync-plugin-version" >&2
         exit 1
     fi

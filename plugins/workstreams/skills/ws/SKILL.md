@@ -1,6 +1,9 @@
 ---
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
+metadata:
+  version: "0.3.0"
+  author: Caio Ariede
 ---
 
 # Workstreams — shared contract (`ws-*` skills)

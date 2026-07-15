@@ -1,0 +1,45 @@
+name: workstreams-version
+on:
+  pull_request:
+    paths:
+      - "plugins/workstreams/.claude-plugin/plugin.json"
+      - "plugins/workstreams/skills/**/SKILL.md"
+      - "plugins/workstreams/skills/ws-guide/assets/**"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/workstreams/.claude-plugin/plugin.json"
+      - "plugins/workstreams/skills/**/SKILL.md"
+      - "plugins/workstreams/skills/ws-guide/assets/**"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Same as `just check-plugin-version`, inlined so CI needs no just.
+      - name: plugin.json version is max of skill versions
+        run: |
+          max=$(grep -hE '^[[:space:]]*version:[[:space:]]*"' plugins/workstreams/skills/*/SKILL.md \
+            | sed -E 's/.*"([^"]+)".*/\1/' | sort -V | tail -1)
+          have=$(jq -r .version plugins/workstreams/.claude-plugin/plugin.json)
+          if [ "$have" = "$max" ]; then
+            echo "plugin version OK ($have = max skill version)"
+          else
+            echo "plugin version drift: plugin.json=$have, max skill version=$max" >&2
+            echo "run: just sync-plugin-version in plugins/workstreams and commit" >&2
+            exit 1
+          fi
+      # Same as `just check-guide`, inlined so CI needs no just/chrome.
+      - name: Guide version matches plugin.json
+        run: |
+          version=$(jq -r .version plugins/workstreams/.claude-plugin/plugin.json)
+          html=plugins/workstreams/skills/ws-guide/assets/WORKSTREAMS-GUIDE.html
+          if grep -q "Version $version" "$html"; then
+            echo "guide version OK ($version)"
+          else
+            echo "guide version drift: plugin.json=$version, HTML has:" >&2
+            grep -o "Version [^<]*" "$html" >&2
+            echo "run: just gen-guide-pdf in plugins/workstreams and commit" >&2
+            exit 1
+          fi
