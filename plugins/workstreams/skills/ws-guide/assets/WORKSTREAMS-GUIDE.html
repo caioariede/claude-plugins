@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.4.0 · July 2026</p>
+    <p class="version">Version 0.5.0 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -450,7 +450,7 @@
       <li><a href="#installation">Installation</a></li>
       <li class="toc-sub"><a href="#install-skills-cli">Agent Skills CLI (skills.sh)</a></li>
       <li class="toc-sub"><a href="#install-marketplace">Claude Code marketplace</a></li>
-      <li><a href="#commands">The eight workflow commands</a></li>
+      <li><a href="#commands">The workflow commands</a></li>
       <li><a href="#flavors">Flavors</a></li>
       <li class="toc-sub"><a href="#customizing">Customizing</a></li>
       <li class="toc-sub"><a href="#flavor-hooks">Flavor hooks</a></li>
@@ -491,7 +491,7 @@
 <h2>Installation</h2>
 <p class="lead">One command installs all ten skills — through the Agent Skills CLI or the Claude Code plugin marketplace; the store and its config scaffold themselves on first use.</p>
 
-<p>Workstreams ships as ten <code>ws-*</code> skills in the portable <b>Agent Skills</b> format: eight workflow commands, the shared contract (<code>ws</code>), and this guide (<code>ws-guide</code>). Install once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
+<p>Workstreams ships as a set of <code>ws-*</code> skills in the portable <b>Agent Skills</b> format: the workflow commands, the shared contract (<code>ws</code>), and this guide (<code>ws-guide</code>). Install once and the <code>/ws-*</code> commands are available in every repo, because the store is global rather than per-project.</p>
 
 <h3>Prerequisites</h3>
 <ul>
@@ -519,8 +519,8 @@ npx skills update    # refresh installed skills later</pre>
 <pre class="cmd-ex">$ /ws-config show
 $ /ws-config set spec-driven-development superpowers</pre>
 </section>
-<section id="commands"><h2>The eight workflow commands</h2>
-<p class="lead">Eight workflow commands cover the full life of a unit of work — from spinning up a container to tearing a branch down, plus deciding what's next and configuring flavors — while every durable fact lives in the global store, never in a worktree.</p>
+<section id="commands"><h2>The workflow commands</h2>
+<p class="lead">The workflow commands cover the full life of a unit of work — from spinning up a container to tearing a branch down, plus deciding what's next and configuring flavors — while every durable fact lives in the global store, never in a worktree.</p>
 
 <aside class="note note-rule"><b>Golden rule.</b> Worktrees are disposable code checkouts; all durable state lives in the store. Every command loads the shared contract (the <code>ws</code> skill) before it acts, and never stores what git or GitHub already owns (branch, base, PR number, status — all derived live).</aside>
 
@@ -666,7 +666,7 @@ hook-ws-next-after.choices.n.desc = No</pre>
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>
 
-<p class="lead">Eight workflow commands, one durable store: worktrees hold code, the store holds truth, and status is always derived live from git and GitHub.</p>
+<p class="lead">The workflow commands, one durable store: worktrees hold code, the store holds truth, and status is always derived live from git and GitHub.</p>
 
 <table class="grid">
 <thead>
