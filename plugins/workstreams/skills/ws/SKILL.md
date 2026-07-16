@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   author: Caio Ariede
 ---
 
@@ -29,16 +29,32 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | current branch | git (the worktree) | `git rev-parse --abbrev-ref HEAD` |
 | base / did GitHub retarget | GitHub | active `forge` flavor `pr-status` (SPEC §Flavors) |
 | PR number + draft/ready/merged | GitHub | active `forge` flavor `pr-status` |
-| status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. PR merged → `merged` · 3. PR ready → `in-review` · 4. PR draft or no PR → `building` |
+| status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. PR merged → `merged` · 3. has an unmet need (§Dependencies) → `blocked` · 4. PR ready → `in-review` · 5. PR draft or no PR → `building` |
 | unit ↔ repo/branch | `units.md` ledger | set once at `ws-start` |
 | unit purpose / scope (why it exists) | unit `charter.md` | set once at `ws-start`; read by `ws-resume` |
 | tasks + in-flight follow-ups | unit `progress.md` | resolved before this unit's PR merges |
+| explicit needs (dependencies) | unit `progress.md` `## Needs` (+ base from ledger) | current set is mutable state; base is the implicit need (§Dependencies) |
 | deferred follow-ups + planned units | `backlog.md` | outlive the unit (see Follow-up placement) |
 | decisions / notes / drop / restack history | `log.md` | append-only |
 
 **Invariants:** log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a ledger slug matches it (dedup vs ledger) — "not started" is not a derived unit *status*, it is a backlog item without a ledger line yet.
 
-**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building` or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>`. Any open item ⇒ **not done**. Dropped units are terminal, not blockers.
+**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>`. Any open item ⇒ **not done**. Dropped units are terminal, not blockers.
+
+## Dependencies (needs / blocked)
+A unit's **needs** = `{ base, when base is a unit-id }` ∪ `{ explicit needs }`. base is the **implicit** need — `ws-start --base <unit-id>` declares the dependency; explicit needs are added later via `ws-block`.
+
+**Need target** — each need points at either:
+- a **unit** (`<unit-id>` or bare slug) — **satisfied** when that unit is *code-complete*.
+- a **follow-up** (`<unit-id>:F<n>` or `WF<n>`) — **satisfied** when that box is checked in its source file.
+
+**code-complete** (derived predicate; never a printed status label): a unit has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. `## Follow-ups` are ignored; zero tasks is *not* code-complete. `merged` implies code-complete.
+
+**blocked** (derived status): a unit has ≥1 need whose target is not satisfied. A **dropped** target is never code-complete → the dependent is stuck: flag it `(dropped)` and route to triage, never auto-resolve. A follow-up target that is *removed* (deleted, not checked) is likewise unresolvable → same triage.
+
+**Derivation is cross-unit.** Unlike git/PR/log-derived facts, `blocked` reads *other* units' code-complete and status, so status resolution **walks the need graph**. `ws-block` refuses to create a cycle, but a hand-edited store could still hold one — every graph walk carries a **visited-set** and never recurses blindly.
+
+Merge ordering (a stacked unit cannot merge before its base) stays owned by git/GitHub + restack — `blocked` means "cannot proceed with work," satisfied at code-complete, distinct from the merge gate.
 
 ## IDs & conventions
 - **ws-id** = `<YYYY-MM-DD>-<slug(name)>` = the store dir name (`date -u +%Y-%m-%d`).
@@ -90,11 +106,11 @@ when the base is in this one:
 **`backlog.md`** (workstream future work; mutable):
 ```
 ## Planned units
-- [ ] <slug>  base=<unit-id|branch>  — <what>
+- [ ] <slug>  base=<unit-id|branch>  [needs=<target>[,<target>]]  — <what>
 ## Follow-ups
 - [ ] WF<n>  <desc>  (from <unit-id>, <ts>)
 ```
-Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a ledger unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream.
+Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a ledger unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream. `needs=` carries dependencies **beyond** base (bare targets, no notes); `ws-start` seeds them into the started unit's `progress.md` `## Needs` (§Dependencies).
 
 **`units/<unit-id>/charter.md`** (static — the unit-level `workstream.md`; no log, no status, nothing volatile). Written once at `ws-start`, read by `ws-resume` to reconstruct the unit's intent with no chat scrollback:
 ```
@@ -107,14 +123,16 @@ plan time against the design; the charter is the north star, not the plan.>
 ```
 Re-scope is a deliberate human edit here (rare) — like editing `workstream.md`'s goal — not churn.
 
-**`units/<unit-id>/progress.md`** (mutable; checklists only — no branch/status/PR, those derive):
+**`units/<unit-id>/progress.md`** (mutable current-state — no branch/status/PR, those derive):
 ```
 ## Tasks
 - [ ] T1  <desc>
 ## Follow-ups
 - [ ] F1  <desc>
+## Needs
+- N1  <target>   — <note>
 ```
-Task/follow-up ids (`T1`, `F1`) are monotonic per unit and never reused, even after check-off or removal.
+`T<n>`/`F<n>`/`N<n>` ids are monotonic per unit and never reused, even after check-off or removal. `## Needs` lines have **no checkbox** — a need's satisfied/open state is *derived* from its target (§Dependencies), never hand-marked; remove a line only on a genuine scope change (append a `decision` to `log.md`). `<target>` = a unit-id/bare-slug or a follow-up id (`<unit-id>:F<n>` / `WF<n>`); the note is optional free text.
 
 **`units/<unit-id>/log.md`** (append-only): `- <ts>  <kind>  <payload>`
 kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>`
