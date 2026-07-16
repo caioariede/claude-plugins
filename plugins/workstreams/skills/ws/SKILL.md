@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
   author: Caio Ariede
 ---
 
@@ -156,10 +156,16 @@ orchestration terminal is your own convention to name, not a role defined here.
 
 ## Next-step chaining
 Every `ws-*` skill ends by naming the single best next command and **offering to
-run it now (default yes)**. It may *mention* the relevant unit so a
-parallel-session user knows where they would go — informational, not a
-precondition to running. `ws-next` is the router; defer to it when the next step
-isn't singular.
+run it now (default yes)**. A skill may delegate this offer to a flavor hook
+(§Flavor hooks) — when an active flavor defines it, the hook's prompt replaces
+the default offer, and the chosen instruction is all that runs. What the choices
+offer is the flavor's business; the skill only distinguishes outcomes: a choice
+resolving to `<command>` runs the command in this session; any other choice is
+the flavor handing the work off its own way — run it, re-emit the command, and
+stop. No flavor defines the hook → the default offer above. The skill may
+*mention* the relevant unit so a parallel-session user knows where they would
+go — informational, not a precondition to running. `ws-next` is the router;
+defer to it when the next step isn't singular.
 
 ## Worktree = code only
 Never write store files into a worktree. Find a unit's worktree via the ledger branch, using the active `worktree-management` flavor's `locate` (SPEC §Flavors). Drop and recreate worktrees freely — progress survives in the store.
@@ -183,7 +189,7 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 1. active flavor = merged `[active] G` → else default (`git-worktree` / `none` / `gh`).
 2. instruction = `[G/<flavor>] O` merged **per key** across layers (overrides > store > built-in).
 3. missing after merge → the group **default flavor's** `O`; an optional op no layer defines → skip.
-4. `word:word` → invoke as a skill; else run as shell, filling `<branch> <base> <path> <repo> <pr> <new-base>` from context.
+4. `word:word` → invoke as a skill; a `ws-*` command line (e.g. `ws-resume <unit>`) → invoke that skill with those arguments; else run as shell. Fill `<branch> <base> <path> <repo> <pr> <new-base>` from context; hook instructions and their `.prompt`/`.choices` may also use `<unit>` (the target unit id) and `<command>` (the firing skill's resolved next command).
 
 **Flavor hooks** — a flavor may react at a skill's lifecycle point. A **hook** is an optional operation named `hook-<skill>-<event>` (e.g. `hook-ws-start-after`); each skill documents the events it fires. At an event, and **only in an interactive session** (never a subagent/headless run), the skill fires that hook from every **active** flavor — across all groups, in group order (`worktree-management`, `spec-driven-development`, `forge`) — that defines it. Companion keys, valid only on `hook-*` operations: `<hook>.prompt` (a question; its presence makes the hook interactive) · `<hook>.choices.<name>` (an option's instruction; empty = skip) · `<hook>.choices.<name>.desc` (its picker description — label is `<name>`). **Modes:** no `.prompt` → run the base instruction unconditionally · `.prompt` without `.choices` → binary (Yes runs the base instruction, No skips) · `.prompt` with `.choices` → present the 2–4 options and run the chosen one (base ignored). A dismissed prompt skips. Base and `.choices` values resolve as any instruction (rule 4). `hook-`, `.prompt` and `.choices.` are reserved on operation keys, and an option `<name>` may not be `prompt`.
 

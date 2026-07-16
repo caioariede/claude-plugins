@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.3.1 · July 2026</p>
+    <p class="version">Version 0.4.0 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -586,7 +586,7 @@ Shows exactly what will be removed and requires explicit confirmation, then remo
 <div class="cmd-head"><span class="cmd-name">ws-next</span><span class="cmd-sig">[ws-id]</span></div>
 <p class="cmd-when"><b>Use when</b> you're unsure which <code>ws-*</code> command or which unit to act on next — after finishing a unit, when a PR merges, or any "what now?" moment.</p>
 <div class="cmd-body">
-Reads the ledger and each unit's live status, then names the single next action and the command to run it — it decides, it doesn't do the work (<code>ws-resume</code> does). Read-only, like <code>ws-board</code>.
+Reads the ledger and each unit's live status, then names the single next action and the command to run it — it decides, it doesn't do the work (<code>ws-resume</code> does). Read-only, like <code>ws-board</code>. It ends by offering to run the named command; an active flavor can take over that offer with a <a href="#flavor-hooks">flavor hook</a> and present its own choices.
 </div>
 <pre class="cmd-ex">$ /ws-next 2026-07-03-task-templates</pre>
 </div>
@@ -621,7 +621,7 @@ Edits only <code>~/.local/share/workstreams/flavors.ini</code> — never a workt
 <li><b>Customize or add a flavor</b> — <code>ws-config add &lt;group&gt; &lt;flavor&gt;</code> scaffolds a <code>[&lt;group&gt;/&lt;flavor&gt;]</code> section to fill in. Redefine only the operations you want to change.</li>
 <li><b>Layer an external file</b> — <code>ws-config set-overrides &lt;path&gt;</code> records <code>overrides-file=&lt;path&gt;</code> under <code>[config]</code>, so a file outside the store (a shared team config, say) wins over both lower layers.</li>
 </ol>
-<p>Each operation's instruction is either a <code>plugin:skill</code> id (invoked as a skill) or a shell command with <code>&lt;branch&gt;</code>, <code>&lt;base&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;repo&gt;</code>, <code>&lt;pr&gt;</code>, and <code>&lt;new-base&gt;</code> filled from context. A non-GitHub user, for instance, replaces the <code>forge</code> group with a custom flavor:</p>
+<p>Each operation's instruction is a <code>plugin:skill</code> id (invoked as a skill), a <code>ws-*</code> command line (invoked as that skill), or a shell command — with <code>&lt;branch&gt;</code>, <code>&lt;base&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;repo&gt;</code>, <code>&lt;pr&gt;</code>, and <code>&lt;new-base&gt;</code> filled from context; hook instructions and their prompts/choices may also use <code>&lt;unit&gt;</code> and <code>&lt;command&gt;</code> (the firing skill's resolved next command). A non-GitHub user, for instance, replaces the <code>forge</code> group with a custom flavor:</p>
 <pre class="code">; ~/.local/share/workstreams/flavors.ini
 [active]
 forge = glab
@@ -636,13 +636,22 @@ pr-retarget    = glab mr update &lt;pr&gt; --target-branch &lt;new-base&gt;</pre
 
 <h3 id="flavor-hooks">Flavor hooks</h3>
 <p>A <b>hook</b> lets a flavor react at a skill's lifecycle point — an optional operation named <code>hook-&lt;skill&gt;-&lt;event&gt;</code>. Each skill documents the events it fires; at an event it runs that hook from every active flavor that defines it. Hooks fire <b>only in an interactive session</b> — a subagent or headless run fires none, so a hook never steals focus or blocks automation.</p>
-<p>Hooks can prompt. Companion keys (valid only on <code>hook-*</code> operations) make one interactive: with no <code>.prompt</code> the hook just runs; a <code>.prompt</code> and no choices is a yes/no (Yes runs the base instruction, No skips); adding <code>.choices.&lt;name&gt;</code> entries turns it into a 2–4-option pick, each with an optional <code>.choices.&lt;name&gt;.desc</code>.</p>
-<p>The built-in <code>wmx</code> flavor uses one: it creates worktrees windowless, then at the end of <code>ws-start</code> asks whether to open a new window — folded into the "where do you continue?" handoff.</p>
+<p>Hooks can prompt. Companion keys (valid only on <code>hook-*</code> operations) make one interactive: with no <code>.prompt</code> the hook just runs; a <code>.prompt</code> and no choices is a yes/no (Yes runs the base instruction, No skips); adding <code>.choices.&lt;name&gt;</code> entries turns it into a 2–4-option pick, each with an optional <code>.choices.&lt;name&gt;.desc</code> (the chosen option's instruction runs, the base is ignored; an empty instruction — and a dismissed prompt — skips).</p>
+<p>A hook at a skill's next-step offer is a <b>chain hook</b>: its prompt replaces the default "run it now? (default yes)". The skill stays unaware of what the choices mean — a choice resolving to <code>&lt;command&gt;</code> runs the named command in this session; any other choice is the flavor handing the work off its own way, so the skill runs it, re-emits the command, and stops.</p>
+<p>The built-in <code>wmx</code> flavor uses both kinds: it creates worktrees windowless, then at the end of <code>ws-start</code> asks whether to open a new window, and at the end of <code>ws-next</code> asks where the recommended command should run.</p>
 <pre class="code">; built-in — worktree-management/wmx
-create                     = wmx worktree create &lt;branch&gt; --base &lt;base&gt; --no-window
-hook-ws-start-after        = wmx window open &lt;branch&gt;
-hook-ws-start-after.prompt = Open &lt;branch&gt; in a new window? (No = keep working here)</pre>
-<aside class="note note-tip"><b>Silence or force it to taste.</b> In your store <code>flavors.ini</code>, set <code>hook-ws-start-after.prompt =</code> (empty) to always open without asking, or <code>hook-ws-start-after =</code> (empty) to never open — one line each, merged over the built-in.</aside>
+create                            = wmx worktree create &lt;branch&gt; --base &lt;base&gt; --no-window
+hook-ws-start-after               = wmx window open &lt;branch&gt;
+hook-ws-start-after.prompt        = Open &lt;branch&gt; in a new window? (No = keep working here)
+hook-ws-next-after                = &lt;command&gt;
+hook-ws-next-after.prompt         = Run &lt;unit&gt; now?
+hook-ws-next-after.choices.w      = wmx window open &lt;branch&gt;
+hook-ws-next-after.choices.w.desc = Yes, in a new window
+hook-ws-next-after.choices.h      = &lt;command&gt;
+hook-ws-next-after.choices.h.desc = Yes, here
+hook-ws-next-after.choices.n      =
+hook-ws-next-after.choices.n.desc = No</pre>
+<aside class="note note-tip"><b>Silence or force it to taste.</b> In your store <code>flavors.ini</code>, set <code>hook-ws-start-after.prompt =</code> (empty) to always open without asking, or <code>hook-ws-start-after =</code> (empty) to never open — one line each, merged over the built-in. The same levers work on <code>hook-ws-next-after</code> and its <code>.choices.*</code> keys.</aside>
 
 <h3 id="superpowers-flavor">Using with Superpowers</h3>
 <p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out: a feature is many units, and each unit plans itself.</p>

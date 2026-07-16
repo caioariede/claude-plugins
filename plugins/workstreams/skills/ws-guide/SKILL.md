@@ -2,7 +2,7 @@
 name: ws-guide
 description: Open the Workstreams guide PDF — the human-readable manual for the ws-* workflow. Use when the user asks to see, read, or open the workstreams guide, manual, handbook, or docs, or wants an overview of how the workstream workflow fits together.
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
   author: Caio Ariede
 ---
 

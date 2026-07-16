@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Decides the next action; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
   author: Caio Ariede
 ---
 
@@ -65,4 +65,4 @@ only the store + GitHub. Name the unit for a unit-scoped recommendation so a
 parallel-session user knows which one — never mandate a place to run it.
 
 ## Chain
-After naming the command, offer to run it now (default yes), then run it — it works from the current session. Mention the unit for a unit-scoped command (SPEC Next-step chaining).
+After naming the command, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) — fills: `<unit>`/`<branch>` from the named unit, `<command>` = the emitted `Next:` command, verbatim. What the choices offer is the active flavor's business — this skill stays unaware; it runs the chosen instruction per SPEC Next-step chaining (`<command>` → run the command here; anything else → the flavor's own handoff: run it, re-emit the command, stop). No active flavor defines the hook → default chaining: offer to run it now (default yes), then run it — it works from the current session. Rules 5–6 emit no runnable command — skip the hook there. Mention the unit for a unit-scoped command (SPEC Next-step chaining).
