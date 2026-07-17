@@ -3,49 +3,41 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   author: Caio Ariede
+compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
 
 # ws-board — workstream board
 
-**Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
+**Required first:** load the `ws` skill — the shared contract (SPEC) this skill relies on.
 
-**Input:** `$ARGUMENTS` = `[ws-id] [unit-id]`. A lone token that matches a store dir name is the `ws-id`, else it is a `unit-id` resolved via the SPEC bare-slug resolver. With 0 args and one workstream, use it; with 0 args and more than one, list them and ask which.
+This skill is **read-only** and **derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status for every unit in parallel, derives status per the SPEC, and prints a terminal-ready board (or one unit's detail). Your job is to run it and relay its output — the deterministic work lives in `ws/scripts/ws_store.py`, shared so `ws-next` can reuse it.
 
-This skill is **read-only** — it derives everything and writes nothing.
+## Run the script
 
-## Steps
-1. Read the `units.md` ledger and `backlog.md`. For each ledger unit derive its **status** per SPEC status rules and its **done/total task counts** from `progress.md` `## Tasks` (checked / total).
-2. Render the board for on-screen reading — output it as **bare GFM markdown, never inside a fenced code block**. A code fence makes the terminal print literal `|` pipes instead of a rendered table; the fenced blocks below delimit the templates for this doc only — don't reproduce the fence in your output. This lands in a **terminal**, so every unit needs a real newline. Markdown table cells can't hold newlines, and `<br>` shows up as a literal `<br>` — so never stack units inside one cell. Give each unit its **own table row** instead: one unit per column per row, padding shorter columns with blank cells so the rows line up.
-   ```
-   *<name>* — <merged>/<total> units done[ · ✅ complete]
+It ships at `scripts/board.py` relative to this skill's directory (when set, `${CLAUDE_PLUGIN_ROOT}/skills/ws-board/scripts/board.py`). Pass `$ARGUMENTS` straight through — `[ws-id] [unit-id]`, both optional:
 
-   | ⏳ Not started | ⛔ Blocked | 🔄 In progress | ✅ Done |
-   | --- | --- | --- | --- |
-   | <slug> | <slug> · needs <target>[, <target>][ · #<pr>] | <slug> · #<pr> · <done>/<total> | <slug> · #<pr> |
-   | <slug> |  |  | <slug> · #<pr> |
-   ```
-   The **⛔ Blocked** column appears **only when ≥1 unit is blocked** — omit the column (header + separator + cells) entirely otherwise, leaving the original three-column board.
+```
+python3 <this-skill-dir>/scripts/board.py [ws-id] [unit-id]
+```
 
-   The header's `<merged>/<total>` counts **board units**: `<merged>` = the Done column, `<total>` = every unit on the board — ledger units plus planned units with no matching ledger line, whether they land in Not-started or ⛔ Blocked. It tracks the whole workstream, not just started units.
+With a `unit-id` (or a lone bare slug that resolves to one) it prints that unit's detail — checklist, needs with derived state, recent log — instead of the board.
 
-   Append ` · ✅ complete` to the header **only when SPEC "Workstream done" holds** — defer to that definition, do not re-list its conditions here. Without the ✅, an N/N `<merged>/<total>` means the units merged but the workstream is **not** done: open backlog remains, shown in the 📋 Backlog section below.
+## Print the output verbatim
 
-   Column contents:
-   - **Not started** — `backlog.md` `## Planned units` slugs with **no matching ledger unit** whose needs are **all satisfied** (§Dependencies). Slug only. (A blocked planned unit goes to ⛔ Blocked instead.)
-   - **⛔ Blocked** — any unit with ≥1 unmet need (§Dependencies): a ledger unit whose derived status is `blocked`, or a planned unit (no ledger line) with an unmet need. Render `<slug> · needs <target>[, <target>][ · #<pr>]` — append ` · #<pr>` only when the unit has an open PR; a dropped/removed target shows `needs <target> (dropped)`.
-   - **In progress** — ledger units whose status is `building` or `in-review` **and not blocked**: `<slug> · #<pr> · <done>/<total>`. No PR opened yet → drop the `· #<pr>` segment.
-   - **Done** — ledger units whose status is `merged`: `<slug> · #<pr>`.
+Print stdout **as bare GFM markdown, never inside a code fence.** A fence makes the terminal show literal `|` pipes instead of a rendered table. The script already emits one unit per row with real newlines, and includes the ⛔ Blocked column only when a unit is blocked — don't reformat, re-wrap, or re-derive it.
 
-   Then, **only when it has items**, below the table — Backlog first, Dropped last:
-   ```
-   📋 *Backlog*
-   - F<n> <gist> (follow-up from <unit>)
-   - WF<n> <gist> (follow-up from <unit>)
+## When it exits 2
 
-   🗑 *Dropped*
-   - <slug>
-   ```
-   **Backlog** = open follow-ups: per-unit in-flight (`F<n>` from a unit's `progress.md`) plus workstream-deferred (`WF<n>` from `backlog.md`). End each with `(follow-up from <unit>)` so its origin is visible — an `F<n>`'s origin is the unit whose `progress.md` holds it; a `WF<n>`'s is the `(from <unit-id|ws-id>, <ts>)` recorded on its `backlog.md` line. Trim each `<desc>` to a one-line summary (the gist — first sentence or less) so the board stays glanceable; the full text lives in the source file. **Dropped** = ledger units with status `dropped`. Omit a header entirely when it has nothing — an empty section is noise, not information.
-3. With a `unit-id`: print that unit's full `progress.md` checklist (Tasks + Follow-ups), its `## Needs` with each need's target, derived satisfied/open state and note (§Dependencies) — plus the implicit base need when it is unmet, so a base-blocked unit's detail shows the dependency the ⛔ Blocked column already counts — plus recent `log.md` notes.
+The script couldn't choose a target on its own; the first stderr token says why:
+
+- `MANY_WORKSTREAMS <list>` — no args and more than one workstream. Show the list, ask which, re-run with that `ws-id`.
+- `AMBIGUOUS <matches>` — a bare slug matches units in more than one workstream. Show the matches, ask which, and re-run passing the `<ws-id>` and `<slug>` as two args.
+- `NO_MATCH` / `NO_STORE` — report it plainly; there is nothing to show.
+
+If `python3` or the forge CLI is missing, or the forge is unreachable, the board still renders — every unit without resolvable PR state simply falls back to `building`. Say so if the result looks PR-blind.
+
+## Next step
+
+Per SPEC §Next-step chaining, end by offering the single best next command (default yes). The board is a read; the natural next move is `ws-next` (the router — what to start next) or `ws-resume <unit>` for an in-progress or blocked unit. Defer to `ws-next` when the next step isn't singular.

@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
   author: Caio Ariede
 ---
 
@@ -111,6 +111,8 @@ when the base is in this one:
 - [ ] WF<n>  <desc>  (from <unit-id|ws-id>, <ts>)
 ```
 Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a ledger unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream; the origin is the capturing unit-id, or the `<ws-id>` when captured outside any unit (`ws-backlog`). `needs=` carries dependencies **beyond** base (bare targets, no notes); `ws-start` seeds them into the started unit's `progress.md` `## Needs` (§Dependencies).
+
+**Parse contract (machine-read).** `ws-board` (later `ws-next`) parse the store deterministically via `scripts/ws_store.py`, bundled with this skill, so these formats are a machine contract — keep fields structured. Parsing is deliberately tolerant. In `backlog.md` only `## Planned units` and `## Follow-ups` are read, by exact heading; any other `##` section (e.g. a stray `## Not tracked here`) is ignored wholesale. Within a read section an item is a single-line `- [ ]`/`- [x]` bullet; comments, single-`#` sub-headers, and blank lines are skipped, so humans keep them freely. A planned line keeps its structured fields (`base=`, `needs=`) **before** the ` — ` separator; everything after is opaque display text and never carries them. A follow-up's origin is the `(from <origin>, <ts>)` parenthetical, found by the `(from ` marker — the description itself may contain parens — and any resolution text trailing it (`→ done in X`) is ignored. In `log.md`, `dropped` is the line **kind** (the token after the timestamp), distinct from the word appearing inside a `decision`/`note` payload.
 
 **`units/<unit-id>/charter.md`** (static — the unit-level `workstream.md`; no log, no status, nothing volatile). Written once at `ws-start`, read by `ws-resume` to reconstruct the unit's intent with no chat scrollback:
 ```
