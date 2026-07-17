@@ -158,8 +158,12 @@ def resolve_args(store: Path, args: List[str]) -> Tuple[str, Optional[str]]:
     all_ws = list_workstreams(store)
     if len(args) >= 2:
         ws_hits = resolve_workstream(store, args[0])
-        ws_id = ws_hits[0] if len(ws_hits) == 1 else args[0]
-        return ws_id, args[1]
+        if len(ws_hits) == 1:
+            return ws_hits[0], args[1]
+        if len(ws_hits) > 1:
+            raise Pick(f"AMBIGUOUS workstream '{args[0]}' matches: "
+                       + ", ".join(ws_hits))
+        raise Pick(f"NO_MATCH no workstream '{args[0]}'")
     if len(args) == 1:
         tok = args[0]
         ws_hits = resolve_workstream(store, tok)

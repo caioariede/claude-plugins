@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/board_hook.py\" --format=claude",
+            "timeout": 20,
+            "statusMessage": "Rendering workstream board..."
+          }
+        ]
+      }
+    ]
+  }
+}

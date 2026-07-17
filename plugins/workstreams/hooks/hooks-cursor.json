@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "python3 \"${CURSOR_PROJECT_DIR}/.cursor/plugins/workstreams/hooks/board_hook.py\" --format=cursor",
+        "timeout": 20
+      }
+    ]
+  }
+}
