@@ -165,7 +165,7 @@ central "hub" and never says "run this here, that there." A dedicated
 orchestration terminal is your own convention to name, not a role defined here.
 
 - **Workstream-scoped** — touches only the global store + GitHub (`ws-init`,
-  `ws-start`, `ws-next`, `ws-board`, `ws-drop`). Runs from anywhere.
+  `ws-start`, `ws-next`, `ws-board`, `ws-drop`, `ws-block`). Runs from anywhere.
 - **Unit-scoped** — git operations on one unit's branch, so it resolves that
   unit's worktree first (`ws-resume`, `ws-restack`). `ws-resume` `cd`s into the
   worktree in the current session (already inside → continue); `ws-restack`

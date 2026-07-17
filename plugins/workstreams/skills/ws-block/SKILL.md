@@ -19,7 +19,7 @@ metadata:
 
 **Required first:** load the `ws` skill — the shared contract (SPEC) this skill references throughout; §Dependencies defines needs, targets, `code-complete`, and `blocked`.
 
-`ws-block` edits a unit's **needs** — the dependencies that gate it. `blocked` is the *derived* state (SPEC §Dependencies), never hand-set here: you add or clear needs, and the board/router derive the rest. Workstream-scoped — it touches only the store, runs from any session, and can target a unit other than the one you are in, including a not-yet-started planned unit.
+`ws-block` edits a unit's **needs** — the dependencies that gate it. `blocked` is the *derived* state (SPEC §Dependencies), never hand-set here: you add or clear needs, and the board/router derive the rest. Workstream-scoped — it touches only the store, runs from any session, and can target a unit other than the one you are in. It targets a **started** (ledger) unit; a not-yet-started planned unit's dependencies live in `backlog.md` `needs=` — edit that line directly (`ws-start` seeds it into `## Needs` once the unit starts, SPEC File formats).
 
 **Input:** `$ARGUMENTS` =
 - `<unit> needs <target> ["note"]` — add a need.
@@ -32,7 +32,7 @@ metadata:
 2. **Validate:**
    - reject a **self-need** (`<unit>` equals the unit `<target>`).
    - reject a **cycle** — walk the existing need graph (SPEC §Dependencies) outward from `<target>`; if it reaches `<unit>`, refuse and name the path. Carry a visited-set so a pre-existing hand-edited cycle cannot loop the walk.
-3. Append to the unit's `progress.md` `## Needs` (create the section if absent): `- N<n>  <target>   — <note>`, where `N<n>` is the unit's next monotonic need id (never reused, even after a clear). No checkbox — satisfaction is derived. Drop the ` — <note>` when none is given.
+3. Append to the unit's `progress.md` `## Needs` (create the section if absent): `- N<n>  <target>   — <note>`, where `N<n>` is the unit's next monotonic need id (never reused, even after a clear) — compute it from the high-water mark of `need N<n> →` entries in the unit's `log.md` (append-only), not from the max `N<n>` currently visible in `## Needs`, so a cleared id can't resurface. No checkbox — satisfaction is derived. Drop the ` — <note>` when none is given.
 4. Append `decision  need N<n> → <target>` to the unit's `log.md`.
 
 ## Steps — clear (`clear N<n>`)

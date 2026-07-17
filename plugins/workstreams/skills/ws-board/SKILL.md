@@ -23,18 +23,18 @@ This skill is **read-only** — it derives everything and writes nothing.
 
    | ⏳ Not started | ⛔ Blocked | 🔄 In progress | ✅ Done |
    | --- | --- | --- | --- |
-   | <slug> | <slug> · needs <target> | <slug> · #<pr> · <done>/<total> | <slug> · #<pr> |
+   | <slug> | <slug> · needs <target>[, <target>][ · #<pr>] | <slug> · #<pr> · <done>/<total> | <slug> · #<pr> |
    | <slug> |  |  | <slug> · #<pr> |
    ```
    The **⛔ Blocked** column appears **only when ≥1 unit is blocked** — omit the column (header + separator + cells) entirely otherwise, leaving the original three-column board.
 
-   The header's `<merged>/<total>` counts **board units**: `<merged>` = the Done column, `<total>` = every unit on the board (ledger units + not-started planned). It tracks the whole workstream, not just started units.
+   The header's `<merged>/<total>` counts **board units**: `<merged>` = the Done column, `<total>` = every unit on the board — ledger units plus planned units with no matching ledger line, whether they land in Not-started or ⛔ Blocked. It tracks the whole workstream, not just started units.
 
    Append ` · ✅ complete` to the header **only when SPEC "Workstream done" holds** — defer to that definition, do not re-list its conditions here. Without the ✅, an N/N `<merged>/<total>` means the units merged but the workstream is **not** done: open backlog remains, shown in the 📋 Backlog section below.
 
    Column contents:
    - **Not started** — `backlog.md` `## Planned units` slugs with **no matching ledger unit** whose needs are **all satisfied** (§Dependencies). Slug only. (A blocked planned unit goes to ⛔ Blocked instead.)
-   - **⛔ Blocked** — any unit with ≥1 unmet need (§Dependencies): a ledger unit whose derived status is `blocked`, or a planned unit (no ledger line) with an unmet need. Render `<slug> · needs <target>[, <target>]`; a dropped/removed target shows `needs <target> (dropped)`.
+   - **⛔ Blocked** — any unit with ≥1 unmet need (§Dependencies): a ledger unit whose derived status is `blocked`, or a planned unit (no ledger line) with an unmet need. Render `<slug> · needs <target>[, <target>][ · #<pr>]` — append ` · #<pr>` only when the unit has an open PR; a dropped/removed target shows `needs <target> (dropped)`.
    - **In progress** — ledger units whose status is `building` or `in-review` **and not blocked**: `<slug> · #<pr> · <done>/<total>`. No PR opened yet → drop the `· #<pr>` segment.
    - **Done** — ledger units whose status is `merged`: `<slug> · #<pr>`.
 
@@ -48,4 +48,4 @@ This skill is **read-only** — it derives everything and writes nothing.
    - <slug>
    ```
    **Backlog** = open follow-ups: per-unit in-flight (`F<n>` from a unit's `progress.md`) plus workstream-deferred (`WF<n>` from `backlog.md`). End each with `(follow-up from <unit>)` so its origin is visible — an `F<n>`'s origin is the unit whose `progress.md` holds it; a `WF<n>`'s is the `(from <unit-id>, <ts>)` recorded on its `backlog.md` line. Trim each `<desc>` to a one-line summary (the gist — first sentence or less) so the board stays glanceable; the full text lives in the source file. **Dropped** = ledger units with status `dropped`. Omit a header entirely when it has nothing — an empty section is noise, not information.
-3. With a `unit-id`: print that unit's full `progress.md` checklist (Tasks + Follow-ups), its `## Needs` with each need's target, derived satisfied/open state and note (§Dependencies), plus recent `log.md` notes.
+3. With a `unit-id`: print that unit's full `progress.md` checklist (Tasks + Follow-ups), its `## Needs` with each need's target, derived satisfied/open state and note (§Dependencies) — plus the implicit base need when it is unmet, so a base-blocked unit's detail shows the dependency the ⛔ Blocked column already counts — plus recent `log.md` notes.

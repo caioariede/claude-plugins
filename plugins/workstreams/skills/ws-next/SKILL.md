@@ -23,12 +23,13 @@ Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status ru
 | 2 | a unit's tasks are **all checked** but it has **no PR** | `ws-resume <unit>` — it ships a done unit (opens the PR) |
 | 3 | a unit is **in progress** (unchecked tasks) | `ws-resume <unit>` |
 | 4 | a **backlog** planned unit whose needs are **all satisfied** (§Dependencies — unit targets code-complete, follow-up targets checked) and it's **not yet on the ledger** | `ws-start <ws> "<what>" --base <dep>` |
+| — | a unit is **blocked** and **every** unmet need targets a dropped/removed unit or follow-up (no live target can ever satisfy it) | **triage:** `ws-block <unit> clear N<n>` (or re-point the need to a live target) |
 | 5 | no **active** unit, **but** `backlog.md` has open items — a planned unit rule 4 couldn't start, or an open `WF<n>`/`F<n>` follow-up | **not done — triage:** `ws-start` a worth-doing item, or check off / discard the rest in `backlog.md` / the unit's `progress.md`. **List the open items.** |
 | 6 | no **active** unit **and** no open backlog item (SPEC "Workstream done") | workstream done — close it |
 
 Rule 4's planned units live in `backlog.md` `## Planned units`. Rule 5 is where a **deferred follow-up** (`WF<n>`) or an unstarted planned unit gets resolved: promote a worth-doing one to a unit (`ws-start`, then check it off in `backlog.md`), or discard the rest. Rule 6 fires only once nothing open remains — "active" is the SPEC term (`building`/`blocked`/`in-review`), reused here, not re-listed.
 
-**Blocked units are not actionable.** A unit with ≥1 unmet need (§Dependencies, derived `blocked`) is skipped in rules 2–3 — never emit `ws-resume` for it. It counts as **active** (SPEC), so it keeps the workstream not-done, but the next real move is to advance its blocker (which its own status surfaces via rule 2/3). A unit blocked **only** by a dropped/removed target has no such path → surface it under rule 5 triage.
+**Blocked units are not actionable.** A unit with ≥1 unmet need (§Dependencies, derived `blocked`) is skipped in rules 2–3 — never emit `ws-resume` for it. It counts as **active** (SPEC), so it keeps the workstream not-done, but the next real move is to advance its blocker (which its own status surfaces via rule 2/3). A unit blocked **only** by a dropped/removed target has no such blocker to advance → the triage rule above fires instead (it fires ahead of rule 5, since "no active unit" never holds while this unit sits blocked).
 
 ## Emitting the command
 
