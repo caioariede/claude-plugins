@@ -3,7 +3,7 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.5.2"
+  version: "0.5.3"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -12,7 +12,7 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 
 **Required first:** load the `ws` skill (the SPEC).
 
-Read-only. A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives status per the SPEC, and prints a terminal-ready board (or one unit's detail). Run it and relay its output — **derive nothing by hand.** (A `/ws-board` hook renders the same output with no model turn; this path covers natural language, unit detail, and disambiguation.)
+Read-only. A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives status per the SPEC, and prints a terminal-ready board (or one unit's detail). Run it and relay its output — **derive nothing by hand.**
 
 ## Run it
 

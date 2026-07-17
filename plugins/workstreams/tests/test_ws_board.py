@@ -16,13 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "ws" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "ws-board" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "ws-next" / "scripts"))
-sys.path.insert(0, str(ROOT / "hooks"))
 
 import ws_store as S      # noqa: E402
 import ws_cli as C        # noqa: E402
 import board as B         # noqa: E402
 import next as N          # noqa: E402
-import board_hook as H    # noqa: E402
 
 
 def write_ws(store, ws_id, units_md="", backlog_md="", workstream_md="",
@@ -444,41 +442,6 @@ class NextEndToEnd(unittest.TestCase):
         out = N.generate(store, "2026-01-01-demo", {"a": None})
         self.assertIn("Next: ws-resume a", out)
         tmp.cleanup()
-
-
-class HookFastPath(unittest.TestCase):
-    def test_command_args_matches_and_extracts(self):
-        self.assertEqual(H.command_args("/ws-board"), [])
-        self.assertEqual(H.command_args("  /ws-board  foo "), ["foo"])
-        self.assertEqual(H.command_args("/ws-board a b"), ["a", "b"])
-        self.assertEqual(H.command_args("/workstreams:ws-board x"), ["x"])
-
-    def test_command_args_ignores_non_command(self):
-        self.assertIsNone(H.command_args("show me the board"))
-        self.assertIsNone(H.command_args("/ws-boardx"))          # word boundary
-        self.assertIsNone(H.command_args("tell me /ws-board"))   # not at start
-
-    def test_block_on_clean_render_claude(self):
-        p = H.decide("/ws-board demo", "claude", lambda a: (0, "BOARD\n"))
-        self.assertEqual(p, {"decision": "block", "reason": "BOARD"})
-
-    def test_block_on_clean_render_cursor(self):
-        p = H.decide("/ws-board demo", "cursor", lambda a: (0, "BOARD\n"))
-        self.assertEqual(p, {"continue": False, "user_message": "BOARD"})
-
-    def test_passthrough_when_not_command(self):
-        self.assertIsNone(H.decide("hello", "claude", lambda a: (0, "x")))
-        self.assertEqual(H.decide("hello", "cursor", lambda a: (0, "x")),
-                         {"continue": True})
-
-    def test_passthrough_on_exit2_disambiguation(self):
-        # board.py exit 2 (needs a human pick) must fall through, not block.
-        self.assertIsNone(H.decide("/ws-board", "claude", lambda a: (2, "")))
-
-    def test_passthrough_on_error(self):
-        def boom(a):
-            raise RuntimeError("gh down")
-        self.assertIsNone(H.decide("/ws-board x", "claude", boom))
 
 
 if __name__ == "__main__":

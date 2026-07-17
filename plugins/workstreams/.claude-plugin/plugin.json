@@ -1,7 +1,7 @@
 {
   "name": "workstreams",
   "description": "Stacked-PR workstream management with pluggable flavors: init, start, resume, restack, drop, block, backlog, next, config, a guide, and a status board across isolated worktree units.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "author": {
     "name": "Caio Ariede"
   }
