@@ -3,70 +3,41 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Decides the next action; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   author: Caio Ariede
+compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
 
 # ws-next — recommend the next workstream action
 
-**Required first:** load the `ws` skill — the shared contract (SPEC). **Read-only itself** — it derives and recommends and writes nothing to the store; it mutates no state. The Chain step at the end only *offers* to run the next command on your confirmation, and that command — a separate skill — is what performs any change; naming a command is not running it.
+**Required first:** load the `ws` skill — the shared contract (SPEC).
 
-## What it does
+**Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives each unit's status, and applies the SPEC decision table (first match wins) to name the single next command. It writes nothing; the command it names — a separate skill — performs any change. Naming a command is not running it.
 
-Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status rules) and prints THE single next command and any units unblocked in parallel. It does not mutate the store — the command it names does.
+## Run the script
 
-## Decision table (first match wins)
-
-| # | If | Then |
-|---|----|------|
-| 1 | a **created** unit's base PR merged / GitHub retargeted it, and its branch isn't rebased yet | `ws-restack <unit>` |
-| 2 | a unit's tasks are **all checked** but it has **no PR** | `ws-resume <unit>` — it ships a done unit (opens the PR) |
-| 3 | a unit is **in progress** (unchecked tasks) | `ws-resume <unit>` |
-| 4 | a **backlog** planned unit whose needs are **all satisfied** (§Dependencies — unit targets code-complete, follow-up targets checked) and it's **not yet on the ledger** | `ws-start <ws> "<what>" --base <dep>` |
-| — | a unit is **blocked** and **every** unmet need targets a dropped/removed unit or follow-up (no live target can ever satisfy it) | **triage:** `ws-block <unit> clear N<n>` (or re-point the need to a live target) |
-| 5 | no **active** unit, **but** `backlog.md` has open items — a planned unit rule 4 couldn't start, or an open `WF<n>`/`F<n>` follow-up | **not done — triage:** `ws-start` a worth-doing item, or check off / discard the rest in `backlog.md` / the unit's `progress.md`. **List the open items.** |
-| 6 | no **active** unit **and** no open backlog item (SPEC "Workstream done") | workstream done — close it |
-
-Rule 4's planned units live in `backlog.md` `## Planned units`. Rule 5 is where a **deferred follow-up** (`WF<n>`) or an unstarted planned unit gets resolved: promote a worth-doing one to a unit (`ws-start`, then check it off in `backlog.md`), or discard the rest. Rule 6 fires only once nothing open remains — "active" is the SPEC term (`building`/`blocked`/`in-review`), reused here, not re-listed.
-
-**Blocked units are not actionable.** A unit with ≥1 unmet need (§Dependencies, derived `blocked`) is skipped in rules 2–3 — never emit `ws-resume` for it. It counts as **active** (SPEC), so it keeps the workstream not-done, but the next real move is to advance its blocker (which its own status surfaces via rule 2/3). A unit blocked **only** by a dropped/removed target has no such blocker to advance → the triage rule above fires instead (it fires ahead of rule 5, since "no active unit" never holds while this unit sits blocked).
-
-## Emitting the command
-
-Walk the rules first; write the `Next:` line **last** — never lead with a guess you then reason away. The emitted line must be the winning rule's command, verbatim.
+Bundled at `scripts/next.py` relative to this skill's directory (when set, `${CLAUDE_PLUGIN_ROOT}/skills/ws-next/scripts/next.py`). Pass `$ARGUMENTS` — `[ws-id]`, optional; a bare workstream slug works, the date prefix is optional:
 
 ```
-Next: <one resolved command>   (unit: <slug>)   ← name the unit when the command is unit-scoped
-Also unblocked (parallel): <unit>, <unit>       ← only when rule 4 has >1 qualifying unit
-Blocked: <unit> — needs <target>[, <target>]    ← one line per blocked unit; omit when none
+python3 <this-skill-dir>/scripts/next.py [ws-id]
 ```
 
-Emit exactly **one** clean, executable line:
-- every argument a **literal** — no `<ws>` / `<unit>` / `<base>` placeholders left in;
-- no retracted or false-start lines, no "wait"/"hold on" in the final answer; if you revise mid-reasoning, re-emit the whole command cleanly from the final decision;
-- `ws-start <ws-id> "<what>" [--base <unit-id|branch>]` — the **first positional is the workstream id**, the unit is slugged from the quoted `"<what>"`, and `--base` is a needs-satisfied dependency's unit-id or branch (rule 4 — merge not required). Never put a unit name in the first slot.
+## Relay the output
 
-Rule 2 fires **only** when a unit has **no PR AND every task checked** — emit `ws-resume <unit>`, which ships a done unit. Any unchecked task ⇒ rule 3, also `ws-resume <unit>` — the verb is idempotent, so state decides ship vs. continue. `ws-next` never opens the PR itself; it names the verb that does.
+Print the script's stdout as-is. Its shape:
 
-## Rules agents get wrong — say the counter out loud
+- a one-line headline (why this is the next move),
+- `Next: <command>   (unit: <slug>)` — the action to run, already fully resolved (every argument literal, no `<placeholder>` left in),
+- `Also unblocked (parallel): <slug>, <slug>` — only when more than one unit is startable now,
+- `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
+- `Open backlog:` + a list — triage/done states only, where there is no `Next:` line.
 
-- **Tasks done + no PR ⇒ SHIP, don't spin.** 6/6 checked with no PR ⇒ `ws-resume <unit>` — it ships a done unit (opens the PR). Do NOT `ws-start` the next unit yet — an un-opened PR is unshipped work.
-- **Satisfied needs ⇒ START the dependent, not restack it.** When a unit's needs are satisfied (§Dependencies — a unit target reaching code-complete is enough; it need not be merged) and the dependent is **not yet created**, `ws-start` it. `ws-restack` is ONLY for a dependent that **already exists** and drifted after its base **merged**. When more than one unit shares satisfied needs, **list them all** — do not tunnel onto one.
-- **All units merged ≠ workstream done.** A merged stack with open backlog still has real remaining work — unstarted planned units, deferred follow-ups. Closing the workstream strands it. Merged units clear the *unit* side; `backlog.md` is the other half of the gate — both must be clear (rule 6), else it's rule 5 (triage).
+Don't second-guess or re-derive the `Next:` line — the rules ran in code. When there's **no** `Next:` line, the script emitted a triage or done state: help the user work the listed items (promote a planned unit, resolve or discard a follow-up, or close the workstream), don't invent a command.
 
-## Red flags — you're about to answer wrong
+## When it exits 2
 
-- Emitting a raw PR-open command or methodology skill (whatever the active flavors resolve to) for a 6/6-no-PR unit → name `ws-resume <unit>` instead; the router emits `ws-*` verbs only.
-- Recommending `ws-restack` for a dependent that isn't created yet → that's a `ws-start`.
-- Naming one startable unit when two share satisfied needs → **list both**.
-- Emitting "workstream done — close it" while `backlog.md` has open items → that's rule 5 (triage the backlog), not rule 6.
-
-## Scope
-
-Every command here runs from any session (SPEC "Command scope"). Unit-scoped
-commands (`ws-resume`, `ws-restack`) self-locate their worktree; the rest touch
-only the store + GitHub. Name the unit for a unit-scoped recommendation so a
-parallel-session user knows which one — never mandate a place to run it.
+Same as ws-board — the first stderr token says why: `MANY_WORKSTREAMS <list>` (ask which, re-run — the slug alone works), `AMBIGUOUS <matches>` (ask which, re-run with the exact id), `NO_MATCH` / `NO_STORE` (report plainly).
 
 ## Chain
-After naming the command, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) — fills: `<unit>`/`<branch>` from the named unit, `<command>` = the emitted `Next:` command, verbatim. What the choices offer is the active flavor's business — this skill stays unaware; it runs the chosen instruction per SPEC Next-step chaining (`<command>` → run the command here; anything else → the flavor's own handoff: run it, re-emit the command, stop). No active flavor defines the hook → default chaining: offer to run it now (default yes), then run it — it works from the current session. Rules 5–6 emit no runnable command — skip the hook there. Mention the unit for a unit-scoped command (SPEC Next-step chaining).
+
+When the script emits a `Next:` command, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) — fill `<unit>`/`<branch>` from the named unit and `<command>` from the `Next:` line verbatim. The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). No active flavor defines the hook → default: offer to run it now (default yes), then run it — it works from the current session. A triage or done state (no `Next:`) has no runnable command — skip the hook, present the items, and stop. Name the unit for a unit-scoped command so a parallel-session user knows which one.

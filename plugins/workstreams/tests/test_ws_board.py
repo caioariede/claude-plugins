@@ -15,9 +15,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "ws" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "ws-board" / "scripts"))
+sys.path.insert(0, str(ROOT / "skills" / "ws-next" / "scripts"))
 
 import ws_store as S      # noqa: E402
+import ws_cli as C        # noqa: E402
 import board as B         # noqa: E402
+import next as N          # noqa: E402
 
 
 def write_ws(store, ws_id, units_md="", backlog_md="", workstream_md="",
@@ -255,39 +258,39 @@ class ArgResolver(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_ws_id_arg(self):
-        self.assertEqual(B.resolve_args(self.store, ["2026-01-01-alpha"]),
+        self.assertEqual(C.resolve_args(self.store, ["2026-01-01-alpha"]),
                          ("2026-01-01-alpha", None))
 
     def test_ws_slug_resolves_without_date(self):
         # Users name a workstream by slug, not the dated dir name.
-        self.assertEqual(B.resolve_args(self.store, ["alpha"]),
+        self.assertEqual(C.resolve_args(self.store, ["alpha"]),
                          ("2026-01-01-alpha", None))
 
     def test_ambiguous_ws_slug_raises_pick(self):
         write_ws(self.store, "2026-03-03-alpha",
                  units_md=ledger('baz  "Baz"  repo=o/r  branch=baz'))
-        with self.assertRaises(B.Pick):
-            B.resolve_args(self.store, ["alpha"])  # two dated 'alpha' ws
+        with self.assertRaises(C.Pick):
+            C.resolve_args(self.store, ["alpha"])  # two dated 'alpha' ws
 
     def test_two_args_ws_slug_resolves(self):
-        self.assertEqual(B.resolve_args(self.store, ["alpha", "foo"]),
+        self.assertEqual(C.resolve_args(self.store, ["alpha", "foo"]),
                          ("2026-01-01-alpha", "foo"))
 
     def test_bare_slug_resolves(self):
-        self.assertEqual(B.resolve_args(self.store, ["bar"]),
+        self.assertEqual(C.resolve_args(self.store, ["bar"]),
                          ("2026-01-02-beta", "bar"))
 
     def test_unknown_raises_pick(self):
-        with self.assertRaises(B.Pick):
-            B.resolve_args(self.store, ["nope"])
+        with self.assertRaises(C.Pick):
+            C.resolve_args(self.store, ["nope"])
 
     def test_zero_args_many_raises_pick(self):
-        with self.assertRaises(B.Pick):
-            B.resolve_args(self.store, [])
+        with self.assertRaises(C.Pick):
+            C.resolve_args(self.store, [])
 
     def test_two_args_passthrough(self):
         self.assertEqual(
-            B.resolve_args(self.store, ["2026-01-01-alpha", "foo"]),
+            C.resolve_args(self.store, ["2026-01-01-alpha", "foo"]),
             ("2026-01-01-alpha", "foo"))
 
 
@@ -317,6 +320,122 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("later", out)               # not started
         self.assertIn("WF1", out)                 # open backlog
         self.assertNotIn("✅ complete", out)      # backlog keeps it open
+        tmp.cleanup()
+
+
+class RecordedBase(unittest.TestCase):
+    def test_last_created_or_restack_wins(self):
+        u = S.Unit(slug="x", log=[
+            ("t1", "created", "base=feat-a"),
+            ("t2", "note", "did stuff"),
+            ("t3", "restack", "base=master was=feat-a"),
+        ])
+        self.assertEqual(S.recorded_base(u), "master")
+
+    def test_none_without_a_base_line(self):
+        u = S.Unit(slug="x", log=[("t1", "note", "hi")])
+        self.assertIsNone(S.recorded_base(u))
+
+
+class DecideNext(unittest.TestCase):
+    def _ws(self, units, planned=None, wfs=None):
+        ws = S.Workstream(ws_id="2026-01-01-demo", name="demo")
+        ws.units = units
+        ws.planned = planned or []
+        ws.wf_followups = wfs or []
+        return ws
+
+    def test_rule1_restack_on_drift(self):
+        u = S.Unit(slug="top", tasks_total=1, tasks_done=1,
+                   pr=pr(5, "OPEN", False, "master"),
+                   log=[("t", "created", "base=feat-base")])
+        d = S.decide_next(self._ws([u]))
+        self.assertEqual((d.rule, d.command), ("restack", "ws-restack top"))
+
+    def test_no_restack_when_base_matches(self):
+        u = S.Unit(slug="top", tasks_total=1, tasks_done=1,
+                   pr=pr(5, "OPEN", False, "master"),
+                   log=[("t", "created", "base=master")])
+        self.assertNotEqual(S.decide_next(self._ws([u])).rule, "restack")
+
+    def test_rule2_ship_before_rule3_resume(self):
+        prog = S.Unit(slug="prog", tasks_total=2, tasks_done=1, pr=None)
+        done = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+        d = S.decide_next(self._ws([prog, done]))
+        self.assertEqual((d.rule, d.unit), ("ship", "done1"))
+
+    def test_rule3_resume_in_progress(self):
+        u = S.Unit(slug="a", tasks_total=2, tasks_done=1, pr=None)
+        self.assertEqual(S.decide_next(self._ws([u])).command, "ws-resume a")
+
+    def test_rule3_prefers_critical_path(self):
+        # a and b both in progress; c is blocked needing b, so finishing b
+        # unblocks c. b wins even though a is earlier in the ledger.
+        a = S.Unit(slug="a", tasks_total=2, tasks_done=1, pr=None)
+        b = S.Unit(slug="b", tasks_total=2, tasks_done=1, pr=None)
+        c = S.Unit(slug="c", needs=[S.Need("N1", "b")])
+        d = S.decide_next(self._ws([a, b, c]))
+        self.assertEqual((d.rule, d.unit), ("resume", "b"))
+
+    def test_rule4_start_stacked_planned(self):
+        base = S.Unit(slug="base", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
+        ws = self._ws([base], planned=[
+            S.PlannedUnit(slug="next-thing", base="base", what="do the thing")])
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "start")
+        self.assertEqual(d.command,
+                         'ws-start 2026-01-01-demo "do the thing" --base base')
+
+    def test_rule4_no_base_flag_for_default_branch(self):
+        ws = self._ws([], planned=[
+            S.PlannedUnit(slug="p", base="master", what="x")])
+        self.assertEqual(S.decide_next(ws).command,
+                         'ws-start 2026-01-01-demo "x"')
+
+    def test_rule4_lists_parallel_startable(self):
+        base = S.Unit(slug="base", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
+        ws = self._ws([base], planned=[
+            S.PlannedUnit(slug="p1", base="master", what="one"),
+            S.PlannedUnit(slug="p2", base="master", what="two")])
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "start")
+        self.assertEqual(len(d.also), 1)
+
+    def test_triage_dropped_blocker(self):
+        gone = S.Unit(slug="gone", tasks_total=1, tasks_done=1, dropped=True)
+        dep = S.Unit(slug="dep", needs=[S.Need("N1", "gone")])
+        d = S.decide_next(self._ws([gone, dep]))
+        self.assertEqual((d.rule, d.command), ("triage-dropped", "ws-block dep clear N1"))
+
+    def test_rule5_open_backlog_not_done(self):
+        merged = S.Unit(slug="m", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
+        ws = self._ws([merged], wfs=[S.Followup("WF1", "later", checked=False)])
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "triage-backlog")
+        self.assertTrue(any("WF1" in it for it in d.open_items))
+
+    def test_rule6_done(self):
+        merged = S.Unit(slug="m", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
+        self.assertEqual(S.decide_next(self._ws([merged])).rule, "done")
+
+    def test_blocked_lines_reported(self):
+        base = S.Unit(slug="base", tasks_total=2, tasks_done=1)  # in progress
+        dep = S.Unit(slug="dep", stacked_on="base",
+                     pr=pr(2, "OPEN", True, "base"))
+        d = S.decide_next(self._ws([base, dep]))
+        self.assertEqual(d.rule, "resume")          # advance the blocker
+        self.assertTrue(any("dep — needs base" in b for b in d.blocked))
+
+
+class NextEndToEnd(unittest.TestCase):
+    def test_resume_in_flight_from_disk(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(store, "2026-01-01-demo",
+                 units_md=ledger('a  "A"  repo=o/r  branch=a'),
+                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"}})
+        out = N.generate(store, "2026-01-01-demo", {"a": None})
+        self.assertIn("Next: ws-resume a", out)
         tmp.cleanup()
 
 

@@ -571,3 +571,173 @@ def workstream_done(ws: Workstream, by_slug: Dict[str, Unit]) -> bool:
         if any(not fu.checked for fu in u.followups):
             return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# Decision engine — ws-next router (SPEC decision table, first match wins)
+# ---------------------------------------------------------------------------
+
+DEFAULT_BRANCHES = {"master", "main", "trunk", "develop", "dev"}
+
+
+def recorded_base(u: Unit) -> Optional[str]:
+    """The base on the unit's last created/restack log line — the SPEC's
+    'recorded base', never the live PR baseRefName."""
+    base = None
+    for _ts, kind, payload in u.log:
+        if kind in ("created", "restack"):
+            m = re.search(r'base=(\S+)', payload)
+            if m:
+                base = m.group(1)
+    return base
+
+
+def unmet_needs(u: Unit, ws: Workstream,
+                by_slug: Dict[str, Unit]) -> List[Tuple[str, str]]:
+    """(target, note) for each of the unit's needs that isn't satisfied."""
+    out = []
+    for n in unit_needs(u, ws):
+        satisfied, note = need_state(n.target, ws, by_slug)
+        if not satisfied:
+            out.append((n.target, note))
+    return out
+
+
+def _drifted(u: Unit) -> bool:
+    """PR base moved off the recorded base (GitHub retargeted, or the base
+    merged) with no restack reconciling it yet."""
+    if not (u.pr and u.pr.base):
+        return False
+    rb = recorded_base(u)
+    return rb is not None and u.pr.base != rb
+
+
+def _dependents(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> int:
+    """How many other units are blocked with an unmet need on `u` — i.e.
+    finishing `u` would unblock them. Ranks in-flight work by critical
+    path: a unit that unblocks others beats one that unblocks nothing."""
+    n = 0
+    for v in ws.units:
+        if v.slug == u.slug:
+            continue
+        if any(_slug_of(t) == u.slug for t, _note in unmet_needs(v, ws, by_slug)):
+            n += 1
+    return n
+
+
+@dataclass
+class Decision:
+    rule: str                       # restack|ship|resume|start|triage-*|done
+    command: Optional[str] = None   # resolved ws-* command; None for triage/done
+    unit: Optional[str] = None      # unit slug when the command is unit-scoped
+    also: List[str] = field(default_factory=list)      # parallel-startable
+    blocked: List[str] = field(default_factory=list)   # "<unit> — needs ..."
+    open_items: List[str] = field(default_factory=list)
+    headline: str = ""
+
+
+def _startable_planned(ws: Workstream,
+                       by_slug: Dict[str, Unit]) -> List[PlannedUnit]:
+    ledger = set(by_slug)
+    return [p for p in ws.planned
+            if p.slug not in ledger
+            and not planned_unmet_needs(p, ws, by_slug)]
+
+
+def decide_next(ws: Workstream) -> Decision:
+    """The single best next action, first-match-wins per the SPEC table.
+    Blocked units are never resumed — the router advances their blocker."""
+    derive_status(ws)
+    by_slug = {u.slug: u for u in ws.units}
+
+    blocked_lines = []
+    for u in ws.units:
+        if u.status != "blocked":
+            continue
+        labels = []
+        for target, note in unmet_needs(u, ws, by_slug):
+            lab = _slug_of(target)
+            if note:
+                lab += f" ({note})"
+            labels.append(lab)
+        blocked_lines.append(f"{u.slug} — needs {', '.join(labels)}")
+
+    def out(rule, command=None, unit=None, also=None, open_items=None,
+            headline=""):
+        return Decision(rule=rule, command=command, unit=unit, also=also or [],
+                        blocked=blocked_lines, open_items=open_items or [],
+                        headline=headline)
+
+    # 1 — branch drifted off its recorded base (retarget / base merged).
+    for u in ws.units:
+        if u.status not in ("merged", "dropped") and _drifted(u):
+            return out("restack", f"ws-restack {u.slug}", u.slug,
+                       headline="base moved; rebase before proceeding")
+
+    # In-flight units, critical path first: one that unblocks others beats
+    # one that unblocks nothing (stable, so ledger order breaks ties).
+    ordered = sorted(
+        [u for u in ws.units if u.status in ("building", "in-review")],
+        key=lambda u: -_dependents(u, ws, by_slug))
+
+    # 2 — tasks all checked but no PR: ship it (ws-resume opens the PR).
+    for u in ordered:
+        if u.code_complete and not u.pr:
+            return out("ship", f"ws-resume {u.slug}", u.slug,
+                       headline="tasks done, no PR — ship it")
+
+    # 3 — in progress (building/in-review, not blocked): advance it.
+    if ordered:
+        u = ordered[0]
+        return out("resume", f"ws-resume {u.slug}", u.slug,
+                   headline="advance the in-flight unit")
+
+    # 4 — a startable planned unit (needs satisfied, no ledger line yet).
+    startable = _startable_planned(ws, by_slug)
+    if startable:
+        p = startable[0]
+        cmd = f'ws-start {ws.ws_id} "{p.what or p.slug}"'
+        if p.base and p.base not in DEFAULT_BRANCHES:
+            cmd += f" --base {p.base}"
+        return out("start", cmd, p.slug,
+                   also=[q.slug for q in startable[1:]],
+                   headline="start the next planned unit")
+
+    # triage — a unit blocked ONLY by dropped/removed targets can't clear on
+    # its own; route to ws-block ahead of backlog triage (it stays active).
+    for u in ws.units:
+        if u.status != "blocked":
+            continue
+        unmet = unmet_needs(u, ws, by_slug)
+        if unmet and all(note in ("dropped", "removed") for _t, note in unmet):
+            nids = [n.nid for n in unit_needs(u, ws)
+                    if n.nid != "base"
+                    and need_state(n.target, ws, by_slug)[1]
+                    in ("dropped", "removed")]
+            cmd = (f"ws-block {u.slug} clear {nids[0]}" if nids
+                   else f"ws-restack {u.slug}")
+            return out("triage-dropped", cmd, u.slug,
+                       headline="blocker dropped/removed — re-point or clear")
+
+    # 5 — no runnable step, but open backlog / blocked units remain: triage.
+    open_items = []
+    ledger = set(by_slug)
+    for p in ws.planned:
+        if p.slug not in ledger:
+            open_items.append(f"planned: {p.slug} — {_gist(p.what)}")
+    for u in ws.units:
+        for fu in u.followups:
+            if not fu.checked:
+                open_items.append(f"{u.slug}:{fu.fid} — {_gist(fu.desc)}")
+    for fu in ws.wf_followups:
+        if not fu.checked:
+            open_items.append(f"{fu.fid} — {_gist(fu.desc)}")
+    if blocked_lines or open_items:
+        head = ("no active unit; open backlog remains — triage"
+                if open_items and not blocked_lines
+                else "no runnable step — advance a blocker or triage backlog")
+        return out("triage-backlog", None, None, open_items=open_items,
+                   headline=head)
+
+    # 6 — nothing active, nothing open.
+    return out("done", None, None, headline="workstream done — close it")
