@@ -555,12 +555,23 @@ With no argument, infers the unit from the current worktree's branch. Ensures th
 <div class="cmd-head"><span class="cmd-name">ws-board</span><span class="cmd-sig">[ws-id] [unit-id]</span></div>
 <p class="cmd-when"><b>Use when</b> you want to see or share where a workstream stands — "show the board", "what's done", "workstream status".</p>
 <div class="cmd-body">
-Reads the ledger, derives each unit's status and task counts, and renders copy-paste-ready markdown grouped by state (Done, In progress, Not started, Dropped) with open follow-ups listed across units. Given a <code>unit-id</code>, prints that unit's full checklist and recent notes.
+Reads the ledger, derives each unit's status and task counts, and renders copy-paste-ready markdown grouped by state (Done, In progress, Blocked, Not started, Dropped) with open follow-ups listed across units. Given a <code>unit-id</code>, prints that unit's full checklist and recent notes.
 </div>
 <pre class="cmd-ex">$ /ws-board 2026-07-03-task-templates</pre>
 </div>
 
 <aside class="note note-tip"><b>Tip.</b> <code>ws-board</code> is strictly read-only — it derives everything and reconciles nothing. Reach for it freely to snapshot progress without touching git or GitHub.</aside>
+
+<aside class="note note-tip"><b>Blocked units.</b> A unit is <code>blocked</code> whenever it has an unmet need — its base or a dependency added with <code>ws-block</code> — and shows in the board's ⛔ Blocked column until that need clears.</aside>
+
+<div class="cmd">
+<div class="cmd-head"><span class="cmd-name">ws-block</span><span class="cmd-sig">&lt;unit&gt; needs &lt;target&gt; ["note"] | &lt;unit&gt; clear N&lt;n&gt;</span></div>
+<p class="cmd-when"><b>Use when</b> a unit must wait on another before it can proceed — record, view, or remove a dependency: "B needs A", "B is blocked by A".</p>
+<div class="cmd-body">
+Adds or removes a unit's <b>needs</b> in its <code>progress.md</code> <code>## Needs</code> section. A <code>&lt;target&gt;</code> is a unit or a follow-up (<code>&lt;unit-id&gt;:F&lt;n&gt;</code> / <code>WF&lt;n&gt;</code>); it's satisfied once that unit is code-complete (every task checked) or that follow-up is checked. Any unmet need derives the <code>blocked</code> status and routes the unit into the board's ⛔ Blocked column. <code>clear N&lt;n&gt;</code> removes a need on a genuine scope change — it never marks one satisfied, since satisfaction is always derived.
+</div>
+<pre class="cmd-ex">$ /ws-block add-is-template-flag needs schema-migration</pre>
+</div>
 
 <div class="cmd">
 <div class="cmd-head"><span class="cmd-name">ws-restack</span><span class="cmd-sig">&lt;unit-id&gt; &lt;new-base&gt;</span></div>
@@ -677,6 +688,7 @@ hook-ws-next-after.choices.n.desc = No</pre>
 <tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>.</td></tr>
 <tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, continue its tasks, or ship it — reopening a gone worktree and reconciling base drift as needed.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>
+<tr><td><code>ws-block</code></td><td>Add or remove a unit's needs (dependencies). An unmet need derives the <code>blocked</code> status.</td></tr>
 <tr><td><code>ws-next</code></td><td>Name the single next action and the command to run it across units. Read-only — decides, doesn't do.</td></tr>
 <tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
 <tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record.</td></tr>
@@ -708,7 +720,7 @@ hook-ws-next-after.choices.n.desc = No</pre>
 </aside>
 
 <aside class="note note-rule">
-<b>Nothing volatile is stored — derive it live.</b> Current branch comes from git, base and retargeting from <code>gh pr view --json baseRefName</code>, PR number and draft/ready/merged from GitHub, and status from a first-match cascade: dropped → merged → in-review → building.
+<b>Nothing volatile is stored — derive it live.</b> Current branch comes from git, base and retargeting from <code>gh pr view --json baseRefName</code>, PR number and draft/ready/merged from GitHub, and status from a first-match cascade: dropped → merged → blocked → in-review → building.
 </aside>
 </section>
 <section id="faq"><h2>Gotchas &amp; FAQ</h2>
