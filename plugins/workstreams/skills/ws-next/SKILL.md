@@ -3,13 +3,13 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Decides the next action; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   author: Caio Ariede
 ---
 
 # ws-next — recommend the next workstream action
 
-**Required first:** load the `ws` skill — the shared contract (SPEC). **Read-only** — it derives and recommends; it writes nothing.
+**Required first:** load the `ws` skill — the shared contract (SPEC). **Read-only itself** — it derives and recommends and writes nothing to the store; it mutates no state. The Chain step at the end only *offers* to run the next command on your confirmation, and that command — a separate skill — is what performs any change; naming a command is not running it.
 
 ## What it does
 
