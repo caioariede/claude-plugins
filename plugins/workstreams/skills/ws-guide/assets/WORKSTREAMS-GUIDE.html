@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.5.1 · July 2026</p>
+    <p class="version">Version 0.6.0 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -574,6 +574,15 @@ Adds or removes a unit's <b>needs</b> in its <code>progress.md</code> <code>## N
 </div>
 
 <div class="cmd">
+<div class="cmd-head"><span class="cmd-name">ws-backlog</span><span class="cmd-sig">"&lt;what&gt;" [--defer | --here | --plan --base &lt;x&gt; [--needs a,b]] [--to &lt;unit&gt;]</span></div>
+<p class="cmd-when"><b>Use when</b> future work surfaces mid-workstream and needs capturing — a bug or follow-up out of scope for the unit you're in, a "we should also do X later" idea, or a whole unit worth planning.</p>
+<div class="cmd-body">
+Routes the item to its one correct home so nothing orphans: a unit's <code>progress.md</code> <code>## Follow-ups</code> (<code>F&lt;n&gt;</code>, fixed before this unit's PR merges), the workstream's <code>backlog.md</code> <code>## Follow-ups</code> (<code>WF&lt;n&gt;</code>, deferred), or <code>backlog.md</code> <code>## Planned units</code> (a future unit). Inside a unit it asks the one thing it can't derive — resolve before this PR merges? — while flags decide it non-interactively. It never writes <code>## Tasks</code>: the plan comes from planning, not by hand.
+</div>
+<pre class="cmd-ex">$ /ws-backlog "retry backoff is wrong" --defer</pre>
+</div>
+
+<div class="cmd">
 <div class="cmd-head"><span class="cmd-name">ws-restack</span><span class="cmd-sig">&lt;unit-id&gt; &lt;new-base&gt;</span></div>
 <p class="cmd-when"><b>Use when</b> a unit's base PR merged and its branch must move onto a new base, or GitHub auto-retargeted a dependent PR and the local branch needs realigning.</p>
 <div class="cmd-body">
@@ -689,6 +698,7 @@ hook-ws-next-after.choices.n.desc = No</pre>
 <tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, continue its tasks, or ship it — reopening a gone worktree and reconciling base drift as needed.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>
 <tr><td><code>ws-block</code></td><td>Add or remove a unit's needs (dependencies). An unmet need derives the <code>blocked</code> status.</td></tr>
+<tr><td><code>ws-backlog</code></td><td>Capture future work — routes a follow-up (<code>F&lt;n&gt;</code>/<code>WF&lt;n&gt;</code>) or a planned unit to its right home so nothing orphans.</td></tr>
 <tr><td><code>ws-next</code></td><td>Name the single next action and the command to run it across units. Read-only — decides, doesn't do.</td></tr>
 <tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
 <tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record.</td></tr>

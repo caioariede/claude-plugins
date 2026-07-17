@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   author: Caio Ariede
 ---
 
@@ -34,7 +34,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | unit purpose / scope (why it exists) | unit `charter.md` | set once at `ws-start`; read by `ws-resume` |
 | tasks + in-flight follow-ups | unit `progress.md` | resolved before this unit's PR merges |
 | explicit needs (dependencies) | unit `progress.md` `## Needs` (+ base from ledger) | current set is mutable state; base is the implicit need (§Dependencies) |
-| deferred follow-ups + planned units | `backlog.md` | outlive the unit (see Follow-up placement) |
+| deferred follow-ups + planned units | `backlog.md` | written via `ws-backlog`; outlive the unit (see Follow-up placement) |
 | decisions / notes / drop / restack history | `log.md` | append-only |
 
 **Invariants:** log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a ledger slug matches it (dedup vs ledger) — "not started" is not a derived unit *status*, it is a backlog item without a ledger line yet.
@@ -108,9 +108,9 @@ when the base is in this one:
 ## Planned units
 - [ ] <slug>  base=<unit-id|branch>  [needs=<target>[,<target>]]  — <what>
 ## Follow-ups
-- [ ] WF<n>  <desc>  (from <unit-id>, <ts>)
+- [ ] WF<n>  <desc>  (from <unit-id|ws-id>, <ts>)
 ```
-Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a ledger unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream. `needs=` carries dependencies **beyond** base (bare targets, no notes); `ws-start` seeds them into the started unit's `progress.md` `## Needs` (§Dependencies).
+Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a ledger unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream; the origin is the capturing unit-id, or the `<ws-id>` when captured outside any unit (`ws-backlog`). `needs=` carries dependencies **beyond** base (bare targets, no notes); `ws-start` seeds them into the started unit's `progress.md` `## Needs` (§Dependencies).
 
 **`units/<unit-id>/charter.md`** (static — the unit-level `workstream.md`; no log, no status, nothing volatile). Written once at `ws-start`, read by `ws-resume` to reconstruct the unit's intent with no chat scrollback:
 ```
@@ -142,9 +142,11 @@ kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>
 ## Follow-up placement
 When you note a follow-up, ask: will it be resolved before **this** unit's PR merges?
 - **Yes** (you'll fix it in this unit before marking the PR ready) → unit `progress.md` `## Follow-ups` (`F<n>`).
-- **No** (merge now, address later — it outlives this unit) → `backlog.md` `## Follow-ups` (`- [ ] WF<n>  <desc>  (from <unit-id>, <ts>)`).
+- **No** (merge now, address later — it outlives this unit) → `backlog.md` `## Follow-ups` (`- [ ] WF<n>  <desc>  (from <unit-id|ws-id>, <ts>)`).
 
 A deferred item left in a unit that is about to merge becomes an orphaned checkbox in a dead unit nobody actions; in the backlog it stays visible and can graduate into a planned unit.
+
+`ws-backlog` is the standalone capture verb for both placements from any session; `ws-resume` records them inline while working the unit — both write the same shapes.
 
 ## Restack reconciliation (the one rebase definition)
 A unit's **recorded base** = the base on its last `created`/`restack` log line (never the live PR `baseRefName`, which GitHub may have moved). To move a unit onto `<new-base>`:
