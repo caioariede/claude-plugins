@@ -258,6 +258,21 @@ class ArgResolver(unittest.TestCase):
         self.assertEqual(B.resolve_args(self.store, ["2026-01-01-alpha"]),
                          ("2026-01-01-alpha", None))
 
+    def test_ws_slug_resolves_without_date(self):
+        # Users name a workstream by slug, not the dated dir name.
+        self.assertEqual(B.resolve_args(self.store, ["alpha"]),
+                         ("2026-01-01-alpha", None))
+
+    def test_ambiguous_ws_slug_raises_pick(self):
+        write_ws(self.store, "2026-03-03-alpha",
+                 units_md=ledger('baz  "Baz"  repo=o/r  branch=baz'))
+        with self.assertRaises(B.Pick):
+            B.resolve_args(self.store, ["alpha"])  # two dated 'alpha' ws
+
+    def test_two_args_ws_slug_resolves(self):
+        self.assertEqual(B.resolve_args(self.store, ["alpha", "foo"]),
+                         ("2026-01-01-alpha", "foo"))
+
     def test_bare_slug_resolves(self):
         self.assertEqual(B.resolve_args(self.store, ["bar"]),
                          ("2026-01-02-beta", "bar"))

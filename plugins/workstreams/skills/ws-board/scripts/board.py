@@ -18,6 +18,7 @@ import concurrent.futures
 import configparser
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -126,8 +127,26 @@ def list_workstreams(store: Path) -> List[str]:
                   if d.is_dir() and (d / "units.md").exists())
 
 
+_WS_SLUG_RE = re.compile(r'^\d{4}-\d{2}-\d{2}-(.+)$')
+
+
+def resolve_workstream(store: Path, token: str) -> List[str]:
+    """Match a workstream by full id (dir name) or by its date-stripped
+    slug — users name a workstream by slug ('scoped-user-sessions'), not
+    the dated id. Exact id wins outright; slug matches can collide across
+    dates, so more than one is ambiguous."""
+    hits = []
+    for ws_id in list_workstreams(store):
+        if ws_id == token:
+            return [ws_id]
+        m = _WS_SLUG_RE.match(ws_id)
+        if m and m.group(1) == token:
+            hits.append(ws_id)
+    return hits
+
+
 def resolve_slug(store: Path, token: str) -> List[Tuple[str, str]]:
-    """Bare-slug resolver: (ws_id, slug) matches across all ledgers."""
+    """Bare-slug resolver: (ws_id, slug) matches across all unit ledgers."""
     hits = []
     for ws_id in list_workstreams(store):
         units = S.parse_units((store / ws_id / "units.md").read_text("utf-8"))
@@ -139,14 +158,21 @@ def resolve_slug(store: Path, token: str) -> List[Tuple[str, str]]:
 
 def resolve_args(store: Path, args: List[str]) -> Tuple[str, Optional[str]]:
     """Return (ws_id, unit_slug|None). Raises Pick when the caller must
-    choose."""
+    choose. A workstream matches by full id or date-stripped slug; else a
+    lone token falls through to the unit bare-slug resolver."""
     all_ws = list_workstreams(store)
     if len(args) >= 2:
-        return args[0], args[1]
+        ws_hits = resolve_workstream(store, args[0])
+        ws_id = ws_hits[0] if len(ws_hits) == 1 else args[0]
+        return ws_id, args[1]
     if len(args) == 1:
         tok = args[0]
-        if tok in all_ws:
-            return tok, None
+        ws_hits = resolve_workstream(store, tok)
+        if len(ws_hits) == 1:
+            return ws_hits[0], None
+        if len(ws_hits) > 1:
+            raise Pick(f"AMBIGUOUS workstream '{tok}' matches: "
+                       + ", ".join(ws_hits))
         hits = resolve_slug(store, tok)
         if len(hits) == 1:
             return hits[0]

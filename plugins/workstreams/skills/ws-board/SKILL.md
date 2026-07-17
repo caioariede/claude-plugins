@@ -3,7 +3,7 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -32,8 +32,8 @@ Print stdout **as bare GFM markdown, never inside a code fence.** A fence makes 
 
 The script couldn't choose a target on its own; the first stderr token says why:
 
-- `MANY_WORKSTREAMS <list>` — no args and more than one workstream. Show the list, ask which, re-run with that `ws-id`.
-- `AMBIGUOUS <matches>` — a bare slug matches units in more than one workstream. Show the matches, ask which, and re-run passing the `<ws-id>` and `<slug>` as two args.
+- `MANY_WORKSTREAMS <list>` — no args and more than one workstream. Show the list, ask which, re-run with that `ws-id` (its slug alone works — the date prefix is optional).
+- `AMBIGUOUS <matches>` — a slug matches more than one workstream (same slug, different dates) or more than one unit. Show the matches, ask which, and re-run with the exact id (for a unit, pass `<ws-id>` and `<slug>` as two args).
 - `NO_MATCH` / `NO_STORE` — report it plainly; there is nothing to show.
 
 If `python3` or the forge CLI is missing, or the forge is unreachable, the board still renders — every unit without resolvable PR state simply falls back to `building`. Say so if the result looks PR-blind.
