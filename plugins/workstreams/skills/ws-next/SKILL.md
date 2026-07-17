@@ -26,7 +26,7 @@ Reads the ledger (`units.md`) and each unit's **derived status** (SPEC status ru
 | 5 | no **active** unit, **but** `backlog.md` has open items — a planned unit rule 4 couldn't start, or an open `WF<n>`/`F<n>` follow-up | **not done — triage:** `ws-start` a worth-doing item, or check off / discard the rest in `backlog.md` / the unit's `progress.md`. **List the open items.** |
 | 6 | no **active** unit **and** no open backlog item (SPEC "Workstream done") | workstream done — close it |
 
-Rule 4's planned units live in `backlog.md` `## Planned units`. Rule 5 is where a **deferred follow-up** (`WF<n>`) or an unstarted planned unit gets resolved: promote a worth-doing one to a unit (`ws-start`, then check it off in `backlog.md`), or discard the rest. Rule 6 fires only once nothing open remains — "active" is the SPEC term (`building`/`in-review`), reused here, not re-listed.
+Rule 4's planned units live in `backlog.md` `## Planned units`. Rule 5 is where a **deferred follow-up** (`WF<n>`) or an unstarted planned unit gets resolved: promote a worth-doing one to a unit (`ws-start`, then check it off in `backlog.md`), or discard the rest. Rule 6 fires only once nothing open remains — "active" is the SPEC term (`building`/`blocked`/`in-review`), reused here, not re-listed.
 
 **Blocked units are not actionable.** A unit with ≥1 unmet need (§Dependencies, derived `blocked`) is skipped in rules 2–3 — never emit `ws-resume` for it. It counts as **active** (SPEC), so it keeps the workstream not-done, but the next real move is to advance its blocker (which its own status surfaces via rule 2/3). A unit blocked **only** by a dropped/removed target has no such path → surface it under rule 5 triage.
 
