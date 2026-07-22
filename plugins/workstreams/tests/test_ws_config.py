@@ -113,5 +113,151 @@ class HelperTest(unittest.TestCase):
             self.assertEqual(C.overrides_path(store), Path("/nope/x.ini"))
 
 
+class ShowTest(unittest.TestCase):
+    def test_defaults_render_with_provenance(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("worktree-management: git-worktree  (default)",
+                          p.stdout)
+            self.assertIn("forge: gh  (default)", p.stdout)
+
+    def test_explicit_store_active_marked(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nworktree-management = wmx\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh", "wmx"))
+            self.assertIn("worktree-management: wmx  (explicit, store)",
+                          p.stdout)
+
+    def test_missing_shell_dep_marks_unresolved(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nworktree-management = wmx\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))  # no wmx stub
+            self.assertIn('unresolved head "wmx"', p.stdout)
+
+    def test_skill_dep_prints_check_in_session(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertIn(
+                "? requires skill superpowers:writing-plans "
+                "(verify in session)", p.stdout)
+
+    def test_stub_flavor_rendered_but_never_offered(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[worktree-management/custom]\n"
+                "create =\nremove =\nlocate =\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertIn("custom", p.stdout)
+            self.assertIn("stub", p.stdout)
+            self.assertNotIn("OFFER worktree-management custom", p.stdout)
+
+    def test_unreadable_overrides_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[config]\noverrides-file = /nope/x.ini\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertIn("UNREADABLE", p.stdout)
+
+    def test_active_hooks_surfaced(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nworktree-management = wmx\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh", "wmx"))
+            self.assertIn("hook-ws-start-after", p.stdout)
+            self.assertIn("Open <branch> in a new window?", p.stdout)
+
+
+class OfferTest(unittest.TestCase):
+    def test_unset_group_with_available_candidate_offers(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "show", tools=("git", "gh", "wmx"))
+            self.assertIn("OFFER worktree-management wmx", p.stdout)
+
+    def test_pending_skill_candidate_still_offered(self):
+        # superpowers deps are skill ids -> '?' -> model settles, so the
+        # candidate line is still emitted.
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertIn("OFFER spec-driven-development superpowers",
+                          p.stdout)
+
+    def test_explicitly_set_group_never_offers(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nworktree-management = git-worktree\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh", "wmx"))
+            self.assertNotIn("OFFER worktree-management", p.stdout)
+
+    def test_forge_without_non_default_never_offers(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertNotIn("OFFER forge", p.stdout)
+
+
+class ReconcileTest(unittest.TestCase):
+    def test_show_installs_for_superpowers(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers\n",
+                "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            script = store / "hooks" / "spec-watch-superpowers.sh"
+            self.assertTrue(script.exists())
+            self.assertTrue(os.access(script, os.X_OK))
+            content = script.read_text("utf-8")
+            self.assertNotIn("@SPEC_GLOB@", content)
+            self.assertIn("*specs/*-design.md", content)
+            self.assertIn("installed spec-watch-superpowers.sh", p.stdout)
+
+    def test_default_none_removes_scripts(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "hooks").mkdir()
+            junk = store / "hooks" / "spec-watch-superpowers.sh"
+            junk.write_text("#!/bin/sh\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertFalse(junk.exists())
+            self.assertIn("removed spec-watch-superpowers.sh", p.stdout)
+
+    def test_foreign_scripts_removed(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers\n",
+                "utf-8")
+            (store / "hooks").mkdir()
+            old = store / "hooks" / "spec-watch-old.sh"
+            old.write_text("#!/bin/sh\n", "utf-8")
+            run_config(td, "show", tools=("git", "gh"))
+            self.assertFalse(old.exists())
+            self.assertTrue(
+                (store / "hooks" / "spec-watch-superpowers.sh").exists())
+
+    def test_second_run_is_silent(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers\n",
+                "utf-8")
+            run_config(td, "show", tools=("git", "gh"))
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertNotIn("spec-watch reconciled", p.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
