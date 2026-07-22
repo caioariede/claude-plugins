@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.9.0"
+  version: "0.10.0"
   author: Caio Ariede
 ---
 
@@ -212,6 +212,8 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 2. instruction = `[G/<flavor>] O` merged **per key** across layers (overrides > store > built-in).
 3. missing after merge → the group **default flavor's** `O`; an optional op no layer defines → skip.
 4. `word:word` → invoke as a skill; a `ws-*` command line (e.g. `ws-resume <unit>`) → invoke that skill with those arguments; else run as shell. Fill `<branch> <base> <path> <repo> <pr> <new-base>` from context; hook instructions and their `.prompt`/`.choices` may also use `<unit>` (the target unit id) and `<command>` (the firing skill's resolved next command).
+
+**Availability (detection)** — a flavor's *tool deps* derive from its core-operation instructions: a shell instruction depends on its head command (`wmx …` → `wmx`); a `skill:id` instruction depends on that skill being installed; a prose methodology instruction (e.g. `none`'s) carries no dep — the same command-vs-prose judgment rule 4 already requires. A flavor is **available** iff every dep resolves (`command -v` per head; the session's skill list per skill id). Only the group's core operations count — `spec-glob`, `hook-*` operations, and companion keys never affect availability. Judge a flavor on its own merged keys **without** rule 3's default-flavor fallback, so a scaffolded stub with empty operations is unavailable. Defaults are checked like any flavor — a missing `gh` means the active default is broken and worth flagging. `ws-config` is the sole consumer: its `show` annotates availability and offers activation (those rules live there, not here).
 
 **Flavor hooks** — a flavor may react at a skill's lifecycle point. A **hook** is an optional operation named `hook-<skill>-<event>` (e.g. `hook-ws-start-after`); each skill documents the events it fires. At an event, and **only in an interactive session** (never a subagent/headless run), the skill fires that hook from every **active** flavor — across all groups, in group order (`worktree-management`, `spec-driven-development`, `forge`) — that defines it. Companion keys, valid only on `hook-*` operations: `<hook>.prompt` (a question; its presence makes the hook interactive) · `<hook>.choices.<name>` (an option's instruction; empty = skip) · `<hook>.choices.<name>.desc` (its picker description — label is `<name>`). **Modes:** no `.prompt` → run the base instruction unconditionally · `.prompt` without `.choices` → binary (Yes runs the base instruction, No skips) · `.prompt` with `.choices` → present the 2–4 options and run the chosen one (base ignored). A dismissed prompt skips. Base and `.choices` values resolve as any instruction (rule 4). `hook-`, `.prompt` and `.choices.` are reserved on operation keys, and an option `<name>` may not be `prompt`.
 
