@@ -1,9 +1,9 @@
 ---
 name: ws-config
-description: Use to view or change workstream flavors — which external tool backs each behavior group (worktree-management, spec-driven-development, forge). Show the active selection, set a flavor, point at an overrides file, or scaffold a custom flavor.
+description: Use to view or change workstream flavors — which external tool backs each behavior group (worktree-management, spec-driven-development, forge). Bare/`show` also detects which flavors' tools are installed, flags an active flavor whose tool is missing, and offers to activate detected flavors for unset groups. Set a flavor, point at an overrides file, or scaffold a custom flavor.
 argument-hint: "[show | set <group> <flavor> | add <group> <flavor> | set-overrides <path> | list [group]]"
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   author: Caio Ariede
 ---
 
@@ -21,10 +21,14 @@ metadata:
 Store file: `<store>/flavors.ini` (store root: SPEC). Built-in defs (read-only): the `ws` skill's bundled `references/flavors.ini`.
 
 ## show (default)
-Print the effective `[active]` per group — store `[active]` if set, else the default (`worktree-management`=`git-worktree`, `spec-driven-development`=`none`, `forge`=`gh`) — and which layers are in play: built-in (always), store (if the file exists), overrides (if `[config] overrides-file` is set; mark it unreadable if the path is missing). Also surface any `hook-*` operations the active flavors define (base, `.prompt`, `.choices`), so the user sees which lifecycle prompts are live (SPEC §Flavors).
+Print the effective `[active]` per group — store `[active]` if set, else the default (`worktree-management`=`git-worktree`, `spec-driven-development`=`none`, `forge`=`gh`) — marking each value explicit (store/overrides `[active]`) or default, and which layers are in play: built-in (always), store (if the file exists), overrides (if `[config] overrides-file` is set; mark it unreadable if the path is missing). Also surface any `hook-*` operations the active flavors define (base, `.prompt`, `.choices`), so the user sees which lifecycle prompts are live (SPEC §Flavors).
+
+**Detection.** Compute availability (SPEC §Flavors, Availability) for every known flavor in every layer and annotate each group's flavor list with it. An active flavor — explicit or default — with an unresolved dep is flagged broken, naming the missing tool and the remedy (install it, or `ws-config set <group> <other-flavor>`).
+
+**Offer** *(interactive sessions only — never a subagent/headless run, same rule as SPEC flavor hooks)*. For each group with no explicit `[active]` entry: exactly one available non-default flavor → offer to set it (default yes); two or more → present a choice that includes keeping the default; none available → no offer, the default is simply in effect. Combine all unset groups into one prompt — never sequential asks. An accepted choice writes through `set` below, so validation and the spec-watch reconcile run in the same pass. **Declining pins the default**: write that group's default explicitly into `[active]`, making the choice deliberate so the offer never repeats. A dismissed prompt writes nothing. (Why non-default wins: defaults are the always-available baseline; installing wmx or superpowers signals intent to use it.)
 
 ## set <group> <flavor>
-Validate `<group>` is one of the three and `[<group>/<flavor>]` is defined in some layer (built-in / store / overrides). Reject an unknown flavor, listing the known ones for that group. Then write/update `[active]` `<group> = <flavor>` in the store file, creating the file and `[active]` section if absent. Confirm the new value.
+Validate `<group>` is one of the three and `[<group>/<flavor>]` is defined in some layer (built-in / store / overrides). Reject an unknown flavor, listing the known ones for that group. Then write/update `[active]` `<group> = <flavor>` in the store file, creating the file and `[active]` section if absent. Confirm the new value. If the flavor is defined but unavailable (SPEC §Flavors, Availability), warn — the tool may be installed later — and set it anyway.
 
 ## set-overrides <path>
 Write `overrides-file = <path>` under `[config]` in the store file (create as needed). Warn if `<path>` does not exist yet — allowed; it may be created later. Confirm.
