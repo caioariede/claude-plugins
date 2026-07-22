@@ -259,5 +259,106 @@ class ReconcileTest(unittest.TestCase):
             self.assertNotIn("spec-watch reconciled", p.stdout)
 
 
+class WriteTest(unittest.TestCase):
+    def test_set_writes_active_and_preserves_comments(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "# my note\n[active]\n"
+                "spec-driven-development = superpowers\n", "utf-8")
+            p = run_config(td, "set", "worktree-management", "wmx",
+                           tools=("git", "gh", "wmx"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text = (store / "flavors.ini").read_text("utf-8")
+            self.assertIn("# my note\n", text)
+            self.assertIn("worktree-management = wmx", text)
+            self.assertIn("spec-driven-development = superpowers", text)
+
+    def test_set_replaces_existing_line_once(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            run_config(td, "set", "forge", "gh", tools=("git", "gh"))
+            p = run_config(td, "set", "forge", "gh", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text = (store / "flavors.ini").read_text("utf-8")
+            self.assertEqual(text.count("forge = gh"), 1)
+
+    def test_set_creates_file_when_absent(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            p = run_config(td, "set", "forge", "gh", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text = (store / "flavors.ini").read_text("utf-8")
+            self.assertIn("[active]", text)
+            self.assertIn("forge = gh", text)
+
+    def test_set_unknown_flavor_token_and_known_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "set", "forge", "nope", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(p.stderr.startswith("UNKNOWN_FLAVOR"),
+                            p.stderr)
+            self.assertIn("gh", p.stderr)
+
+    def test_set_unknown_group_token(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "set", "nope", "gh", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(p.stderr.startswith("UNKNOWN_GROUP"), p.stderr)
+
+    def test_set_unavailable_flavor_warns_but_writes(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            p = run_config(td, "set", "worktree-management", "wmx",
+                           tools=("git", "gh"))  # wmx not on PATH
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("warning", p.stdout)
+            self.assertIn("worktree-management = wmx",
+                          (store / "flavors.ini").read_text("utf-8"))
+
+    def test_add_appends_scaffold_without_activating(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            p = run_config(td, "add", "forge", "gitlab",
+                           tools=("git", "gh"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text = (store / "flavors.ini").read_text("utf-8")
+            self.assertIn("[forge/gitlab]", text)
+            for op in ("default-branch", "pr-status", "pr-create",
+                       "pr-ready", "pr-retarget"):
+                self.assertIn(f"{op} =", text)
+            self.assertNotIn("[active]", text)
+
+    def test_add_duplicate_errors(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            run_config(td, "add", "forge", "gitlab", tools=("git", "gh"))
+            p = run_config(td, "add", "forge", "gitlab",
+                           tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(p.stderr.startswith("ALREADY_EXISTS"),
+                            p.stderr)
+
+    def test_set_overrides_writes_and_warns_on_missing_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            target = str(Path(td) / "ov.ini")
+            p = run_config(td, "set-overrides", target,
+                           tools=("git", "gh"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn(f"overrides-file = {target}",
+                          (store / "flavors.ini").read_text("utf-8"))
+            self.assertIn("warning", p.stdout)
+
+    def test_bad_args_token(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "frobnicate", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(p.stderr.startswith("BAD_ARGS"), p.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
