@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.9.0 · July 2026</p>
+    <p class="version">Version 0.10.0 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -511,13 +511,13 @@ npx skills update    # refresh installed skills later</pre>
 <pre class="code">/plugin marketplace add caioariede/claude-plugins
 /plugin install workstreams@caioariede</pre>
 
-<aside class="note note-warn"><b>Pick one channel.</b> Installing through both registers the skills twice in Claude Code. Either way, verify: the <code>/ws-*</code> commands resolve, and <code>/ws-init</code> is the entry point.</aside>
+<aside class="note note-warn"><b>Pick one channel.</b> Installing through both registers the skills twice in Claude Code. Either way, verify with a bare <code>/ws-config</code> — it confirms the skills resolve and checks your tools, flagging a missing <code>gh</code> before your first <code>ws-init</code> fails.</aside>
 
 <aside class="note note-tip"><b>State scaffolds itself.</b> The global store at <code>~/.local/share/workstreams/</code> and its <code>flavors.ini</code> are created on the first <code>ws-init</code> — nothing to set up by hand.</aside>
 
-<h3>Configure flavors (optional)</h3>
-<p>Defaults are <code>git-worktree</code> for worktree management, <code>gh</code> for the forge, and <code>none</code> for spec-driven development. Change any of them with <code>ws-config</code>; see the <a href="#flavors">Flavors</a> section.</p>
-<pre class="cmd-ex">$ /ws-config show
+<h3>First run</h3>
+<p>Run <code>/ws-config</code> once after installing. It detects which tools you have — <code>wmx</code>, superpowers, <code>gh</code> — and offers to activate the matching flavors for any group you haven't set; accept and you're configured. It also flags an active flavor whose tool is missing. Defaults are <code>git-worktree</code> for worktree management, <code>gh</code> for the forge, and <code>none</code> for spec-driven development; change any of them later with <code>ws-config set</code> — see the <a href="#flavors">Flavors</a> section.</p>
+<pre class="cmd-ex">$ /ws-config
 $ /ws-config set spec-driven-development superpowers</pre>
 </section>
 <section id="commands"><h2>The workflow commands</h2>
@@ -616,9 +616,10 @@ Reads the ledger and each unit's live status, then names the single next action 
 <div class="cmd-head"><span class="cmd-name">ws-config</span><span class="cmd-sig">[show | set &lt;group&gt; &lt;flavor&gt; | set-overrides &lt;path&gt; | list [group] | add &lt;group&gt; &lt;flavor&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> viewing or changing workstream flavors — which external tool backs each behavior group.</p>
 <div class="cmd-body">
-Edits only <code>~/.local/share/workstreams/flavors.ini</code> and the <a href="#spec-watch">spec-watch</a> script under the store's <code>hooks/</code> — never a worktree. <code>show</code> prints the active flavor per group and which layers are in play; <code>set</code> switches one group's flavor; <code>add</code> scaffolds a custom flavor stub; <code>set-overrides</code> points at an external overrides file. Every run also reconciles the spec-watch script to the active flavors. See the <a href="#flavors">Flavors</a> section.
+Edits only <code>~/.local/share/workstreams/flavors.ini</code> and the <a href="#spec-watch">spec-watch</a> script under the store's <code>hooks/</code> — never a worktree. <code>show</code> (the bare default) prints the active flavor per group and which layers are in play, annotates which flavors' tools are detected, flags an active flavor whose tool is missing, and offers to activate detected flavors for unset groups; <code>set</code> switches one group's flavor; <code>add</code> scaffolds a custom flavor stub; <code>set-overrides</code> points at an external overrides file. Every run also reconciles the spec-watch script to the active flavors. See the <a href="#flavors">Flavors</a> section.
 </div>
-<pre class="cmd-ex">$ /ws-config set worktree-management wmx</pre>
+<pre class="cmd-ex">$ /ws-config
+$ /ws-config set worktree-management wmx</pre>
 </div>
 </section>
 <section id="flavors"><h2>Flavors</h2>
@@ -633,7 +634,7 @@ Edits only <code>~/.local/share/workstreams/flavors.ini</code> and the <a href="
 </tbody>
 </table>
 <p>Your selection and any custom flavors live in <code>~/.local/share/workstreams/flavors.ini</code>, merged over the plugin's built-in defs; an optional overrides file layers on top. View or change all of it with <code>ws-config</code>.</p>
-<aside class="note note-tip"><b>Configure with <code>/ws-config</code>.</b> <code>ws-config show</code> prints the active flavor per group; <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> switches one; <code>ws-config add</code> scaffolds a custom flavor to fill in. <code>gh</code> is the assumed forge baseline — a non-GitHub user adds a custom <code>forge</code> flavor via the overrides file.</aside>
+<aside class="note note-tip"><b>Configure with <code>/ws-config</code>.</b> Bare <code>/ws-config</code> shows the active flavor per group, detects installed tools, and offers to activate matching flavors for groups you haven't set; <code>ws-config set &lt;group&gt; &lt;flavor&gt;</code> switches one; <code>ws-config add</code> scaffolds a custom flavor to fill in. <code>gh</code> is the assumed forge baseline — a non-GitHub user adds a custom <code>forge</code> flavor via the overrides file.</aside>
 
 <h3 id="customizing">Customizing</h3>
 <p>Flavor definitions merge across three layers, lowest to highest precedence — the plugin's built-in <code>flavors.ini</code>, your store <code>~/.local/share/workstreams/flavors.ini</code>, then an optional external overrides file. Higher layers win <b>per operation</b>, so you redefine only the keys you care about and inherit the rest.</p>
