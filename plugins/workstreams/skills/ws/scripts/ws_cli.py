@@ -65,6 +65,96 @@ def resolve_operation(store: Path, group: str, op: str,
 
 
 # ---------------------------------------------------------------------------
+# Flavor introspection (ws-config engine) — provenance, known flavors,
+# per-flavor merged ops WITHOUT the default fallback, and tool deps
+# (SPEC §Flavors, Availability).
+# ---------------------------------------------------------------------------
+
+GROUP_DEFAULTS = {"worktree-management": "git-worktree",
+                  "spec-driven-development": "none",
+                  "forge": "gh"}
+
+CORE_OPS = {"worktree-management": ("create", "remove", "locate"),
+            "spec-driven-development": ("plan", "execute", "ship"),
+            "forge": ("default-branch", "pr-status", "pr-create",
+                      "pr-ready", "pr-retarget")}
+
+_LAYER_NAMES = ("built-in", "store", "overrides")
+
+
+def active_flavor(store: Path, group: str) -> Tuple[str, str]:
+    """(flavor, provenance) — provenance names the highest layer that
+    sets [active] group, or 'default' when none does."""
+    flavor, prov = GROUP_DEFAULTS[group], "default"
+    for cp, name in zip(_layers(store), _LAYER_NAMES):
+        if cp.has_option("active", group):
+            flavor, prov = cp.get("active", group).strip(), name
+    return flavor, prov
+
+
+def known_flavors(store: Path, group: str) -> List[str]:
+    """Flavors defined for `group` in any layer, default flavor first."""
+    out: List[str] = []
+    for cp in _layers(store):
+        for sec in cp.sections():
+            g, _, f = sec.partition("/")
+            if g == group and f and f not in out:
+                out.append(f)
+    d = GROUP_DEFAULTS[group]
+    if d in out:
+        out.remove(d)
+        out.insert(0, d)
+    return out
+
+
+def flavor_ops(store: Path, group: str, flavor: str) -> Dict[str, str]:
+    """[group/flavor] merged per key across layers. Deliberately NO
+    default-flavor fallback: Availability judges a flavor on its own
+    keys, so a scaffolded stub stays visibly empty."""
+    sec = f"{group}/{flavor}"
+    ops: Dict[str, str] = {}
+    for cp in _layers(store):
+        if cp.has_section(sec):
+            for k, v in cp.items(sec):
+                ops[k] = (v or "").strip()
+    return ops
+
+
+def flavor_deps(ops: Dict[str, str], group: str) -> List[Tuple[str, str]]:
+    """Tool deps of the group's core operations only — spec-glob,
+    hook-*, and companion keys never contribute (SPEC Availability).
+    Kinds: ('shell', head) / ('skill', id) / ('ws', cmd) /
+    ('missing-op', op) for an empty or absent core op."""
+    deps: List[Tuple[str, str]] = []
+    seen = set()
+    for op in CORE_OPS[group]:
+        instr = (ops.get(op) or "").strip()
+        if not instr:
+            deps.append(("missing-op", op))
+            continue
+        head = instr.split()[0]
+        if head.startswith("ws-"):
+            d = ("ws", head)
+        elif re.fullmatch(r"[A-Za-z0-9_-]+:[A-Za-z0-9_-]+", head):
+            d = ("skill", head)
+        else:
+            d = ("shell", head)
+        if d not in seen:
+            seen.add(d)
+            deps.append(d)
+    return deps
+
+
+def overrides_path(store: Path) -> Optional[Path]:
+    """The [config] overrides-file path from the store layer, or None."""
+    store_cp = _load_ini(store / "flavors.ini")
+    if store_cp.has_option("config", "overrides-file"):
+        return Path(os.path.expanduser(
+            store_cp.get("config", "overrides-file").strip()))
+    return None
+
+
+# ---------------------------------------------------------------------------
 # PR state gathering — run the resolved pr-status per branch, in parallel
 # ---------------------------------------------------------------------------
 
