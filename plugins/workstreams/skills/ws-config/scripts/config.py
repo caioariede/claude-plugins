@@ -3,20 +3,22 @@
 
 Renders show/list from the merged INI layers, performs validated
 surgical writes (set / add / set-overrides) on <store>/flavors.ini,
-and reconciles the spec-watch hook script on every successful verb.
-The skill runs this and relays the output; the session settles only
-the `?` marks (skill deps, prose-vs-missing-tool) and runs the
-interactive offer from the trailing OFFER lines.
+and reconciles the spec-watch hook script on every run — including
+after a failed verb, so healing never depends on typing the command
+right. The skill runs this and relays the output; the session
+settles only the `?` marks (skill deps, prose-vs-missing-tool) and
+runs the interactive offer from the trailing OFFER lines.
 
 Usage: config.py [show | set <group> <flavor> | add <group> <flavor>
                   | set-overrides <path> | list [group]]
 Exit 2 with a machine-readable first stderr token (UNKNOWN_GROUP,
-UNKNOWN_FLAVOR, ALREADY_EXISTS, BAD_ARGS) when the caller must
-correct the request.
+UNKNOWN_FLAVOR, ALREADY_EXISTS, BAD_ARGS, BAD_STORE) when the caller
+must correct the request or repair the store file.
 """
 
 from __future__ import annotations
 
+import configparser
 import os
 import re
 import shutil
@@ -32,6 +34,12 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE = PLUGIN_ROOT / "hooks" / "spec-watch.sh"
 
 MARK = {"ok": "✓", "maybe": "?", "stub": "✗"}
+
+# Flavor names land in INI section headers and shell-adjacent contexts;
+# globs are substituted into a double-quoted sh string. Both charsets
+# exclude quotes, whitespace, and expansion characters by construction.
+FLAVOR_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+SPEC_GLOB_RE = re.compile(r"[A-Za-z0-9_*?./\[\]-]+")
 
 
 class Fail(Exception):
@@ -102,10 +110,10 @@ def _layers_line(store: Path) -> str:
     ov = C.overrides_path(store)
     if ov is None:
         parts.append("overrides — (not set)")
-    elif ov.exists():
+    elif ov.exists() and os.access(ov, os.R_OK):
         parts.append(f"overrides ✓ ({ov})")
     else:
-        parts.append(f"overrides ✗ UNREADABLE ({ov})")
+        parts.append(f"overrides ✗ UNREADABLE ({ov}) — layer skipped")
     return "layers: " + " · ".join(parts)
 
 
@@ -114,9 +122,14 @@ def cmd_show(store: Path) -> int:
     offers: List[str] = []
     for group in C.CORE_OPS:
         flavor, prov = C.active_flavor(store, group)
+        known = C.known_flavors(store, group)
         prov_txt = "default" if prov == "default" else f"explicit, {prov}"
         lines.append(f"{group}: {flavor}  ({prov_txt})")
-        for f in C.known_flavors(store, group):
+        if flavor not in known:
+            lines.append(f"  ✗ {flavor} (active but not defined in any "
+                         f"layer — fix with ws-config set {group} "
+                         "<flavor>)")
+        for f in known:
             verdict, notes = flavor_state(store, group, f)
             lines.append(f"  {MARK[verdict]} {f}")
             lines += [f"      {n}" for n in notes]
@@ -158,37 +171,45 @@ def cmd_list(store: Path, group: Optional[str]) -> int:
 
 def set_key(store: Path, section: str, key: str, value: str) -> None:
     """Replace `key = …` inside [section], insert it into the section,
-    or append the section — touching nothing else in the file."""
+    or append the section — touching nothing else in the file. Targets
+    the LAST occurrence of the section and of the key, mirroring
+    configparser's duplicate-merge (last wins), so the written value is
+    always the effective one. Section names match exactly, unstripped,
+    for the same reader-parity reason."""
     f = store / "flavors.ini"
     lines = (f.read_text("utf-8").splitlines(keepends=True)
              if f.exists() else [])
     sec_re = re.compile(r"^\[(.+)\]\s*$")
     key_re = re.compile(rf"^\s*{re.escape(key)}\s*=")
-    out: List[str] = []
-    in_sec = sec_seen = done = False
-    for line in lines:
+    last_start = None
+    for i, line in enumerate(lines):
         m = sec_re.match(line)
-        if m:
-            if in_sec and not done:      # leaving target section: insert
-                out.append(f"{key} = {value}\n")
-                done = True
-            in_sec = (m.group(1).strip() == section)
-            sec_seen = sec_seen or in_sec
-        elif in_sec and not done and key_re.match(line):
-            out.append(f"{key} = {value}\n")
-            done = True
-            continue
-        out.append(line)
-    if not done:
-        if not sec_seen:
-            if out and not out[-1].endswith("\n"):
-                out[-1] += "\n"
-            if out:
-                out.append("\n")
-            out.append(f"[{section}]\n")
-        out.append(f"{key} = {value}\n")
+        if m and m.group(1) == section:
+            last_start = i
+    if last_start is None:
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        if lines:
+            lines.append("\n")
+        lines += [f"[{section}]\n", f"{key} = {value}\n"]
+    else:
+        end = len(lines)
+        for j in range(last_start + 1, len(lines)):
+            if sec_re.match(lines[j]):
+                end = j
+                break
+        key_idx = None
+        for j in range(last_start + 1, end):
+            if key_re.match(lines[j]):
+                key_idx = j
+        if key_idx is not None:
+            lines[key_idx] = f"{key} = {value}\n"
+        else:
+            if not lines[end - 1].endswith("\n"):
+                lines[end - 1] += "\n"
+            lines.insert(end, f"{key} = {value}\n")
     store.mkdir(parents=True, exist_ok=True)
-    f.write_text("".join(out), "utf-8")
+    f.write_text("".join(lines), "utf-8")
 
 
 def _require_group(group: str) -> None:
@@ -205,20 +226,31 @@ def cmd_set(store: Path, group: str, flavor: str) -> int:
                    + ", ".join(known))
     set_key(store, "active", group, flavor)
     print(f"[active] {group} = {flavor}")
+    effective, eff_prov = C.active_flavor(store, group)
+    if effective != flavor:
+        print(f"warning: the {eff_prov} layer sets {group} = {effective}"
+              " — the store value is shadowed and will not take effect")
     verdict, notes = flavor_state(store, group, flavor)
-    if verdict != "ok":
-        print("warning: deps not fully resolved — " + "; ".join(notes)
-              + " — set anyway (the tool may be installed later)")
+    if verdict == "stub":
+        print("warning: " + "; ".join(notes)
+              + " — fill the operations before use")
+    else:
+        for n in notes:
+            print(n)     # `?` marks — the session settles them
     return 0
 
 
 def cmd_add(store: Path, group: str, flavor: str) -> int:
     _require_group(group)
+    if not FLAVOR_NAME_RE.fullmatch(flavor):
+        raise Fail(f"BAD_ARGS invalid flavor name '{flavor}' — use "
+                   "letters, digits, '.', '_', '-'")
+    if flavor in C.known_flavors(store, group):
+        raise Fail(f"ALREADY_EXISTS [{group}/{flavor}] is already "
+                   "defined in some layer — a store stub would shadow "
+                   "its operations per key")
     f = store / "flavors.ini"
     text = f.read_text("utf-8") if f.exists() else ""
-    if f"[{group}/{flavor}]" in text:
-        raise Fail(f"ALREADY_EXISTS [{group}/{flavor}] is already in "
-                   "the store file")
     block = "\n".join([f"[{group}/{flavor}]"]
                       + [f"{op} =" for op in C.CORE_OPS[group]]) + "\n"
     store.mkdir(parents=True, exist_ok=True)
@@ -230,6 +262,8 @@ def cmd_add(store: Path, group: str, flavor: str) -> int:
 
 
 def cmd_set_overrides(store: Path, path: str) -> int:
+    if not path.strip() or any(ch in path for ch in "\n\r"):
+        raise Fail(f"BAD_ARGS invalid overrides path {path!r}")
     set_key(store, "config", "overrides-file", path)
     print(f"[config] overrides-file = {path}")
     if not Path(os.path.expanduser(path)).exists():
@@ -239,15 +273,24 @@ def cmd_set_overrides(store: Path, path: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Spec-watch reconcile (SPEC §Flavors, Spec-watch) — every verb
+# Spec-watch reconcile (SPEC §Flavors, Spec-watch) — every run
 # ---------------------------------------------------------------------------
 
-def reconcile(store: Path) -> None:
+def reconcile(store: Path) -> Optional[str]:
     flavor, _ = C.active_flavor(store, "spec-driven-development")
-    glob = C.resolve_operation(store, "spec-driven-development",
-                               "spec-glob", "none")
-    hooks = store / "hooks"
+    # The active flavor's OWN spec-glob only — a flavor without one
+    # gets no script (SPEC §Spec-watch), so no rule-3 fallback here.
+    ops = C.flavor_ops(store, "spec-driven-development", flavor)
+    glob = (ops.get("spec-glob") or "").strip()
     changed: List[str] = []
+    if glob and not SPEC_GLOB_RE.fullmatch(glob):
+        # The glob is substituted into a double-quoted sh string in the
+        # hook template; anything outside the safe charset could inject
+        # shell that runs on every Write/Edit. Refuse to install.
+        changed.append(f"invalid spec-glob {glob!r} ignored — script "
+                       "not installed")
+        glob = ""
+    hooks = store / "hooks"
     keep: Optional[Path] = None
     if glob:
         keep = hooks / f"spec-watch-{flavor}.sh"
@@ -262,8 +305,13 @@ def reconcile(store: Path) -> None:
             if keep is None or p != keep:
                 p.unlink()
                 changed.append(f"removed {p.name}")
-    if changed:
-        print("spec-watch reconciled: " + "; ".join(changed))
+    return "; ".join(changed) if changed else None
+
+
+def _emit_reconcile(store: Path) -> None:
+    msg = reconcile(store)
+    if msg:
+        print("spec-watch reconciled: " + msg)
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +321,14 @@ def reconcile(store: Path) -> None:
 def main(argv: List[str]) -> int:
     store = S.store_root()
     verb, args = (argv[0], argv[1:]) if argv else ("show", [])
+    rc = 0
     try:
         if verb == "show" and not args:
-            rc = cmd_show(store)
-        elif verb == "set" and len(args) == 2:
+            # Reconcile first: show's OFFER lines are a trailing parse
+            # contract for the skill, so nothing may print after them.
+            _emit_reconcile(store)
+            return cmd_show(store)
+        if verb == "set" and len(args) == 2:
             rc = cmd_set(store, args[0], args[1])
         elif verb == "add" and len(args) == 2:
             rc = cmd_add(store, args[0], args[1])
@@ -289,8 +341,16 @@ def main(argv: List[str]) -> int:
                        + " ".join([verb] + args))
     except Fail as e:
         print(str(e), file=sys.stderr)
+        rc = 2
+    except configparser.Error as e:
+        print("BAD_STORE " + str(e).replace("\n", " "), file=sys.stderr)
         return 2
-    reconcile(store)
+    try:
+        # Every run heals the spec-watch script, a failed verb included.
+        _emit_reconcile(store)
+    except configparser.Error as e:
+        print("BAD_STORE " + str(e).replace("\n", " "), file=sys.stderr)
+        rc = 2
     return rc
 
 

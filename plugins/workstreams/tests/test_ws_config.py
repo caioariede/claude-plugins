@@ -308,13 +308,15 @@ class WriteTest(unittest.TestCase):
             self.assertEqual(p.returncode, 2)
             self.assertTrue(p.stderr.startswith("UNKNOWN_GROUP"), p.stderr)
 
-    def test_set_unavailable_flavor_warns_but_writes(self):
+    def test_set_unavailable_flavor_notes_but_writes(self):
+        # Unresolved deps print as `?` marks for the session to settle
+        # (a hard warning would be wrong for prose flavors like none).
         with tempfile.TemporaryDirectory() as td:
             store = store_at(td)
             p = run_config(td, "set", "worktree-management", "wmx",
                            tools=("git", "gh"))  # wmx not on PATH
             self.assertEqual(p.returncode, 0, p.stderr)
-            self.assertIn("warning", p.stdout)
+            self.assertIn('? unresolved head "wmx"', p.stdout)
             self.assertIn("worktree-management = wmx",
                           (store / "flavors.ini").read_text("utf-8"))
 
@@ -358,6 +360,143 @@ class WriteTest(unittest.TestCase):
             p = run_config(td, "frobnicate", tools=("git", "gh"))
             self.assertEqual(p.returncode, 2)
             self.assertTrue(p.stderr.startswith("BAD_ARGS"), p.stderr)
+
+
+class ReviewRegressionTest(unittest.TestCase):
+    """Each test pins one defect from the max-effort engine review."""
+
+    def test_set_key_appends_newline_before_new_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nforge = gh", "utf-8")   # no trailing newline
+            p = run_config(td, "set", "worktree-management", "wmx",
+                           tools=("git", "gh", "wmx"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text = (store / "flavors.ini").read_text("utf-8")
+            self.assertIn("forge = gh\n", text)
+            self.assertIn("worktree-management = wmx", text)
+
+    def test_set_targets_last_duplicate_section(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nforge = gh\n\n"
+                "[active]\nworktree-management = git-worktree\n", "utf-8")
+            p = run_config(td, "set", "worktree-management", "wmx",
+                           tools=("git", "gh", "wmx"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(
+                C.active_flavor(store, "worktree-management"),
+                ("wmx", "store"))
+
+    def test_add_builtin_flavor_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            store_at(td)
+            p = run_config(td, "add", "forge", "gh", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(p.stderr.startswith("ALREADY_EXISTS"),
+                            p.stderr)
+
+    def test_add_invalid_flavor_name_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            p = run_config(td, "add", "forge", "my lab",
+                           tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(p.stderr.startswith("BAD_ARGS"), p.stderr)
+            self.assertFalse((store / "flavors.ini").exists())
+
+    def test_malicious_spec_glob_not_installed(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers\n\n"
+                "[spec-driven-development/superpowers]\n"
+                'spec-glob = *"; echo INJECTED; "*\n', "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertFalse(
+                (store / "hooks" / "spec-watch-superpowers.sh").exists())
+            self.assertIn("invalid spec-glob", p.stdout)
+
+    def test_broken_store_reports_token_not_traceback(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "forge = gh\n", "utf-8")   # key above any section header
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(p.stderr.startswith("BAD_STORE"), p.stderr)
+            self.assertNotIn("Traceback", p.stderr)
+
+    def test_reconcile_runs_after_failed_verb(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers\n",
+                "utf-8")
+            p = run_config(td, "set", "forge", "nope", tools=("git", "gh"))
+            self.assertEqual(p.returncode, 2)
+            self.assertTrue(
+                (store / "hooks" / "spec-watch-superpowers.sh").exists())
+
+    def test_set_warns_when_overrides_shadow(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            ov = Path(td) / "ov.ini"
+            ov.write_text("[active]\nworktree-management = wmx\n", "utf-8")
+            (store / "flavors.ini").write_text(
+                f"[config]\noverrides-file = {ov}\n", "utf-8")
+            p = run_config(td, "set", "worktree-management",
+                           "git-worktree", tools=("git", "gh", "wmx"))
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("shadowed", p.stdout)
+
+    def test_undefined_active_flagged_broken(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nworktree-management = wxm\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh", "wmx"))
+            self.assertIn("not defined in any layer", p.stdout)
+
+    def test_default_section_does_not_bleed_into_ops(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[DEFAULT]\ncreate = mycmd\n\n"
+                "[worktree-management/custom]\ncreate =\nremove =\n"
+                "locate =\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh", "mycmd"))
+            self.assertNotIn("OFFER worktree-management custom", p.stdout)
+            ops = C.flavor_ops(store, "worktree-management", "custom")
+            self.assertEqual(ops.get("create"), "")
+
+    def test_empty_overrides_value_reads_as_unset(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[config]\noverrides-file =\n", "utf-8")
+            self.assertIsNone(C.overrides_path(store))
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertIn("overrides — (not set)", p.stdout)
+
+    def test_glob_never_falls_back_to_default_flavor(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = myflow\n\n"
+                "[spec-driven-development/none]\n"
+                "spec-glob = *specs/*.md\n\n"
+                "[spec-driven-development/myflow]\n"
+                "plan = superpowers:writing-plans\nexecute = x\n"
+                "ship = x\n", "utf-8")
+            run_config(td, "show", tools=("git", "gh", "x"))
+            hooks = store / "hooks"
+            installed = (sorted(hooks.glob("spec-watch-*.sh"))
+                         if hooks.is_dir() else [])
+            self.assertEqual(installed, [])
 
 
 if __name__ == "__main__":

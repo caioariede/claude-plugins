@@ -27,8 +27,13 @@ BUILTIN_FLAVORS = Path(__file__).resolve().parent.parent / "references" / "flavo
 # ---------------------------------------------------------------------------
 
 def _load_ini(path: Path) -> configparser.ConfigParser:
+    # The parser's default section is renamed to a sentinel no file
+    # will contain, so a literal [DEFAULT] in a hand-edited file stays
+    # an ordinary section instead of bleeding its keys into every
+    # flavor's merged ops.
     cp = configparser.ConfigParser(interpolation=None, delimiters=("=",),
-                                   strict=False)
+                                   strict=False,
+                                   default_section="~defaults-disabled~")
     cp.optionxform = str  # keys are case-sensitive here
     if path.exists():
         cp.read(path, encoding="utf-8")
@@ -37,13 +42,10 @@ def _load_ini(path: Path) -> configparser.ConfigParser:
 
 def _layers(store: Path) -> List[configparser.ConfigParser]:
     """Built-in → store → overrides, low to high precedence."""
-    layers = [_load_ini(BUILTIN_FLAVORS)]
-    store_cp = _load_ini(store / "flavors.ini")
-    layers.append(store_cp)
-    if store_cp.has_option("config", "overrides-file"):
-        ov = Path(os.path.expanduser(store_cp.get("config", "overrides-file")))
-        if ov.exists():
-            layers.append(_load_ini(ov))
+    layers = [_load_ini(BUILTIN_FLAVORS), _load_ini(store / "flavors.ini")]
+    ov = overrides_path(store)
+    if ov is not None and ov.exists():
+        layers.append(_load_ini(ov))
     return layers
 
 
@@ -146,11 +148,13 @@ def flavor_deps(ops: Dict[str, str], group: str) -> List[Tuple[str, str]]:
 
 
 def overrides_path(store: Path) -> Optional[Path]:
-    """The [config] overrides-file path from the store layer, or None."""
+    """The [config] overrides-file path from the store layer; None when
+    unset or emptied (an empty value means 'no overrides', not '.')."""
     store_cp = _load_ini(store / "flavors.ini")
     if store_cp.has_option("config", "overrides-file"):
-        return Path(os.path.expanduser(
-            store_cp.get("config", "overrides-file").strip()))
+        val = store_cp.get("config", "overrides-file").strip()
+        if val:
+            return Path(os.path.expanduser(val))
     return None
 
 
