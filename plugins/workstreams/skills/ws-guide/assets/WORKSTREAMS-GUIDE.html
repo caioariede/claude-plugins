@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.8.1 · July 2026</p>
+    <p class="version">Version 0.9.0 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -454,6 +454,7 @@
       <li><a href="#flavors">Flavors</a></li>
       <li class="toc-sub"><a href="#customizing">Customizing</a></li>
       <li class="toc-sub"><a href="#flavor-hooks">Flavor hooks</a></li>
+      <li class="toc-sub"><a href="#spec-watch">Spec-watch</a></li>
       <li class="toc-sub"><a href="#superpowers-flavor">Using with Superpowers</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
@@ -615,7 +616,7 @@ Reads the ledger and each unit's live status, then names the single next action 
 <div class="cmd-head"><span class="cmd-name">ws-config</span><span class="cmd-sig">[show | set &lt;group&gt; &lt;flavor&gt; | set-overrides &lt;path&gt; | list [group] | add &lt;group&gt; &lt;flavor&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> viewing or changing workstream flavors — which external tool backs each behavior group.</p>
 <div class="cmd-body">
-Edits only <code>~/.local/share/workstreams/flavors.ini</code> — never a worktree. <code>show</code> prints the active flavor per group and which layers are in play; <code>set</code> switches one group's flavor; <code>add</code> scaffolds a custom flavor stub; <code>set-overrides</code> points at an external overrides file. See the <a href="#flavors">Flavors</a> section.
+Edits only <code>~/.local/share/workstreams/flavors.ini</code> and the <a href="#spec-watch">spec-watch</a> script under the store's <code>hooks/</code> — never a worktree. <code>show</code> prints the active flavor per group and which layers are in play; <code>set</code> switches one group's flavor; <code>add</code> scaffolds a custom flavor stub; <code>set-overrides</code> points at an external overrides file. Every run also reconciles the spec-watch script to the active flavors. See the <a href="#flavors">Flavors</a> section.
 </div>
 <pre class="cmd-ex">$ /ws-config set worktree-management wmx</pre>
 </div>
@@ -627,7 +628,7 @@ Edits only <code>~/.local/share/workstreams/flavors.ini</code> — never a workt
 <thead><tr><th>Group</th><th>Operations</th><th>Built-in flavors (default first)</th></tr></thead>
 <tbody>
 <tr><td><code>worktree-management</code></td><td>create · remove · locate</td><td><code>git-worktree</code>, <code>wmx</code></td></tr>
-<tr><td><code>spec-driven-development</code></td><td>plan · execute · ship</td><td><code>none</code>, <code>superpowers</code></td></tr>
+<tr><td><code>spec-driven-development</code></td><td>plan · execute · ship · spec-glob</td><td><code>none</code>, <code>superpowers</code></td></tr>
 <tr><td><code>forge</code></td><td>default-branch · pr-status · pr-create · pr-ready · pr-retarget</td><td><code>gh</code></td></tr>
 </tbody>
 </table>
@@ -673,11 +674,16 @@ hook-ws-next-after.choices.n      =
 hook-ws-next-after.choices.n.desc = No</pre>
 <aside class="note note-tip"><b>Silence or force it to taste.</b> In your store <code>flavors.ini</code>, set <code>hook-ws-start-after.prompt =</code> (empty) to always open without asking, or <code>hook-ws-start-after =</code> (empty) to never open — one line each, merged over the built-in. The same levers work on <code>hook-ws-next-after</code> and its <code>.choices.*</code> keys.</aside>
 
+<h3 id="spec-watch">Spec-watch: from spec to workstream</h3>
+<p>Workstreams usually begin at a design spec — and the moment one is written is easy to miss. <b>Spec-watch</b> closes that gap: when a written file matches the active <code>spec-driven-development</code> flavor's <code>spec-glob</code> and no workstream's <code>design:</code> claims it, the runtime nudges the session to offer <code>ws-init</code> with that spec as the design. A workstream that has no design yet is surfaced as the attach-instead alternative. It only suggests — single-PR work is left alone, and nothing is created without you.</p>
+<p>The mechanism costs nothing when idle: the plugin's file-write hook merely checks whether <code>~/.local/share/workstreams/hooks/spec-watch-&lt;flavor&gt;.sh</code> exists and runs it — the installed script <i>is</i> the on-switch. <code>ws-config</code> keeps it in sync on every run: a flavor that declares <code>spec-glob</code> gets the script installed with its glob baked in; a flavor without one gets it removed. Ownership is matched by the spec's <b>filename</b> against <code>design:</code> lines, so <code>~</code>, absolute, and symlinked spellings all count.</p>
+<aside class="note note-tip"><b>Opt out in one line.</b> Set <code>spec-glob =</code> (empty) on your active flavor in the store <code>flavors.ini</code>, then any <code>/ws-config</code> run removes the watcher — the same empty-key convention that silences flavor hooks.</aside>
+
 <h3 id="superpowers-flavor">Using with Superpowers</h3>
 <p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out: a feature is many units, and each unit plans itself.</p>
 <ol class="steps">
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
-<li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. It creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan.</li>
+<li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. With the superpowers flavor active, <a href="#spec-watch">spec-watch</a> nudges this step automatically the moment the design doc is written. <code>ws-init</code> creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan.</li>
 <li><b>Split the spec into units</b> with <code>ws-start</code>, one per shippable slice — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
 <li><b>Let each unit plan itself.</b> <code>ws-resume</code> runs <code>writing-plans</code> scoped to that unit (tasks land as <code>T1..</code> in its <code>progress.md</code>), then executes with <code>subagent-driven-development</code>.</li>
 </ol>
@@ -702,7 +708,7 @@ hook-ws-next-after.choices.n.desc = No</pre>
 <tr><td><code>ws-next</code></td><td>Name the single next action and the command to run it across units. Read-only — decides, doesn't do.</td></tr>
 <tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
 <tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record.</td></tr>
-<tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only.</td></tr>
+<tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only, and reconciles the spec-watch script.</td></tr>
 </tbody>
 </table>
 

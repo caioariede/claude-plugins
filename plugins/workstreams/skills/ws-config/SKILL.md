@@ -3,7 +3,7 @@ name: ws-config
 description: Use to view or change workstream flavors — which external tool backs each behavior group (worktree-management, spec-driven-development, forge). Show the active selection, set a flavor, point at an overrides file, or scaffold a custom flavor.
 argument-hint: "[show | set <group> <flavor> | add <group> <flavor> | set-overrides <path> | list [group]]"
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
   author: Caio Ariede
 ---
 
@@ -35,5 +35,13 @@ List the flavors per group (built-in + store + overrides) with each flavor's ope
 ## add <group> <flavor>
 Scaffold a `[<group>/<flavor>]` section stub in the store file with the group's operation keys (per SPEC §Flavors) left empty, for the user to fill. Do not activate it — tell the user to run `ws-config set <group> <flavor>` when ready.
 
+## Spec-watch reconcile (every run)
+After any command above, sync the installed spec-watch script to the merged INI (SPEC §Flavors, Spec-watch) — running `ws-config` is what heals a hand-edited `flavors.ini`:
+1. Resolve the active `spec-driven-development` flavor and its `spec-glob`.
+2. `spec-glob` defined → install/refresh `<store>/hooks/spec-watch-<flavor>.sh` from the plugin template (from this skill's directory: `../../hooks/spec-watch.sh`), substituting `@SPEC_GLOB@` with the glob, `chmod +x`. Remove any *other* `spec-watch-*.sh` there.
+3. No `spec-glob` → remove every `<store>/hooks/spec-watch-*.sh`.
+
+The end state is always: script present iff the merged declaration says so. Mention the reconcile in output only when it changed something.
+
 ## Scope
-Edits touch only `<store>/flavors.ini` — never a worktree, never the built-in defs. Everything here is config; nothing derives from git/GitHub.
+Edits touch only `<store>/flavors.ini` and `<store>/hooks/` (the spec-watch reconcile) — never a worktree, never the built-in defs. Everything here is config; nothing derives from git/GitHub.

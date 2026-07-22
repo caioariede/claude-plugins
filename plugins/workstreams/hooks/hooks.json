@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for s in \"${XDG_DATA_HOME:-$HOME/.local/share}\"/workstreams/hooks/spec-watch-*.sh; do [ -x \"$s\" ] && exec \"$s\"; done; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

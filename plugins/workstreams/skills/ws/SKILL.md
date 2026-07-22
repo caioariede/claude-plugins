@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.8.1"
+  version: "0.9.0"
   author: Caio Ariede
 ---
 
@@ -197,7 +197,7 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 
 **Groups & operations**
 - `worktree-management` — `create` (worktree+branch `<branch>` off `<base>`) · `remove` (`<branch>`) · `locate` (worktree path for `<branch>`).
-- `spec-driven-development` — `plan` (charter+design → `T1..`) · `execute` (first unchecked task) · `ship` (open the PR).
+- `spec-driven-development` — `plan` (charter+design → `T1..`) · `execute` (first unchecked task) · `ship` (open the PR) · `spec-glob` (optional — glob of this flavor's design-spec paths; powers Spec-watch below).
 - `forge` — `default-branch` · `pr-status` (number+draft/ready/merged+base for `<branch>`) · `pr-create` (`<branch>`→`<base>`) · `pr-ready` (`<pr>`) · `pr-retarget` (`<pr>`→`<new-base>`).
 
 **Files (INI), merged low→high precedence**
@@ -214,5 +214,7 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 4. `word:word` → invoke as a skill; a `ws-*` command line (e.g. `ws-resume <unit>`) → invoke that skill with those arguments; else run as shell. Fill `<branch> <base> <path> <repo> <pr> <new-base>` from context; hook instructions and their `.prompt`/`.choices` may also use `<unit>` (the target unit id) and `<command>` (the firing skill's resolved next command).
 
 **Flavor hooks** — a flavor may react at a skill's lifecycle point. A **hook** is an optional operation named `hook-<skill>-<event>` (e.g. `hook-ws-start-after`); each skill documents the events it fires. At an event, and **only in an interactive session** (never a subagent/headless run), the skill fires that hook from every **active** flavor — across all groups, in group order (`worktree-management`, `spec-driven-development`, `forge`) — that defines it. Companion keys, valid only on `hook-*` operations: `<hook>.prompt` (a question; its presence makes the hook interactive) · `<hook>.choices.<name>` (an option's instruction; empty = skip) · `<hook>.choices.<name>.desc` (its picker description — label is `<name>`). **Modes:** no `.prompt` → run the base instruction unconditionally · `.prompt` without `.choices` → binary (Yes runs the base instruction, No skips) · `.prompt` with `.choices` → present the 2–4 options and run the chosen one (base ignored). A dismissed prompt skips. Base and `.choices` values resolve as any instruction (rule 4). `hook-`, `.prompt` and `.choices.` are reserved on operation keys, and an option `<name>` may not be `prompt`.
+
+**Spec-watch (runtime hook)** — when a written path matches the active `spec-driven-development` flavor's `spec-glob` and no workstream's `design:` claims that spec, the runtime injects a one-line nudge to offer `ws-init` with it as the design (naming a design-less workstream as the attach-instead alternative when one exists). Mechanics: the runtime wiring (`hooks/hooks.json`) is a constant-cost existence check — it execs `<store>/hooks/spec-watch-<flavor>.sh` when present, else exits; the installed script *is* the runtime flag. `ws-config` reconciles it on every run from the bundled template (`hooks/spec-watch.sh`), baking in the flavor's `spec-glob`; a flavor without `spec-glob` gets no script. Ownership matches the spec's basename against `design:` lines — spellings vary (`~`/absolute/symlink), dated filenames don't. Distinct from §Flavor hooks (those fire *from* `ws-*` skills; this fires when an upstream tool — e.g. superpowers brainstorming — writes a spec before any workstream exists). Suggestion only: no store write, and no command runs without the user.
 
 `overrides-file` set but unreadable → warn, skip that layer. `gh` is the assumed baseline — there is no git-only forge; a non-GitHub user adds a custom forge flavor via the overrides file. Configure with `/ws-config`.
