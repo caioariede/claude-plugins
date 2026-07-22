@@ -13,10 +13,11 @@ Run: python3 -m unittest discover -s plugins/workstreams/tests
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from test_ws_config import run_config
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "hooks" / "spec-watch.sh"
@@ -30,9 +31,6 @@ def make_store(base):
     return store
 
 
-CONFIG = ROOT / "skills" / "ws-config" / "scripts" / "config.py"
-
-
 def install(store, glob=GLOB, flavor="superpowers"):
     """The shipped reconcile: config.py installs the script when the
     active spec-driven-development flavor declares a spec-glob."""
@@ -41,11 +39,9 @@ def install(store, glob=GLOB, flavor="superpowers"):
         f"spec-driven-development = {flavor}\n\n"
         f"[spec-driven-development/{flavor}]\n"
         f"spec-glob = {glob}\n", "utf-8")
-    env = {"PATH": os.environ["PATH"], "HOME": "/nonexistent",
-           "XDG_DATA_HOME": str(store.parent)}
-    subprocess.run([sys.executable, str(CONFIG), "show"],
-                   capture_output=True, text=True, timeout=30,
-                   env=env, check=True)
+    p = run_config(store.parent, "show")
+    if p.returncode != 0:
+        raise AssertionError("config.py show failed: " + p.stderr)
     script = store / "hooks" / f"spec-watch-{flavor}.sh"
     if not script.exists():
         raise AssertionError("config.py reconcile did not install "

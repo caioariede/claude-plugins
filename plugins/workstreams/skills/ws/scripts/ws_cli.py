@@ -40,23 +40,34 @@ def _load_ini(path: Path) -> configparser.ConfigParser:
     return cp
 
 
+def _overrides_from(cp: configparser.ConfigParser) -> Optional[Path]:
+    """The [config] overrides-file path in a loaded store layer; None
+    when unset or emptied (an empty value means 'no overrides', not
+    '.')."""
+    if cp.has_option("config", "overrides-file"):
+        val = cp.get("config", "overrides-file").strip()
+        if val:
+            return Path(os.path.expanduser(val))
+    return None
+
+
 def _layers(store: Path) -> List[configparser.ConfigParser]:
     """Built-in → store → overrides, low to high precedence."""
-    layers = [_load_ini(BUILTIN_FLAVORS), _load_ini(store / "flavors.ini")]
-    ov = overrides_path(store)
+    store_cp = _load_ini(store / "flavors.ini")
+    layers = [_load_ini(BUILTIN_FLAVORS), store_cp]
+    ov = _overrides_from(store_cp)
     if ov is not None and ov.exists():
         layers.append(_load_ini(ov))
     return layers
 
 
-def resolve_operation(store: Path, group: str, op: str,
-                      default_flavor: str) -> Optional[str]:
+def resolve_operation(store: Path, group: str, op: str) -> Optional[str]:
+    """SPEC §Flavors resolution: the active flavor's op, merged per key
+    across layers, falling back to the group default flavor's op."""
     layers = _layers(store)
-    flavor = default_flavor
-    for cp in layers:
-        if cp.has_option("active", group):
-            flavor = cp.get("active", group).strip()
-    for section in (f"{group}/{flavor}", f"{group}/{default_flavor}"):
+    flavor = active_flavor(store, group)[0]
+    for section in (f"{group}/{flavor}",
+                    f"{group}/{GROUP_DEFAULTS[group]}"):
         instr = None
         for cp in layers:
             if cp.has_option(section, op):
@@ -148,14 +159,8 @@ def flavor_deps(ops: Dict[str, str], group: str) -> List[Tuple[str, str]]:
 
 
 def overrides_path(store: Path) -> Optional[Path]:
-    """The [config] overrides-file path from the store layer; None when
-    unset or emptied (an empty value means 'no overrides', not '.')."""
-    store_cp = _load_ini(store / "flavors.ini")
-    if store_cp.has_option("config", "overrides-file"):
-        val = store_cp.get("config", "overrides-file").strip()
-        if val:
-            return Path(os.path.expanduser(val))
-    return None
+    """The [config] overrides-file path from the store layer, or None."""
+    return _overrides_from(_load_ini(store / "flavors.ini"))
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +190,7 @@ def _run_pr_status(cmd: str) -> Optional[S.PR]:
 
 
 def gather_pr_state(ws: S.Workstream, store: Path) -> Dict[str, Optional[S.PR]]:
-    template = resolve_operation(store, "forge", "pr-status", "gh")
+    template = resolve_operation(store, "forge", "pr-status")
     result: Dict[str, Optional[S.PR]] = {}
     if not template or ":" in template.split()[0]:
         # A skill:id-style forge can't be driven from here; render without

@@ -7,7 +7,8 @@ and reconciles the spec-watch hook script on every run — including
 after a failed verb, so healing never depends on typing the command
 right. The skill runs this and relays the output; the session
 settles only the `?` marks (skill deps, prose-vs-missing-tool) and
-runs the interactive offer from the trailing OFFER lines.
+runs the interactive offer from the OFFER lines (prefix-addressed —
+their position in the output carries no meaning).
 
 Usage: config.py [show | set <group> <flavor> | add <group> <flavor>
                   | set-overrides <path> | list [group]]
@@ -50,30 +51,19 @@ class Fail(Exception):
 # Availability (SPEC §Flavors, Availability)
 # ---------------------------------------------------------------------------
 
-def dep_status(kind: str, val: str) -> str:
-    if kind == "missing-op":
-        return "stub"
-    if kind == "ws":
-        return "ok"          # bundled ws-* skill, no external dep
-    if kind == "skill":
-        return "check"       # session knowledge — the skill settles it
-    return "ok" if shutil.which(val) else "unresolved"
-
-
-def flavor_state(store: Path, group: str, flavor: str):
+def flavor_state(ops: Dict[str, str], group: str):
     """(verdict, notes) — verdict 'ok'|'maybe'|'stub'. Notes carry the
-    rendered `?` annotations the session must settle."""
-    ops = C.flavor_ops(store, group, flavor)
+    rendered `?` annotations the session must settle. A 'ws' dep is a
+    bundled ws-* skill and never a mark."""
     notes: List[str] = []
     verdict = "ok"
     for kind, val in C.flavor_deps(ops, group):
-        st = dep_status(kind, val)
-        if st == "stub":
+        if kind == "missing-op":
             return "stub", [f"stub (empty op: {val})"]
-        if st == "check":
+        if kind == "skill":
             verdict = "maybe"
             notes.append(f"? requires skill {val} (verify in session)")
-        elif st == "unresolved":
+        elif kind == "shell" and not shutil.which(val):
             verdict = "maybe"
             notes.append(f'? unresolved head "{val}" '
                          "(prose or missing tool)")
@@ -129,14 +119,18 @@ def cmd_show(store: Path) -> int:
             lines.append(f"  ✗ {flavor} (active but not defined in any "
                          f"layer — fix with ws-config set {group} "
                          "<flavor>)")
+        active_ops: Dict[str, str] = {}
         for f in known:
-            verdict, notes = flavor_state(store, group, f)
+            ops = C.flavor_ops(store, group, f)
+            if f == flavor:
+                active_ops = ops
+            verdict, notes = flavor_state(ops, group)
             lines.append(f"  {MARK[verdict]} {f}")
             lines += [f"      {n}" for n in notes]
             if (prov == "default" and f != C.GROUP_DEFAULTS[group]
                     and verdict != "stub"):
                 offers.append(f"OFFER {group} {f}")
-        for h in _hook_lines(C.flavor_ops(store, group, flavor)):
+        for h in _hook_lines(active_ops):
             lines.append(f"  hook: {h}")
         lines.append("")
     lines.append(_layers_line(store))
@@ -154,10 +148,11 @@ def cmd_list(store: Path, group: Optional[str]) -> int:
         active, _ = C.active_flavor(store, g)
         out.append(f"## {g}")
         for fl in C.known_flavors(store, g):
-            verdict, notes = flavor_state(store, g, fl)
+            ops = C.flavor_ops(store, g, fl)
+            verdict, notes = flavor_state(ops, g)
             star = " (active)" if fl == active else ""
             out.append(f"[{g}/{fl}] {MARK[verdict]}{star}")
-            for k, v in C.flavor_ops(store, g, fl).items():
+            for k, v in ops.items():
                 out.append(f"  {k} = {v}")
             out += [f"  {n}" for n in notes]
             out.append("")
@@ -230,7 +225,8 @@ def cmd_set(store: Path, group: str, flavor: str) -> int:
     if effective != flavor:
         print(f"warning: the {eff_prov} layer sets {group} = {effective}"
               " — the store value is shadowed and will not take effect")
-    verdict, notes = flavor_state(store, group, flavor)
+    verdict, notes = flavor_state(C.flavor_ops(store, group, flavor),
+                                  group)
     if verdict == "stub":
         print("warning: " + "; ".join(notes)
               + " — fill the operations before use")
@@ -323,34 +319,30 @@ def main(argv: List[str]) -> int:
     verb, args = (argv[0], argv[1:]) if argv else ("show", [])
     rc = 0
     try:
-        if verb == "show" and not args:
-            # Reconcile first: show's OFFER lines are a trailing parse
-            # contract for the skill, so nothing may print after them.
-            _emit_reconcile(store)
-            return cmd_show(store)
-        if verb == "set" and len(args) == 2:
-            rc = cmd_set(store, args[0], args[1])
-        elif verb == "add" and len(args) == 2:
-            rc = cmd_add(store, args[0], args[1])
-        elif verb == "set-overrides" and len(args) == 1:
-            rc = cmd_set_overrides(store, args[0])
-        elif verb == "list" and len(args) <= 1:
-            rc = cmd_list(store, args[0] if args else None)
-        else:
-            raise Fail("BAD_ARGS unknown verb/arity: "
-                       + " ".join([verb] + args))
-    except Fail as e:
-        print(str(e), file=sys.stderr)
-        rc = 2
-    except configparser.Error as e:
-        print("BAD_STORE " + str(e).replace("\n", " "), file=sys.stderr)
-        return 2
-    try:
+        try:
+            if verb == "show" and not args:
+                rc = cmd_show(store)
+            elif verb == "set" and len(args) == 2:
+                rc = cmd_set(store, args[0], args[1])
+            elif verb == "add" and len(args) == 2:
+                rc = cmd_add(store, args[0], args[1])
+            elif verb == "set-overrides" and len(args) == 1:
+                rc = cmd_set_overrides(store, args[0])
+            elif verb == "list" and len(args) <= 1:
+                rc = cmd_list(store, args[0] if args else None)
+            else:
+                raise Fail("BAD_ARGS unknown verb/arity: "
+                           + " ".join([verb] + args))
+        except Fail as e:
+            print(str(e), file=sys.stderr)
+            rc = 2
         # Every run heals the spec-watch script, a failed verb included.
+        # OFFER lines are prefix-addressed (^OFFER), so output order is
+        # free and the reconcile message may land after them.
         _emit_reconcile(store)
     except configparser.Error as e:
         print("BAD_STORE " + str(e).replace("\n", " "), file=sys.stderr)
-        rc = 2
+        return 2
     return rc
 
 
