@@ -38,4 +38,4 @@ if [ -n "$nospec" ]; then
     extra=" Workstream '$wsid' has no design yet; attaching this spec to it may fit better than a new workstream."
 fi
 
-printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"[workstreams] %s looks like a design spec no workstream owns (no workstream.md design: mentions it). If this design implies multiple units/PRs, offer - once the user has reviewed the spec - to run ws-init with it as the design; ws-init only creates the workstream container, planning and execution still follow the active flavor.%s If it is single-PR work, or you already offered this session, say nothing."}}\n' "$path" "$extra"
+printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"[workstreams] %s looks like a design spec no workstream owns (no workstream.md design: mentions it). Once the user has reviewed the spec, offer to run ws-init with it as the design regardless of how many PRs the work implies; ws-init only creates the workstream container, planning and execution still follow the active flavor.%s Offer once per session: if you already offered this session, say nothing."}}\n' "$path" "$extra"
