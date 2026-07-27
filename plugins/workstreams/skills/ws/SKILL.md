@@ -177,7 +177,8 @@ orchestration terminal is your own convention to name, not a role defined here.
   ergonomics for parallel work, never required.
 
 ## Next-step chaining
-Every `ws-*` skill ends by naming the single best next command and offering to run it.
+Every `ws-*` skill ends by naming the single best next command and offering to run it
+(`ws-next` lists every runnable move and offers the default one).
 A command that starts or continues code work (`ws-resume`, `ws-start`, `ws-restack`) is
 offered **default not-now** — running it is an explicit pick, never what a dismissal
 does; a read-only command (`ws-next`, `ws-board`) keeps **default yes**. A skill may delegate this offer to a flavor hook
