@@ -474,5 +474,85 @@ class SetTest(unittest.TestCase):
             self.assertIn("BACKWARDS", err)
 
 
+GUIDE_HTML = (
+    '<html><body>\n'
+    '<h1>Guide</h1>\n'
+    '<p class="version">Version %s · July 2026</p>\n'
+    '</body></html>\n'
+)
+
+
+class SeriesVerbTest(unittest.TestCase):
+    def test_prints_major_minor(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.3", {"ws": "0.15.3"})
+            rc, out, err = run_cli("series", root)
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(out.strip(), "0.15")
+
+
+class CheckGuideTest(unittest.TestCase):
+    def guide(self, root, stamp):
+        path = root / "guide.html"
+        path.write_text(GUIDE_HTML % stamp)
+        return path
+
+    def test_matching_series_passes(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.0", {"ws": "0.15.0"})
+            html = self.guide(root, "0.15")
+            rc, out, err = run_cli("check-guide", root, html)
+            self.assertEqual(rc, 0, err)
+
+    def test_patch_bump_still_passes(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.7", {"ws": "0.15.7"})
+            html = self.guide(root, "0.15")
+            rc, out, err = run_cli("check-guide", root, html)
+            self.assertEqual(rc, 0, err)
+
+    def test_stale_minor_exits_1(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.16.0", {"ws": "0.16.0"})
+            html = self.guide(root, "0.15")
+            rc, out, err = run_cli("check-guide", root, html)
+            self.assertEqual(rc, 1)
+            self.assertIn("0.16", err)
+            self.assertIn("gen-guide-pdf", err)
+
+    def test_full_triple_stamp_exits_1(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.0", {"ws": "0.15.0"})
+            html = self.guide(root, "0.15.0")
+            rc, out, err = run_cli("check-guide", root, html)
+            self.assertEqual(rc, 1)
+
+    def test_multi_digit_minor_is_not_a_prefix_match(self):
+        """`grep -q "Version 0.15"` passes on `Version 0.150`. Exact
+        token comparison is what closes that hole."""
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.0", {"ws": "0.15.0"})
+            html = self.guide(root, "0.150")
+            rc, out, err = run_cli("check-guide", root, html)
+            self.assertEqual(rc, 1)
+
+    def test_absent_stamp_exits_2(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.0", {"ws": "0.15.0"})
+            html = root / "guide.html"
+            html.write_text("<html><body>No stamp.</body></html>\n")
+            rc, out, err = run_cli("check-guide", root, html)
+            self.assertEqual(rc, 2)
+            self.assertIn("NO_STAMP", err)
+
+    def test_absent_html_exits_2(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.0", {"ws": "0.15.0"})
+            rc, out, err = run_cli("check-guide", root,
+                                   root / "nope.html")
+            self.assertEqual(rc, 2)
+            self.assertIn("MISSING_FILE", err)
+
+
 if __name__ == "__main__":
     unittest.main()

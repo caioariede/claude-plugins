@@ -30,6 +30,9 @@ SNAPSHOT_JSON = ".claude-plugin/skill-versions.json"
 SKILL_VERSION_RE = re.compile(
     r'^\s*version:\s*"([^"]*)"\s*$', re.MULTILINE)
 
+# Matches the guide's version line, which carries major.minor only.
+STAMP_RE = re.compile(r'<p class="version">Version\s+([0-9.]+)')
+
 
 class Fail(Exception):
     """Malformed input. Message starts with a machine-readable token."""
@@ -237,6 +240,32 @@ def cmd_set(plugin_dir: Path, version: str) -> int:
     return 0
 
 
+def read_stamp(path: Path) -> str:
+    if not path.is_file():
+        raise Fail("MISSING_FILE " + str(path))
+    m = STAMP_RE.search(path.read_text())
+    if not m:
+        raise Fail("NO_STAMP no version line in " + str(path))
+    return m.group(1)
+
+
+def cmd_series(plugin_dir: Path) -> int:
+    print(series(read_plugin_version(plugin_dir)))
+    return 0
+
+
+def cmd_check_guide(plugin_dir: Path, html: Path) -> int:
+    want = series(read_plugin_version(plugin_dir))
+    have = read_stamp(html)
+    if have == want:
+        print("guide version OK (%s)" % have)
+        return 0
+    print("guide version drift: expected %s, stamp has %s"
+          % (want, have), file=sys.stderr)
+    print("run: just gen-guide-pdf", file=sys.stderr)
+    return 1
+
+
 def main(argv: List[str]) -> int:
     try:
         if len(argv) < 2:
@@ -251,6 +280,10 @@ def main(argv: List[str]) -> int:
             return cmd_bump(plugin_dir)
         if verb == "set" and len(args) == 1:
             return cmd_set(plugin_dir, args[0])
+        if verb == "series" and not args:
+            return cmd_series(plugin_dir)
+        if verb == "check-guide" and len(args) == 1:
+            return cmd_check_guide(plugin_dir, Path(args[0]))
         raise Fail("BAD_ARGS unknown verb/arity: " + " ".join(argv))
     except Fail as e:
         print(str(e), file=sys.stderr)
