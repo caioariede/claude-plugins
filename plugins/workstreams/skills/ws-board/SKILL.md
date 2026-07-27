@@ -34,4 +34,4 @@ The first stderr token says why: `MANY_WORKSTREAMS <list>` (ask which; the slug 
 
 ## Next step
 
-Per SPEC §Next-step chaining, offer the single best next command: usually `ws-next` (the router, default yes), or `ws-resume <unit>` for an in-progress or blocked unit — work-starting, so default not-now.
+Per SPEC §Next-step chaining, offer `ws-next` — read-only, so default yes. It is the only command this skill names: the board reports, the router decides which unit moves and what that takes. Offer it bare, in board and unit-detail mode alike; never name `ws-resume` here, not even for an in-progress or blocked unit.

@@ -192,7 +192,10 @@ any other choice is the flavor handing the work off its own way — run it,
 re-emit the command, and stop. No flavor defines the hook → the default offer
 above. The skill may *mention* the relevant unit so a parallel-session user
 knows where they would go — informational, not a precondition to running.
-`ws-next` is the router; defer to it when the next step isn't singular.
+`ws-next` is the router; defer to it when the next step isn't singular. The
+offer is a work-starting command only from the skill that just provisioned the
+unit (`ws-start`) or the router that picked one (`ws-next`); every other skill
+offers `ws-next`.
 
 ## Worktree = code only
 Never write store files into a worktree. Find a unit's worktree via the ledger branch, using the active `worktree-management` flavor's `locate` (SPEC §Flavors). Drop and recreate worktrees freely — progress survives in the store.
