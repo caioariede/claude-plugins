@@ -367,6 +367,13 @@ class EnumerateMoves(unittest.TestCase):
         u = S.Unit(slug="a", branch="a", tasks_total=5, tasks_done=2)
         self.assertEqual(moves_of(mkws([u]))[0].why, "3 of 5 tasks left")
 
+    def test_code_complete_with_a_pr_names_the_pr(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
+                   pr=pr(12, "OPEN", False, "master"),
+                   log=[("t", "created", "base=master")])
+        m = moves_of(mkws([u]))[0]
+        self.assertEqual((m.rule, m.why), ("resume", "tasks done, PR #12"))
+
     def test_unit_without_tasks_says_so(self):
         u = S.Unit(slug="a", branch="a")
         self.assertEqual(moves_of(mkws([u]))[0].why, "no tasks planned yet")

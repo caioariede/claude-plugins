@@ -670,8 +670,14 @@ def enumerate_moves(ws: Workstream,
                            Move(u.slug, "ship", f"ws-resume {u.slug}",
                                 u.branch or None, "tasks done, no PR")))
         else:
-            why = (f"{u.tasks_total - u.tasks_done} of {u.tasks_total} "
-                   "tasks left" if u.tasks_total else "no tasks planned yet")
+            if u.code_complete:
+                why = (f"tasks done, PR #{u.pr.number}" if u.pr.number
+                       else "tasks done, PR open")
+            elif u.tasks_total:
+                why = (f"{u.tasks_total - u.tasks_done} of "
+                       f"{u.tasks_total} tasks left")
+            else:
+                why = "no tasks planned yet"
             ranked.append(((_RULE_RANK["resume"], deps, i),
                            Move(u.slug, "resume", f"ws-resume {u.slug}",
                                 u.branch or None, why)))
