@@ -178,11 +178,12 @@ orchestration terminal is your own convention to name, not a role defined here.
 
 ## Next-step chaining
 Every `ws-*` skill ends by naming the single best next command and offering to
-run it (`ws-next` lists every runnable move and offers the default one). A
-command that starts or continues code work (`ws-resume`, `ws-start`,
-`ws-restack`) is offered **default not-now** — running it is an explicit pick,
-never what a dismissal does; a read-only command (`ws-next`, `ws-board`) keeps
-**default yes**. A skill may delegate this offer to a flavor hook
+run it (`ws-next` lists every runnable move, settles which unit, then offers
+that one — choosing a unit runs nothing, so the not-now default lands on the
+step after it). A command that starts or continues code work (`ws-resume`,
+`ws-start`, `ws-restack`) is offered **default not-now** — running it is an
+explicit pick, never what a dismissal does; a read-only command (`ws-next`,
+`ws-board`) keeps **default yes**. A skill may delegate this offer to a flavor hook
 (§Flavor hooks) — when an active flavor defines it, the hook's prompt replaces
 the default offer, and the chosen instruction is all that runs. What the choices
 offer is the flavor's business; the skill only distinguishes outcomes: a choice
