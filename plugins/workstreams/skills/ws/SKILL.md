@@ -183,16 +183,16 @@ that one — choosing a unit runs nothing, so the not-now default lands on the
 step after it). A command that starts or continues code work (`ws-resume`,
 `ws-start`, `ws-restack`) is offered **default not-now** — running it is an
 explicit pick, never what a dismissal does; a read-only command (`ws-next`,
-`ws-board`) keeps **default yes**. A skill may delegate this offer to a flavor hook
-(§Flavor hooks) — when an active flavor defines it, the hook's prompt replaces
-the default offer, and the chosen instruction is all that runs. What the choices
-offer is the flavor's business; the skill only distinguishes outcomes: a choice
-resolving to `<command>` runs the command in this session; any other choice is
-the flavor handing the work off its own way — run it, re-emit the command, and
-stop. No flavor defines the hook → the default offer above. The skill may
-*mention* the relevant unit so a parallel-session user knows where they would
-go — informational, not a precondition to running. `ws-next` is the router;
-defer to it when the next step isn't singular.
+`ws-board`) keeps **default yes**. A skill may delegate this offer to a flavor
+hook (§Flavor hooks) — when an active flavor defines it, the hook's prompt
+replaces the default offer, and the chosen instruction is all that runs. What
+the choices offer is the flavor's business; the skill only distinguishes
+outcomes: a choice resolving to `<command>` runs the command in this session;
+any other choice is the flavor handing the work off its own way — run it,
+re-emit the command, and stop. No flavor defines the hook → the default offer
+above. The skill may *mention* the relevant unit so a parallel-session user
+knows where they would go — informational, not a precondition to running.
+`ws-next` is the router; defer to it when the next step isn't singular.
 
 ## Worktree = code only
 Never write store files into a worktree. Find a unit's worktree via the ledger branch, using the active `worktree-management` flavor's `locate` (SPEC §Flavors). Drop and recreate worktrees freely — progress survives in the store.
