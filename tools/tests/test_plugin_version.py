@@ -307,5 +307,172 @@ class CheckTest(unittest.TestCase):
         self.assertIn("BAD_PLUGIN", err)
 
 
+class BumpTest(unittest.TestCase):
+    def test_seeds_an_absent_snapshot_without_bumping(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.0",
+                               {"ws": "0.15.0", "ws-next": "0.9.0"})
+            rc, out, err = run_cli("bump", root)
+            self.assertEqual(rc, 0, err)
+            self.assertIn("seeded", out)
+            snap = read_json(root / ".claude-plugin"
+                             / "skill-versions.json")
+            self.assertEqual(snap["plugin"], "0.15.0")
+            self.assertEqual(snap["skills"],
+                             {"ws": "0.15.0", "ws-next": "0.9.0"})
+            self.assertEqual(
+                read_json(root / ".claude-plugin"
+                          / "plugin.json")["version"], "0.15.0")
+
+    def test_no_op_when_nothing_moved(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            rc, out, err = run_cli("bump", root)
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(
+                read_json(root / ".claude-plugin"
+                          / "plugin.json")["version"], "0.15.0")
+
+    def test_running_twice_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.1"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            run_cli("bump", root)
+            run_cli("bump", root)
+            self.assertEqual(
+                read_json(root / ".claude-plugin"
+                          / "plugin.json")["version"], "0.15.1")
+
+    def test_patch_bump_writes_both_files(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.0", "ws-next": "0.9.1"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0",
+                                     "ws-next": "0.9.0"}})
+            rc, out, err = run_cli("bump", root)
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(
+                read_json(root / ".claude-plugin"
+                          / "plugin.json")["version"], "0.15.1")
+            snap = read_json(root / ".claude-plugin"
+                             / "skill-versions.json")
+            self.assertEqual(snap["plugin"], "0.15.1")
+            self.assertEqual(snap["skills"]["ws-next"], "0.9.1")
+
+    def test_minor_beats_patch_across_skills(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0",
+                {"ws-next": "0.10.0", "ws-board": "0.5.5"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws-next": "0.9.0",
+                                     "ws-board": "0.5.4"}})
+            rc, out, err = run_cli("bump", root)
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(
+                read_json(root / ".claude-plugin"
+                          / "plugin.json")["version"], "0.16.0")
+
+    def test_bump_reports_each_moved_skill(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0",
+                {"ws-next": "0.10.0", "ws-board": "0.5.4"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws-next": "0.9.0",
+                                     "ws-board": "0.5.4"}})
+            rc, out, err = run_cli("bump", root)
+            self.assertEqual(rc, 0, err)
+            self.assertIn("ws-next", out)
+            self.assertIn("minor", out)
+            self.assertIn("0.16.0", out)
+
+    def test_bump_leaves_check_passing(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.16.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            run_cli("bump", root)
+            rc, out, err = run_cli("check", root)
+            self.assertEqual(rc, 0, err)
+
+    def test_backwards_skill_exits_2_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.14.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            rc, out, err = run_cli("bump", root)
+            self.assertEqual(rc, 2)
+            self.assertIn("BACKWARDS", err)
+            self.assertEqual(
+                read_json(root / ".claude-plugin"
+                          / "plugin.json")["version"], "0.15.0")
+
+    def test_preserves_other_plugin_json_keys(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.1"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            path = root / ".claude-plugin" / "plugin.json"
+            write_json(path, {"name": "demo", "description": "d",
+                              "version": "0.15.0",
+                              "author": {"name": "A"}})
+            run_cli("bump", root)
+            got = read_json(path)
+            self.assertEqual(list(got),
+                             ["name", "description", "version",
+                              "author"])
+            self.assertEqual(got["author"], {"name": "A"})
+            self.assertEqual(got["version"], "0.15.1")
+
+
+class SetTest(unittest.TestCase):
+    def test_writes_both_files_and_leaves_check_passing(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            rc, out, err = run_cli("set", root, "1.0.0")
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(
+                read_json(root / ".claude-plugin"
+                          / "plugin.json")["version"], "1.0.0")
+            snap = read_json(root / ".claude-plugin"
+                             / "skill-versions.json")
+            self.assertEqual(snap["plugin"], "1.0.0")
+            rc, out, err = run_cli("check", root)
+            self.assertEqual(rc, 0, err)
+
+    def test_rejects_a_malformed_version(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            rc, out, err = run_cli("set", root, "1.0")
+            self.assertEqual(rc, 2)
+            self.assertIn("BAD_VERSION", err)
+
+    def test_rejects_going_backwards(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            rc, out, err = run_cli("set", root, "0.14.0")
+            self.assertEqual(rc, 2)
+            self.assertIn("BACKWARDS", err)
+
+
 if __name__ == "__main__":
     unittest.main()

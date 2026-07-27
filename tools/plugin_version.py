@@ -178,6 +178,65 @@ def cmd_check(plugin_dir: Path) -> int:
     return 1
 
 
+def write_plugin_version(plugin_dir: Path, version: str) -> None:
+    path = plugin_dir / PLUGIN_JSON
+    doc = _read_json(path)
+    doc["version"] = version
+    _write_json(path, doc)
+
+
+def write_snapshot(plugin_dir: Path, plugin_version: str,
+                   skills: Dict[str, str]) -> None:
+    _write_json(plugin_dir / SNAPSHOT_JSON,
+                {"plugin": plugin_version,
+                 "skills": {k: skills[k] for k in sorted(skills)}})
+
+
+def cmd_bump(plugin_dir: Path) -> int:
+    live = read_skill_versions(plugin_dir)
+    have = read_plugin_version(plugin_dir)
+    snap = read_snapshot(plugin_dir)
+    if snap is None:
+        write_snapshot(plugin_dir, have, live)
+        print("seeded %s at plugin %s (%d skills), no bump"
+              % (SNAPSHOT_JSON, have, len(live)))
+        return 0
+    if parse(have) < parse(str(snap["plugin"])):
+        raise Fail("BACKWARDS plugin.json %s is below snapshot %s"
+                   % (have, snap["plugin"]))
+    want, overall = expected_version(snap, live)
+    was = snap["skills"]
+    for name in sorted(set(was) | set(live)):
+        if name not in live:
+            print("  - %-12s %s -> removed  major" % (name, was[name]))
+        elif name not in was:
+            print("  + %-12s %s          minor" % (name, live[name]))
+        elif was[name] != live[name]:
+            print("    %-12s %s -> %s  %s"
+                  % (name, was[name], live[name],
+                     severity(parse(was[name]), parse(live[name]))))
+    if overall == "none":
+        print("no skill version moved; plugin stays %s" % have)
+        return 0
+    write_plugin_version(plugin_dir, want)
+    write_snapshot(plugin_dir, want, live)
+    print("highest = %s; plugin %s -> %s" % (overall, have, want))
+    return 0
+
+
+def cmd_set(plugin_dir: Path, version: str) -> int:
+    parse(version)
+    live = read_skill_versions(plugin_dir)
+    have = read_plugin_version(plugin_dir)
+    if parse(version) < parse(have):
+        raise Fail("BACKWARDS %s is below plugin.json %s"
+                   % (version, have))
+    write_plugin_version(plugin_dir, version)
+    write_snapshot(plugin_dir, version, live)
+    print("plugin %s -> %s (snapshot rebased)" % (have, version))
+    return 0
+
+
 def main(argv: List[str]) -> int:
     try:
         if len(argv) < 2:
@@ -188,6 +247,10 @@ def main(argv: List[str]) -> int:
         args = rest[1:]
         if verb == "check" and not args:
             return cmd_check(plugin_dir)
+        if verb == "bump" and not args:
+            return cmd_bump(plugin_dir)
+        if verb == "set" and len(args) == 1:
+            return cmd_set(plugin_dir, args[0])
         raise Fail("BAD_ARGS unknown verb/arity: " + " ".join(argv))
     except Fail as e:
         print(str(e), file=sys.stderr)
