@@ -64,6 +64,17 @@ def moves_of(ws):
     return S.enumerate_moves(ws, {u.slug: u for u in ws.units})
 
 
+def three_move_store(store):
+    """One ship, one advance, one start -> the pr_state map for them."""
+    write_ws(store, "2026-01-01-demo",
+             units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2',
+                             'b  "B"  repo=o/r  branch=b'),
+             backlog_md="## Planned units\n- [ ] p  base=b  — do it\n",
+             units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"},
+                    "b": {"progress": "## Tasks\n- [x] T1  x\n"}})
+    return {"feat-a-2": None, "b": None}
+
+
 class ParseLog(unittest.TestCase):
     def test_dropped_kind_not_substring(self):
         log = ("- 2026-01-01T00:00Z  created base=master\n"
@@ -596,14 +607,7 @@ class NextEndToEnd(unittest.TestCase):
     def test_lists_every_move_ranked_with_a_default(self):
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
-        write_ws(store, "2026-01-01-demo",
-                 units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2',
-                                 'b  "B"  repo=o/r  branch=b'),
-                 backlog_md="## Planned units\n- [ ] p  base=b  — do it\n",
-                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"},
-                        "b": {"progress": "## Tasks\n- [x] T1  x\n"}})
-        out = N.generate(store, "2026-01-01-demo", {"feat-a-2": None,
-                                                    "b": None})
+        out = N.generate(store, "2026-01-01-demo", three_move_store(store))
         self.assertIn("  b — ship it: tasks done, no PR   [default]"
                       "   run=ws-resume b   branch=b", out)
         self.assertIn("  a — advance: 1 of 2 tasks left"
@@ -621,14 +625,7 @@ class NextEndToEnd(unittest.TestCase):
         # move list collides with its option numbers.
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
-        write_ws(store, "2026-01-01-demo",
-                 units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2',
-                                 'b  "B"  repo=o/r  branch=b'),
-                 backlog_md="## Planned units\n- [ ] p  base=b  — do it\n",
-                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"},
-                        "b": {"progress": "## Tasks\n- [x] T1  x\n"}})
-        out = N.generate(store, "2026-01-01-demo", {"feat-a-2": None,
-                                                    "b": None})
+        out = N.generate(store, "2026-01-01-demo", three_move_store(store))
         for line in out.splitlines():
             self.assertNotRegex(line, r"^\s*\d+\.")
         tmp.cleanup()
