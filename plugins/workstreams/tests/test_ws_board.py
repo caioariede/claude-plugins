@@ -586,34 +586,51 @@ class DecideNext(unittest.TestCase):
 
 
 class NextEndToEnd(unittest.TestCase):
-    def test_resume_in_flight_from_disk(self):
+    def test_lists_every_move_ranked_with_a_default(self):
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
         write_ws(store, "2026-01-01-demo",
-                 units_md=ledger('a  "A"  repo=o/r  branch=a'),
-                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"}})
-        out = N.generate(store, "2026-01-01-demo", {"a": None})
-        self.assertIn("Next: ws-resume a", out)
+                 units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2',
+                                 'b  "B"  repo=o/r  branch=b'),
+                 backlog_md="## Planned units\n- [ ] p  base=b  — do it\n",
+                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"},
+                        "b": {"progress": "## Tasks\n- [x] T1  x\n"}})
+        out = N.generate(store, "2026-01-01-demo", {"feat-a-2": None,
+                                                    "b": None})
+        self.assertIn("1. b — ship it: tasks done, no PR   [default]"
+                      "   run=ws-resume b   branch=b", out)
+        self.assertIn("2. a — advance: 1 of 2 tasks left"
+                      "   run=ws-resume a   branch=feat-a-2", out)
+        self.assertIn('3. p — start: "do it", stacks on b'
+                      '   run=ws-start 2026-01-01-demo "do it" --base b', out)
+        self.assertNotIn("Next:", out)
         tmp.cleanup()
 
-    def test_tail_prints_the_branch_when_the_worktree_exists(self):
-        tmp = tempfile.TemporaryDirectory()
-        store = Path(tmp.name)
-        write_ws(store, "2026-01-01-demo",
-                 units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2'),
-                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"}})
-        out = N.generate(store, "2026-01-01-demo", {"feat-a-2": None})
-        self.assertIn("Next: ws-resume a   (unit: a, branch: feat-a-2)", out)
-        tmp.cleanup()
-
-    def test_tail_omits_branch_for_a_start_recommendation(self):
+    def test_start_move_carries_no_branch(self):
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
         write_ws(store, "2026-01-01-demo",
                  backlog_md="## Planned units\n- [ ] p  base=master  — do it\n")
         out = N.generate(store, "2026-01-01-demo", {})
-        self.assertIn('Next: ws-start 2026-01-01-demo "do it"   (unit: p)', out)
-        self.assertNotIn("branch:", out)
+        self.assertIn('1. p — start: "do it"   [default]'
+                      '   run=ws-start 2026-01-01-demo "do it"', out)
+        self.assertNotIn("branch=", out)
+        tmp.cleanup()
+
+    def test_triage_fallback_keeps_the_next_line(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(store, "2026-01-01-demo",
+                 units_md=ledger('gone  "G"  repo=o/r  branch=gone',
+                                 'dep  "D"  repo=o/r  branch=dep'),
+                 units={"gone": {"progress": "## Tasks\n- [x] T1  x\n",
+                                 "log": "- 2026-01-02T00:00Z  dropped "
+                                        "superseded\n"},
+                        "dep": {"progress": "## Tasks\n- [x] T1  x\n"
+                                            "## Needs\n- N1  gone\n"}})
+        out = N.generate(store, "2026-01-01-demo", {"gone": None, "dep": None})
+        self.assertIn("Next: ws-block dep clear N1   (unit: dep, branch: dep)",
+                      out)
         tmp.cleanup()
 
 
