@@ -11,14 +11,24 @@ Usage: plugin_version.py <verb> <plugin-dir> [args]
 
 from __future__ import annotations
 
+import json
 import re
-from typing import Iterable, Tuple
+import sys
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
 
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 # Ordered so max() over the ranks picks the strongest bump.
 RANK = {"none": 0, "patch": 1, "minor": 2, "major": 3}
 BY_RANK = {v: k for k, v in RANK.items()}
+
+PLUGIN_JSON = ".claude-plugin/plugin.json"
+SNAPSHOT_JSON = ".claude-plugin/skill-versions.json"
+
+# Matches `  version: "0.15.0"` in a SKILL.md metadata block.
+SKILL_VERSION_RE = re.compile(
+    r'^\s*version:\s*"([^"]*)"\s*$', re.MULTILINE)
 
 
 class Fail(Exception):
@@ -67,3 +77,122 @@ def apply_bump(cur: Tuple[int, int, int],
     if sev == "patch":
         return (cur[0], cur[1], cur[2] + 1)
     return cur
+
+
+def _read_json(path: Path) -> Dict[str, object]:
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError:
+        raise Fail("MISSING_FILE " + str(path))
+    except ValueError as e:
+        raise Fail("BAD_JSON %s: %s" % (path, e))
+
+
+def _write_json(path: Path, obj: Dict[str, object]) -> None:
+    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
+
+
+def read_skill_versions(plugin_dir: Path) -> Dict[str, str]:
+    skills = plugin_dir / "skills"
+    if not skills.is_dir():
+        raise Fail("BAD_PLUGIN no skills/ under " + str(plugin_dir))
+    out = {}
+    for md in sorted(skills.glob("*/SKILL.md")):
+        m = SKILL_VERSION_RE.search(md.read_text())
+        rel = md.relative_to(plugin_dir)
+        if not m:
+            raise Fail("NO_VERSION no version: field in " + str(rel))
+        try:
+            parse(m.group(1))
+        except Fail as e:
+            raise Fail("%s in %s" % (str(e), rel))
+        out[md.parent.name] = m.group(1)
+    return out
+
+
+def read_plugin_version(plugin_dir: Path) -> str:
+    path = plugin_dir / PLUGIN_JSON
+    if not path.is_file():
+        raise Fail("BAD_PLUGIN no plugin.json under " + str(plugin_dir))
+    raw = _read_json(path).get("version")
+    if not isinstance(raw, str):
+        raise Fail("BAD_PLUGIN version is not a string in " + str(path))
+    parse(raw)
+    return raw
+
+
+def read_snapshot(plugin_dir: Path) -> Optional[Dict[str, object]]:
+    path = plugin_dir / SNAPSHOT_JSON
+    if not path.is_file():
+        return None
+    snap = _read_json(path)
+    if not isinstance(snap.get("plugin"), str) \
+            or not isinstance(snap.get("skills"), dict):
+        raise Fail("BAD_SNAPSHOT needs plugin + skills keys: "
+                   + str(path))
+    return snap
+
+
+def expected_version(snapshot: Dict[str, object],
+                     live: Dict[str, str]) -> Tuple[str, str]:
+    """The version the plugin should carry, and the severity that got
+    it there. A skill present only in the snapshot was removed, which
+    breaks its callers; one present only in the tree is new."""
+    was = snapshot["skills"]
+    sevs = []
+    for name in sorted(set(was) | set(live)):
+        if name not in live:
+            sevs.append("major")
+        elif name not in was:
+            sevs.append("minor")
+        else:
+            try:
+                sevs.append(severity(parse(was[name]),
+                                     parse(live[name])))
+            except Fail as e:
+                raise Fail("%s for skill %s" % (str(e), name))
+    overall = worst(sevs)
+    base = parse(str(snapshot["plugin"]))
+    return (fmt(apply_bump(base, overall)), overall)
+
+
+def cmd_check(plugin_dir: Path) -> int:
+    live = read_skill_versions(plugin_dir)
+    have = read_plugin_version(plugin_dir)
+    snap = read_snapshot(plugin_dir)
+    if snap is None:
+        print("no %s; run: just bump-plugin-version" % SNAPSHOT_JSON,
+              file=sys.stderr)
+        return 1
+    if parse(have) < parse(str(snap["plugin"])):
+        raise Fail("BACKWARDS plugin.json %s is below snapshot %s"
+                   % (have, snap["plugin"]))
+    want, overall = expected_version(snap, live)
+    if have == want:
+        print("plugin version OK (%s)" % have)
+        return 0
+    print("plugin version drift: plugin.json=%s, expected %s "
+          "(highest skill bump: %s)" % (have, want, overall),
+          file=sys.stderr)
+    print("run: just bump-plugin-version", file=sys.stderr)
+    return 1
+
+
+def main(argv: List[str]) -> int:
+    try:
+        if len(argv) < 2:
+            raise Fail("BAD_ARGS usage: plugin_version.py <verb> "
+                       "<plugin-dir> [args]")
+        verb, rest = argv[0], argv[1:]
+        plugin_dir = Path(rest[0])
+        args = rest[1:]
+        if verb == "check" and not args:
+            return cmd_check(plugin_dir)
+        raise Fail("BAD_ARGS unknown verb/arity: " + " ".join(argv))
+    except Fail as e:
+        print(str(e), file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

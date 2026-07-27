@@ -9,11 +9,15 @@ Run: python3 -m unittest discover -s tools/tests
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "tools" / "plugin_version.py"
 sys.path.insert(0, str(ROOT / "tools"))
 import plugin_version as P  # noqa: E402
 
@@ -127,6 +131,180 @@ class SeriesTest(unittest.TestCase):
 
     def test_does_not_confuse_multi_digit_minor(self):
         self.assertEqual(P.series("0.150.0"), "0.150")
+
+
+def make_plugin(base, plugin_version, skills, snapshot=None):
+    """Build a minimal plugin tree. `skills` maps name -> version.
+    `snapshot` is written only when given; pass a dict shaped like
+    {"plugin": "0.1.0", "skills": {...}}.
+    """
+    root = Path(base) / "plugins" / "demo"
+    (root / ".claude-plugin").mkdir(parents=True)
+    write_json(root / ".claude-plugin" / "plugin.json",
+               {"name": "demo", "version": plugin_version})
+    for name, version in skills.items():
+        d = root / "skills" / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            "---\nname: %s\nmetadata:\n  version: \"%s\"\n---\n\nBody.\n"
+            % (name, version))
+    if snapshot is not None:
+        write_json(root / ".claude-plugin" / "skill-versions.json",
+                   snapshot)
+    return root
+
+
+def write_json(path, obj):
+    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
+
+
+def read_json(path):
+    return json.loads(Path(path).read_text())
+
+
+def run_cli(*args):
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT)] + [str(a) for a in args],
+        capture_output=True, text=True)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+class ReadSkillVersionsTest(unittest.TestCase):
+    def test_reads_every_skill(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.2.0",
+                               {"ws": "0.2.0", "ws-next": "0.1.3"})
+            self.assertEqual(P.read_skill_versions(root),
+                             {"ws": "0.2.0", "ws-next": "0.1.3"})
+
+    def test_missing_version_field_names_the_file(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.1.0", {"ws": "0.1.0"})
+            (root / "skills" / "ws" / "SKILL.md").write_text(
+                "---\nname: ws\n---\n\nNo version here.\n")
+            with self.assertRaises(P.Fail) as cm:
+                P.read_skill_versions(root)
+            msg = str(cm.exception)
+            self.assertTrue(msg.startswith("NO_VERSION"))
+            self.assertIn("ws/SKILL.md", msg)
+
+    def test_malformed_version_names_the_file(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.1.0", {"ws": "0.1"})
+            with self.assertRaises(P.Fail) as cm:
+                P.read_skill_versions(root)
+            self.assertIn("ws/SKILL.md", str(cm.exception))
+
+    def test_skill_dir_without_skill_md_is_ignored(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.1.0", {"ws": "0.1.0"})
+            (root / "skills" / "scratch").mkdir()
+            self.assertEqual(P.read_skill_versions(root), {"ws": "0.1.0"})
+
+
+class ExpectedVersionTest(unittest.TestCase):
+    def snap(self, plugin, skills):
+        return {"plugin": plugin, "skills": skills}
+
+    def test_no_change_holds_the_version(self):
+        snap = self.snap("0.15.0", {"ws": "0.15.0", "ws-next": "0.9.0"})
+        got = P.expected_version(snap, {"ws": "0.15.0",
+                                        "ws-next": "0.9.0"})
+        self.assertEqual(got, ("0.15.0", "none"))
+
+    def test_patch_only(self):
+        snap = self.snap("0.15.0", {"ws": "0.15.0", "ws-next": "0.9.0"})
+        got = P.expected_version(snap, {"ws": "0.15.0",
+                                        "ws-next": "0.9.1"})
+        self.assertEqual(got, ("0.15.1", "patch"))
+
+    def test_minor_wins_over_patch(self):
+        snap = self.snap("0.15.0", {"ws": "0.15.0", "ws-next": "0.9.0",
+                                    "ws-board": "0.5.4"})
+        got = P.expected_version(snap, {"ws": "0.15.0",
+                                        "ws-next": "0.10.0",
+                                        "ws-board": "0.5.5"})
+        self.assertEqual(got, ("0.16.0", "minor"))
+
+    def test_major_wins_over_minor(self):
+        snap = self.snap("0.15.0", {"ws": "0.15.0", "ws-next": "0.9.0"})
+        got = P.expected_version(snap, {"ws": "1.0.0",
+                                        "ws-next": "0.10.0"})
+        self.assertEqual(got, ("1.0.0", "major"))
+
+    def test_added_skill_is_minor(self):
+        snap = self.snap("0.15.0", {"ws": "0.15.0"})
+        got = P.expected_version(snap, {"ws": "0.15.0",
+                                        "ws-audit": "0.1.0"})
+        self.assertEqual(got, ("0.16.0", "minor"))
+
+    def test_removed_skill_is_major(self):
+        snap = self.snap("0.15.0", {"ws": "0.15.0",
+                                    "ws-board": "0.5.4"})
+        got = P.expected_version(snap, {"ws": "0.15.0"})
+        self.assertEqual(got, ("1.0.0", "major"))
+
+    def test_backwards_skill_names_the_skill(self):
+        snap = self.snap("0.15.0", {"ws": "0.15.0"})
+        with self.assertRaises(P.Fail) as cm:
+            P.expected_version(snap, {"ws": "0.14.0"})
+        msg = str(cm.exception)
+        self.assertTrue(msg.startswith("BACKWARDS"))
+        self.assertIn("ws", msg)
+
+
+class CheckTest(unittest.TestCase):
+    def test_consistent_tree_passes(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.0", "ws-next": "0.9.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0",
+                                     "ws-next": "0.9.0"}})
+            rc, out, err = run_cli("check", root)
+            self.assertEqual(rc, 0, err)
+            self.assertIn("0.15.0", out)
+
+    def test_drifted_tree_exits_1_and_names_the_command(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.15.0", {"ws": "0.15.0", "ws-next": "0.9.1"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0",
+                                     "ws-next": "0.9.0"}})
+            rc, out, err = run_cli("check", root)
+            self.assertEqual(rc, 1)
+            self.assertIn("0.15.1", err)
+            self.assertIn("bump", err)
+
+    def test_absent_snapshot_exits_1_and_names_bump(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.15.0", {"ws": "0.15.0"})
+            rc, out, err = run_cli("check", root)
+            self.assertEqual(rc, 1)
+            self.assertIn("bump", err)
+
+    def test_plugin_below_snapshot_exits_2(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(
+                base, "0.14.0", {"ws": "0.15.0"},
+                snapshot={"plugin": "0.15.0",
+                          "skills": {"ws": "0.15.0"}})
+            rc, out, err = run_cli("check", root)
+            self.assertEqual(rc, 2)
+            self.assertIn("BACKWARDS", err)
+
+    def test_unknown_verb_exits_2(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = make_plugin(base, "0.1.0", {"ws": "0.1.0"})
+            rc, out, err = run_cli("frobnicate", root)
+            self.assertEqual(rc, 2)
+            self.assertIn("BAD_ARGS", err)
+
+    def test_missing_plugin_dir_exits_2(self):
+        rc, out, err = run_cli("check", "/nonexistent/plugin")
+        self.assertEqual(rc, 2)
+        self.assertIn("BAD_PLUGIN", err)
 
 
 if __name__ == "__main__":
