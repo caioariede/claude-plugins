@@ -34,4 +34,4 @@ The first stderr token says why: `MANY_WORKSTREAMS <list>` (ask which; the slug 
 
 ## Next step
 
-Per SPEC §Next-step chaining, offer the single best next command (default yes): usually `ws-next` (the router), or `ws-resume <unit>` for an in-progress or blocked unit.
+Per SPEC §Next-step chaining, offer the single best next command: usually `ws-next` (the router, default yes), or `ws-resume <unit>` for an in-progress or blocked unit — work-starting, so default not-now.

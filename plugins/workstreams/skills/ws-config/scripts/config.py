@@ -76,12 +76,15 @@ def flavor_state(ops: Dict[str, str], group: str):
 
 def _hook_lines(ops: Dict[str, str]) -> List[str]:
     out = []
-    for h in sorted(k for k in ops if k.startswith("hook-")
-                    and "." not in k):
+    # A choices-mode hook may define no base instruction at all, so the
+    # hook's own name comes from any key it owns, dotted or not.
+    for h in sorted({k.split(".")[0] for k in ops if k.startswith("hook-")}):
         prompt = ops.get(f"{h}.prompt")
         prefix = f"{h}.choices."
-        names = sorted(k[len(prefix):] for k in ops
-                       if k.startswith(prefix) and not k.endswith(".desc"))
+        # Merged-key order is the picker's order — the first choice is
+        # the safe one, so the listing must not re-sort it.
+        names = [k[len(prefix):] for k in ops
+                 if k.startswith(prefix) and not k.endswith(".desc")]
         if prompt and names:
             opts = " · ".join(
                 f"{n}: {ops.get(prefix + n + '.desc', n)}" for n in names)

@@ -17,7 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "skills" / "ws-config" / "scripts" / "config.py"
 sys.path.insert(0, str(ROOT / "skills" / "ws" / "scripts"))
+sys.path.insert(0, str(ROOT / "skills" / "ws-config" / "scripts"))
 import ws_cli as C  # noqa: E402
+import config as CFG  # noqa: E402
 
 
 def store_at(base):
@@ -497,6 +499,21 @@ class ReviewRegressionTest(unittest.TestCase):
             installed = (sorted(hooks.glob("spec-watch-*.sh"))
                          if hooks.is_dir() else [])
             self.assertEqual(installed, [])
+
+
+class HookLineOrder(unittest.TestCase):
+    def test_choices_keep_merged_key_order(self):
+        ops = {
+            "hook-ws-next-after.prompt": "Where should <unit> run?",
+            "hook-ws-next-after.choices.skip": "",
+            "hook-ws-next-after.choices.skip.desc": "Not now",
+            "hook-ws-next-after.choices.here": "<command>",
+            "hook-ws-next-after.choices.here.desc": "Here",
+            "hook-ws-next-after.choices.window": "wmx window open <branch>",
+            "hook-ws-next-after.choices.window.desc": "New window",
+        }
+        line = CFG._hook_lines(ops)[0]
+        self.assertIn("skip: Not now · here: Here · window: New window", line)
 
 
 if __name__ == "__main__":
