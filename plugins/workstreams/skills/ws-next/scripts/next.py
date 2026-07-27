@@ -50,6 +50,22 @@ def render_decision(d: S.Decision) -> str:
     if d.open_items:
         lines.append("Open backlog:")
         lines += [f"- {it}" for it in d.open_items]
+    # `suggest` material — for the assistant composing the proposal, not
+    # for the user; the skill consumes these blocks instead of relaying
+    # them, the same way it strips each move's run= tail.
+    if d.proposable:
+        lines.append("Proposable:")
+        for p in d.proposable:
+            # A unit-scoped id already carries its origin as the prefix.
+            origin = ("" if p.fid.startswith(f"{p.origin}:")
+                      else f"  from={p.origin}")
+            blocks = f"  blocks={','.join(p.blocks)}" if p.blocks else ""
+            lines.append(f"- {p.fid}{origin}{blocks}  {p.desc}")
+    if d.covered:
+        lines.append("Covered:")
+        lines += [f"- {c}" for c in d.covered]
+    if d.design:
+        lines.append(f"Design: {d.design}")
     return "\n".join(lines)
 
 

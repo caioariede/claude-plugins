@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.15.0"
+  version: "0.16.0"
   author: Caio Ariede
 ---
 
@@ -35,18 +35,23 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | tasks + in-flight follow-ups | unit `progress.md` | resolved before this unit's PR merges |
 | explicit needs (dependencies) | unit `progress.md` `## Needs` (+ base from ledger) | current set is mutable state; base is the implicit need (§Dependencies) |
 | deferred follow-ups + planned units | `backlog.md` | written via `ws-backlog`; outlive the unit (see Follow-up placement) |
+| is a follow-up claimed (being closed by a unit) | **derived** | a non-dropped ledger unit's `claims=` names it (§Follow-up units) |
 | decisions / notes / drop / restack history | `log.md` | append-only |
 
 **Invariants:** log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a ledger slug matches it (dedup vs ledger) — "not started" is not a derived unit *status*, it is a backlog item without a ledger line yet.
 
-**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>`. Any open item ⇒ **not done**. Dropped units are terminal, not blockers.
+**`ws-start` is the sole creator of `units/<unit-id>/`.** No other skill and no ad-hoc write creates a unit directory or any file in it — not while seeding a backlog, not while capturing a follow-up, not to "get ahead" of a unit that is about to exist. A unit directory with no matching `units.md` ledger line is malformed. Anything that wants a unit runs `ws-start`; anything that wants to *record* a future unit writes `backlog.md` via `ws-backlog`.
+
+**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>` — an unchecked follow-up a live unit **claims** is that unit's work, not an open item (§Follow-up units). Any open item ⇒ **not done**. Dropped units are terminal, not blockers.
+
+This predicate reads the store only, so it cannot know whether the `design:` spec still holds unbuilt scope. A workstream can therefore be **done** here while `ws-next` still proposes a unit from the design — the judgment layers on top of the derived answer rather than contradicting it, which is why `ws-next` says "no store work left" instead of claiming done.
 
 ## Dependencies (needs / blocked)
 A unit's **needs** = `{ base, when base is a unit-id }` ∪ `{ explicit needs }`. base is the **implicit** need — `ws-start --base <unit-id>` declares the dependency; explicit needs are added later via `ws-block`.
 
 **Need target** — each need points at either:
 - a **unit** (`<unit-id>` or bare slug) — **satisfied** when that unit is *code-complete*.
-- a **follow-up** (`<unit-id>:F<n>` or `WF<n>`) — **satisfied** when that box is checked in its source file.
+- a **follow-up** (`<unit-id>:F<n>` or `WF<n>`) — when a live unit **claims** it (§Follow-up units), satisfied through that unit exactly as a unit target; otherwise **satisfied** when the box is checked in its source file.
 
 **code-complete** (derived predicate; never a printed status label): a unit has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. `## Follow-ups` are ignored; zero tasks is *not* code-complete. `merged` implies code-complete.
 
@@ -101,8 +106,9 @@ canonical `<ws-id>:<slug>` when the base is in another workstream, bare `<slug>`
 when the base is in this one:
 ```
 # Units — <ws-id> (append-only)
-- <ts>  <slug>  "<title>"  repo=<org/repo>  branch=<b>  [restart-of=<slug>]  [stacked-on=<ws-id>:<slug> | <slug>]
+- <ts>  <slug>  "<title>"  repo=<org/repo>  branch=<b>  [restart-of=<slug>]  [stacked-on=<ws-id>:<slug> | <slug>]  [claims=<target>[,<target>]]
 ```
+`claims=` lists the follow-up targets this unit was created to close (§Follow-up units); each target is a `WF<n>` or `<unit-id>:F<n>` per §Dependencies.
 **`backlog.md`** (workstream future work; mutable):
 ```
 ## Planned units
@@ -112,7 +118,7 @@ when the base is in this one:
 ```
 Planned units feed `ws-next` (what to start) and `ws-board` (not-started); a line is derived-done once a ledger unit matches its `<slug>` — no manual check-off. Follow-ups here are the workstream home for **deferred** items; check off when resolved or promoted to a planned unit / `ws-start`. `WF<n>` ids are monotonic per workstream; the origin is the capturing unit-id, or the `<ws-id>` when captured outside any unit (`ws-backlog`). `needs=` carries dependencies **beyond** base (bare targets, no notes); `ws-start` seeds them into the started unit's `progress.md` `## Needs` (§Dependencies).
 
-**Parse contract (machine-read).** `ws-board` and `ws-next` parse the store deterministically via `scripts/ws_store.py`, bundled with this skill, and `ws-config` drives the flavors INI through the same bundled engine (`scripts/ws_cli.py` plus its own `config.py`), so these formats are a machine contract — keep fields structured. Parsing is deliberately tolerant. In `backlog.md` only `## Planned units` and `## Follow-ups` are read, by exact heading; any other `##` section (e.g. a stray `## Not tracked here`) is ignored wholesale. Within a read section an item is a single-line `- [ ]`/`- [x]` bullet; comments, single-`#` sub-headers, and blank lines are skipped, so humans keep them freely. A planned line keeps its structured fields (`base=`, `needs=`) **before** the ` — ` separator; everything after is opaque display text and never carries them. A follow-up's origin is the `(from <origin>, <ts>)` parenthetical, found by the `(from ` marker — the description itself may contain parens — and any resolution text trailing it (`→ done in X`) is ignored. In `log.md`, `dropped` is the line **kind** (the token after the timestamp), distinct from the word appearing inside a `decision`/`note` payload.
+**Parse contract (machine-read).** `ws-board` and `ws-next` parse the store deterministically via `scripts/ws_store.py`, bundled with this skill, and `ws-config` drives the flavors INI through the same bundled engine (`scripts/ws_cli.py` plus its own `config.py`), so these formats are a machine contract — keep fields structured. Parsing is deliberately tolerant. In `backlog.md` only `## Planned units` and `## Follow-ups` are read, by exact heading; any other `##` section (e.g. a stray `## Not tracked here`) is ignored wholesale. Within a read section an item is a single-line `- [ ]`/`- [x]` bullet; comments, single-`#` sub-headers, and blank lines are skipped, so humans keep them freely. A planned line keeps its structured fields (`base=`, `needs=`) **before** the ` — ` separator; everything after is opaque display text and never carries them. A follow-up's origin is the `(from <origin>, <ts>)` parenthetical, found by the `(from ` marker — the description itself may contain parens — and any resolution text trailing it (`→ done in X`) is ignored. In `log.md`, `dropped` is the line **kind** (the token after the timestamp), distinct from the word appearing inside a `decision`/`note` payload. A ledger line's `key=value` tokens are read by name and unknown keys are ignored, so a new field is additive. `workstream.md`'s `design:` is parsed (an em-dash placeholder reads as absent); `charter.md` is not — it is prose for `ws-resume`, never a machine input.
 
 **`units/<unit-id>/charter.md`** (static — the unit-level `workstream.md`; no log, no status, nothing volatile). Written once at `ws-start`, read by `ws-resume` to reconstruct the unit's intent with no chat scrollback:
 ```
@@ -149,6 +155,21 @@ When you note a follow-up, ask: will it be resolved before **this** unit's PR me
 A deferred item left in a unit that is about to merge becomes an orphaned checkbox in a dead unit nobody actions; in the backlog it stays visible and can graduate into a planned unit.
 
 `ws-backlog` is the standalone capture verb for both placements from any session; `ws-resume` records them inline while working the unit — both write the same shapes.
+
+## Follow-up units
+A **follow-up unit** exists to close a batch of already-captured follow-ups rather than to build new scope. It is an ordinary unit — `ws-start` makes it like any other — plus `claims=<targets>` on its ledger line naming what it closes.
+
+**That field is the only write.** No follow-up is checked off, no other unit's files are touched. **Claimed** is *derived*: a follow-up that a non-dropped ledger unit claims is not open work, and everything that asks follows from that one rule —
+- a dependent's need on it resolves through the claiming unit, at that unit's code-complete (§Dependencies),
+- the board shows it as that unit's row, not a backlog line,
+- `ws-next` does not re-propose it,
+- **Workstream done** counts it resolved once the claimer is terminal.
+
+**Dropping the claimer releases the claim**, so the follow-up re-opens itself with nothing rewritten and the dependent's need falls back to the box it always named. This is why claiming must not touch the box: a checked box would have to be un-checked on drop, against an append-only ledger line that still reads `claims=`. Deriving costs one field and no compensating operation.
+
+`ws-start` refuses to claim a target that is missing, already checked, or already claimed by a live unit — two units cannot claim the same work. Checking a box stays what it always was: the record that the work is done, and after a claim it is optional bookkeeping, never the source.
+
+What material a follow-up unit is proposed from, and when, is `ws-next`'s business (§Next-step chaining).
 
 ## Restack reconciliation (the one rebase definition)
 A unit's **recorded base** = the base on its last `created`/`restack` log line (never the live PR `baseRefName`, which GitHub may have moved). To move a unit onto `<new-base>`:

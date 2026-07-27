@@ -66,6 +66,7 @@ class Unit:
     branch: str = ""
     stacked_on: Optional[str] = None    # base unit, when base is a unit
     restart_of: Optional[str] = None
+    claims: List[str] = field(default_factory=list)  # follow-up targets
     tasks_total: int = 0
     tasks_done: int = 0
     followups: List[Followup] = field(default_factory=list)
@@ -96,6 +97,7 @@ class PlannedUnit:
 class Workstream:
     ws_id: str
     name: str
+    design: str = ""                    # workstream.md design: path, verbatim
     units: List[Unit] = field(default_factory=list)
     planned: List[PlannedUnit] = field(default_factory=list)
     wf_followups: List[Followup] = field(default_factory=list)  # backlog WF<n>
@@ -133,6 +135,8 @@ def parse_units(text: str) -> List[Unit]:
                 u.restart_of = v
             elif k == "stacked-on":
                 u.stacked_on = v
+            elif k == "claims":
+                u.claims = [t for t in v.split(",") if t]
         units.append(u)
     return units
 
@@ -314,8 +318,12 @@ def load_workstream(ws_dir: Path) -> Workstream:
     m = re.search(r'^name:\s*(.+)$', wm, re.MULTILINE)
     if m:
         name = m.group(1).strip()
+    dm = re.search(r'^design:\s*(.+)$', wm, re.MULTILINE)
+    design = dm.group(1).strip() if dm else ""
+    if design in ("—", "-"):
+        design = ""
 
-    ws = Workstream(ws_id=ws_id, name=name)
+    ws = Workstream(ws_id=ws_id, name=name, design=design)
     ws.units = parse_units(_read(ws_dir / "units.md"))
     ws.planned, ws.wf_followups = parse_backlog(_read(ws_dir / "backlog.md"))
 
@@ -342,9 +350,48 @@ def _slug_of(target: str) -> str:
     return target.split(":")[-1] if ":" in target else target
 
 
+_UNIT_FU_RE = re.compile(r'^(.*):(F\d+)$')   # <unit>:F<n>, unit part greedy
+
+
 def _is_followup_target(target: str) -> bool:
     return bool(re.match(r'^WF\d+$', target) or re.search(r':F\d+$', target)
                 or re.match(r'^F\d+$', target))
+
+
+def _fu_key(target: str) -> str:
+    """Canonical follow-up id: `WF<n>`, or `<bare-slug>:F<n>`.
+
+    Need targets and `claims=` entries spell a unit-scoped follow-up
+    either way the SPEC allows (`<ws-id>:<slug>:F<n>` or `<slug>:F<n>`);
+    proposals use the bare form, so every side normalizes through here.
+    """
+    m = _UNIT_FU_RE.match(target)
+    return f"{_slug_of(m.group(1))}:{m.group(2)}" if m else target
+
+
+def claimer_of(fid: str, ws: Workstream) -> Optional[Unit]:
+    """The unit whose `claims=` covers this follow-up, else None.
+
+    A dropped unit releases its claim — that is what re-opens a claimed
+    follow-up when its unit is abandoned, with nothing rewritten.
+    """
+    for u in ws.units:
+        if not u.dropped and fid in {_fu_key(c) for c in u.claims}:
+            return u
+    return None
+
+
+def followup_open(fid: str, fu: Followup, ws: Workstream) -> bool:
+    """Is this follow-up still open work?
+
+    Open unless its box is checked or a live unit claims it. A claimed
+    follow-up is that unit's business: while the unit is active it counts
+    as active work, and once the unit is terminal the claim carries the
+    resolution. The single source for "open follow-up" — `workstream_done`,
+    the board's backlog, `ws-next`'s open items and its proposals all ask
+    here.
+    """
+    return not fu.checked and claimer_of(fid, ws) is None
 
 
 def derive_status(ws: Workstream) -> None:
@@ -379,14 +426,20 @@ def need_state(target: str, ws: Workstream,
                by_slug: Dict[str, Unit]) -> Tuple[bool, str]:
     """Return (satisfied, note). note is "dropped" / "removed" / "".
 
-    Unit target → satisfied at code-complete. Follow-up target →
-    satisfied when its box is checked; a target that no longer exists is
-    unresolvable (removed), not satisfied.
+    Unit target → satisfied at code-complete. Follow-up target → if a
+    live unit claims it, resolve through that unit exactly as a unit
+    target (so the dependent clears when the claiming unit is
+    code-complete, not the moment a box flips); else satisfied when its
+    box is checked. A target that no longer exists is unresolvable
+    (removed), not satisfied.
     """
     if _is_followup_target(target):
         fu = _find_followup(target, ws, by_slug)
         if fu is None:
             return False, "removed"
+        claimer = claimer_of(_fu_key(target), ws)
+        if claimer is not None:
+            return claimer.code_complete, ""
         return fu.checked, ""
     slug = _slug_of(target)
     dep = by_slug.get(slug)
@@ -408,7 +461,7 @@ def _find_followup(target: str, ws: Workstream,
         return None
     # <unit>:F<n> or bare F<n> — a bare F<n> has no owning unit context,
     # so it is only resolvable in the qualified form.
-    m = re.match(r'^(.*):(F\d+)$', target)
+    m = _UNIT_FU_RE.match(target)
     if not m:
         return None
     dep = by_slug.get(_slug_of(m.group(1)))
@@ -513,16 +566,17 @@ def build_board(ws: Workstream) -> Board:
     b.total_count = len([u for u in ws.units if u.status != "dropped"]) \
         + len(planned_only)
 
-    # Backlog: open in-flight F<n> + open workstream WF<n>.
+    # Backlog: open in-flight F<n> + open workstream WF<n>. A follow-up a
+    # live unit claims is that unit's row, not a backlog line.
     for u in ws.units:
         if u.status in ("merged", "dropped"):
             continue
         for fu in u.followups:
-            if not fu.checked:
+            if followup_open(f"{u.slug}:{fu.fid}", fu, ws):
                 b.backlog.append(
                     f"- {fu.fid} {_gist(fu.desc)} (follow-up from {u.slug})")
     for fu in ws.wf_followups:
-        if not fu.checked:
+        if followup_open(fu.fid, fu, ws):
             origin = fu.origin or ws.ws_id
             b.backlog.append(
                 f"- {fu.fid} {_gist(fu.desc)} (follow-up from {origin})")
@@ -565,10 +619,11 @@ def workstream_done(ws: Workstream, by_slug: Dict[str, Unit]) -> bool:
     ledger_slugs = set(by_slug)
     if any(p.slug not in ledger_slugs for p in ws.planned):
         return False
-    if any(not fu.checked for fu in ws.wf_followups):
+    if any(followup_open(fu.fid, fu, ws) for fu in ws.wf_followups):
         return False
     for u in ws.units:
-        if any(not fu.checked for fu in u.followups):
+        if any(followup_open(f"{u.slug}:{fu.fid}", fu, ws)
+               for fu in u.followups):
             return False
     return True
 
@@ -697,8 +752,17 @@ def enumerate_moves(ws: Workstream,
 
 
 @dataclass
+class Proposable:
+    """A follow-up a new unit could claim (SPEC §Follow-up units)."""
+    fid: str                        # WF<n> or <slug>:F<n>
+    desc: str
+    origin: str                     # ws-id for WF, unit slug for F
+    blocks: List[str] = field(default_factory=list)   # units it blocks
+
+
+@dataclass
 class Decision:
-    rule: str                       # restack|ship|resume|start|triage-*|done
+    rule: str  # restack|ship|resume|start|triage-*|suggest|empty|done
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
     unit: Optional[str] = None      # unit slug when the command is unit-scoped
     branch: Optional[str] = None    # ledger branch; None until a worktree exists
@@ -706,6 +770,10 @@ class Decision:
     blocked: List[str] = field(default_factory=list)   # "<unit> — needs ..."
     open_items: List[str] = field(default_factory=list)
     headline: str = ""
+    # `suggest` only — material for the proposal the skill composes.
+    proposable: List[Proposable] = field(default_factory=list)
+    covered: List[str] = field(default_factory=list)   # "<slug> — <title>"
+    design: str = ""
 
 
 def _startable_planned(ws: Workstream,
@@ -714,6 +782,54 @@ def _startable_planned(ws: Workstream,
     return [p for p in ws.planned
             if p.slug not in ledger
             and not planned_unmet_needs(p, ws, by_slug)]
+
+
+def _followup_blockers(ws: Workstream,
+                       by_slug: Dict[str, Unit]) -> Dict[str, List[str]]:
+    """follow-up id → the units it blocks. Only a `blocked` unit can have
+    an unmet need, so the others need no walk."""
+    out: Dict[str, List[str]] = {}
+    for u in ws.units:
+        if u.status != "blocked":
+            continue
+        for target, _note in unmet_needs(u, ws, by_slug):
+            if not _is_followup_target(target):
+                continue
+            slugs = out.setdefault(_fu_key(target), [])
+            if u.slug not in slugs:     # two needs, one target
+                slugs.append(u.slug)
+    return out
+
+
+def proposable_followups(ws: Workstream,
+                         by_slug: Dict[str, Unit]) -> List[Proposable]:
+    """Follow-ups a new unit could claim: the open ones (§followup_open)
+    that no live unit is already working. An `F<n>` in a live unit is
+    never proposable — that unit has its own resume move.
+
+    Reads derived status, so `derive_status` must have run.
+    """
+    found = [(fu.fid, fu, fu.origin or ws.ws_id)
+             for fu in ws.wf_followups if followup_open(fu.fid, fu, ws)]
+    for u in ws.units:
+        if u.status != "merged":
+            continue
+        found += [(f"{u.slug}:{fu.fid}", fu, u.slug) for fu in u.followups
+                  if followup_open(f"{u.slug}:{fu.fid}", fu, ws)]
+    if not found:
+        return []               # nothing to annotate; skip the needs walk
+    blockers = _followup_blockers(ws, by_slug)
+    return [Proposable(fid, fu.desc, origin, blockers.get(fid, []))
+            for fid, fu, origin in found]
+
+
+def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit]) -> List[str]:
+    """What the store already covers, so a proposal can skip it. Dropped
+    units count — the drop was a decision (SPEC)."""
+    out = [f"{u.slug} — {u.title}" if u.title else u.slug for u in ws.units]
+    out += [f"{p.slug} — {_gist(p.what)} (planned)" for p in ws.planned
+            if p.slug not in by_slug]
+    return out
 
 
 def decide_next(ws: Workstream) -> Decision:
@@ -728,18 +844,23 @@ def decide_next(ws: Workstream) -> Decision:
             continue
         labels = []
         for target, note in unmet_needs(u, ws, by_slug):
-            lab = _slug_of(target)
+            # `_slug_of` would reduce `<ws>:<unit>:F1` to a bare `F1`,
+            # which names nothing.
+            lab = (_fu_key(target) if _is_followup_target(target)
+                   else _slug_of(target))
             if note:
                 lab += f" ({note})"
             labels.append(lab)
         blocked_lines.append(f"{u.slug} — needs {', '.join(labels)}")
 
     def out(rule, command=None, unit=None, branch=None, moves=None,
-            open_items=None, headline=""):
+            open_items=None, headline="", proposable=None, covered=None,
+            design=""):
         return Decision(rule=rule, command=command, unit=unit,
                         branch=branch or None, moves=moves or [],
                         blocked=blocked_lines, open_items=open_items or [],
-                        headline=headline)
+                        headline=headline, proposable=proposable or [],
+                        covered=covered or [], design=design)
 
     # Everything runnable now, ranked; the leader is the default.
     moves = enumerate_moves(ws, by_slug)
@@ -764,7 +885,6 @@ def decide_next(ws: Workstream) -> Decision:
             return out("triage-dropped", cmd, u.slug, u.branch,
                        headline="blocker dropped/removed — re-point or clear")
 
-    # 5 — no runnable step, but open backlog / blocked units remain: triage.
     open_items = []
     ledger = set(by_slug)
     for p in ws.planned:
@@ -772,11 +892,24 @@ def decide_next(ws: Workstream) -> Decision:
             open_items.append(f"planned: {p.slug} — {_gist(p.what)}")
     for u in ws.units:
         for fu in u.followups:
-            if not fu.checked:
+            if followup_open(f"{u.slug}:{fu.fid}", fu, ws):
                 open_items.append(f"{u.slug}:{fu.fid} — {_gist(fu.desc)}")
     for fu in ws.wf_followups:
-        if not fu.checked:
+        if followup_open(fu.fid, fu, ws):
             open_items.append(f"{fu.fid} — {_gist(fu.desc)}")
+
+    # Terminal fork, first match wins: suggest > triage-backlog > empty >
+    # done. `suggest` is strictly last resort — any move above suppresses
+    # it, so the router never doubles as a unit-proposal machine.
+    proposable = proposable_followups(ws, by_slug)
+    if proposable or ws.design:
+        return out("suggest", None, None, open_items=open_items,
+                   headline="no store work left — propose the next unit",
+                   proposable=proposable,
+                   covered=_covered_scope(ws, by_slug), design=ws.design)
+    # Open work the proposal path can't take: a planned unit stuck behind
+    # an unresolvable need, an F<n> in a live blocked unit, a hand-broken
+    # need cycle.
     if blocked_lines or open_items:
         head = ("no active unit; open backlog remains — triage"
                 if open_items and not blocked_lines
@@ -784,5 +917,8 @@ def decide_next(ws: Workstream) -> Decision:
         return out("triage-backlog", None, None, open_items=open_items,
                    headline=head)
 
-    # 6 — nothing active, nothing open.
+    if not ws.units:
+        return out("empty", None, None,
+                   headline="no units yet — start the first with ws-start")
+
     return out("done", None, None, headline="workstream done — close it")

@@ -51,8 +51,9 @@ def pr(number, state="OPEN", is_draft=False, base="master"):
     return S.PR(number=number, state=state, is_draft=is_draft, base=base)
 
 
-def mkws(units=None, planned=None, wfs=None, ws_id="2026-01-01-demo"):
-    ws = S.Workstream(ws_id=ws_id, name="demo")
+def mkws(units=None, planned=None, wfs=None, ws_id="2026-01-01-demo",
+         design=""):
+    ws = S.Workstream(ws_id=ws_id, name="demo", design=design)
     ws.units = units or []
     ws.planned = planned or []
     ws.wf_followups = wfs or []
@@ -535,11 +536,11 @@ class DecideNext(unittest.TestCase):
         self.assertEqual(d.command, d.moves[0].command)
         self.assertEqual([m.unit for m in d.moves], ["b", "a"])
 
-    def test_triage_and_done_carry_no_moves(self):
+    def test_terminal_states_carry_no_moves(self):
         merged = S.Unit(slug="m", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
         ws = self._ws([merged], wfs=[S.Followup("WF1", "later", checked=False)])
         d = S.decide_next(ws)
-        self.assertEqual((d.rule, d.moves), ("triage-backlog", []))
+        self.assertEqual((d.rule, d.moves), ("suggest", []))
         self.assertEqual(S.decide_next(self._ws([merged])).moves, [])
 
     def test_drifted_units_rank_by_dependents(self):
@@ -560,17 +561,6 @@ class DecideNext(unittest.TestCase):
         dep = S.Unit(slug="dep", needs=[S.Need("N1", "gone")])
         d = S.decide_next(self._ws([gone, dep]))
         self.assertEqual((d.rule, d.command), ("triage-dropped", "ws-block dep clear N1"))
-
-    def test_rule5_open_backlog_not_done(self):
-        merged = S.Unit(slug="m", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
-        ws = self._ws([merged], wfs=[S.Followup("WF1", "later", checked=False)])
-        d = S.decide_next(ws)
-        self.assertEqual(d.rule, "triage-backlog")
-        self.assertTrue(any("WF1" in it for it in d.open_items))
-
-    def test_rule6_done(self):
-        merged = S.Unit(slug="m", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
-        self.assertEqual(S.decide_next(self._ws([merged])).rule, "done")
 
     def test_blocked_lines_reported(self):
         base = S.Unit(slug="base", tasks_total=2, tasks_done=1)  # in progress
@@ -601,6 +591,258 @@ class DecideNext(unittest.TestCase):
     def test_branchless_ledger_line_reports_none(self):
         u = S.Unit(slug="a", tasks_total=2, tasks_done=1)
         self.assertIsNone(S.decide_next(self._ws([u])).branch)
+
+
+class TerminalFork(unittest.TestCase):
+    """suggest / empty / done — reached only when no move exists."""
+
+    def _merged(self, slug="m", followups=None):
+        return S.Unit(slug=slug, title=f"did {slug}", tasks_total=1,
+                      tasks_done=1, pr=pr(1, "MERGED"),
+                      followups=followups or [])
+
+    def test_empty_store_says_no_units_yet(self):
+        d = S.decide_next(mkws())
+        self.assertEqual(d.rule, "empty")
+        self.assertIn("no units yet", d.headline)
+
+    def test_empty_store_with_a_design_proposes_instead(self):
+        d = S.decide_next(mkws(design="~/specs/x-design.md"))
+        self.assertEqual(d.rule, "suggest")
+        self.assertEqual(d.design, "~/specs/x-design.md")
+        self.assertEqual(d.proposable, [])
+
+    def test_design_is_read_off_workstream_md(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            write_ws(store, "2026-01-01-demo", workstream_md=(
+                "---\nname: demo\ndesign: ~/specs/x-design.md\n---\n"))
+            ws = S.load_workstream(store / "2026-01-01-demo")
+            self.assertEqual(ws.design, "~/specs/x-design.md")
+            self.assertEqual(S.decide_next(ws).rule, "suggest")
+
+    def test_em_dash_design_placeholder_reads_as_absent(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            write_ws(store, "2026-01-01-demo",
+                     workstream_md="---\nname: demo\ndesign: —\n---\n")
+            ws = S.load_workstream(store / "2026-01-01-demo")
+            self.assertEqual(ws.design, "")
+            self.assertEqual(S.decide_next(ws).rule, "empty")
+
+    def test_orphaned_followup_in_a_merged_unit_is_proposable(self):
+        u = self._merged(followups=[S.Followup("F1", "tidy it", checked=False)])
+        d = S.decide_next(mkws([u]))
+        self.assertEqual(d.rule, "suggest")
+        self.assertEqual([(p.fid, p.origin) for p in d.proposable],
+                         [("m:F1", "m")])
+
+    def test_nothing_open_is_done(self):
+        self.assertEqual(S.decide_next(mkws([self._merged()])).rule, "done")
+
+    def test_open_backlog_reaches_both_readers(self):
+        # Open backlog is the user's list, Proposable the assistant's —
+        # different readers, so an open follow-up belongs to both.
+        ws = mkws([self._merged()],
+                  wfs=[S.Followup("WF1", "later", checked=False)])
+        d = S.decide_next(ws)
+        self.assertEqual(d.open_items, ["WF1 — later"])
+        self.assertEqual([p.fid for p in d.proposable], ["WF1"])
+
+    def test_checked_followup_in_a_merged_unit_is_not_proposable(self):
+        u = self._merged(followups=[S.Followup("F1", "done", checked=True)])
+        self.assertEqual(S.decide_next(mkws([u])).rule, "done")
+
+    def test_followup_in_a_live_unit_is_not_proposable(self):
+        # The unit owns it, and it has a resume move of its own.
+        live = S.Unit(slug="a", tasks_total=2, tasks_done=1,
+                      followups=[S.Followup("F1", "later", checked=False)])
+        d = S.decide_next(mkws([live]))
+        self.assertEqual(d.rule, "resume")
+        self.assertEqual(
+            S.proposable_followups(mkws([live]),
+                                   {"a": live}), [])
+
+    def test_blocking_followup_is_flagged(self):
+        merged = self._merged()
+        dep = S.Unit(slug="dep", needs=[S.Need("N1", "WF4")])
+        ws = mkws([merged, dep],
+                      wfs=[S.Followup("WF4", "harden it", checked=False)])
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "suggest")
+        self.assertEqual([(p.fid, p.blocks) for p in d.proposable],
+                         [("WF4", ["dep"])])
+        self.assertTrue(any("dep — needs WF4" in b for b in d.blocked))
+
+    def test_qualified_need_target_matches_the_bare_proposal_id(self):
+        merged = self._merged(followups=[S.Followup("F1", "x", checked=False)])
+        dep = S.Unit(slug="dep",
+                     needs=[S.Need("N1", "2026-01-01-demo:m:F1")])
+        d = S.decide_next(mkws([merged, dep]))
+        self.assertEqual([(p.fid, p.blocks) for p in d.proposable],
+                         [("m:F1", ["dep"])])
+
+    def test_covered_scope_lists_ledger_and_planned(self):
+        merged = self._merged()
+        dropped = S.Unit(slug="gone", title="abandoned idea", dropped=True)
+        # p carries an unresolvable need, so it makes no start move and
+        # cannot suppress the fork.
+        ws = mkws([merged, dropped],
+                      planned=[S.PlannedUnit(slug="p", base="master",
+                                             what="later work",
+                                             needs=["WF9"])],
+                      design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "suggest")
+        self.assertIn("m — did m", d.covered)
+        self.assertIn("gone — abandoned idea", d.covered)   # dropped counts
+        self.assertTrue(any(c.startswith("p — later work") for c in d.covered))
+
+    def test_open_items_list_planned_and_followups_together(self):
+        merged = self._merged()
+        ws = mkws([merged],
+                      planned=[S.PlannedUnit(slug="p", base="master",
+                                             what="stuck", needs=["WF9"])],
+                      wfs=[S.Followup("WF1", "later", checked=False)])
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "suggest")
+        self.assertEqual([p.fid for p in d.proposable], ["WF1"])
+        self.assertEqual(d.open_items,
+                         ["planned: p — stuck", "WF1 — later"])
+
+    def test_any_move_suppresses_suggest(self):
+        """The guard on the whole design: proposing is last resort."""
+        live = S.Unit(slug="a", tasks_total=2, tasks_done=1)
+        ws = mkws([live], wfs=[S.Followup("WF1", "later", checked=False)],
+                      design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "resume")
+        self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+
+    def test_unresolvable_planned_need_triages_over_empty(self):
+        # No proposable material and no design, but open work remains, so
+        # "no units yet" would be wrong advice — triage, not empty.
+        ws = mkws(planned=[S.PlannedUnit(slug="p", base="master",
+                                             what="x", needs=["WF9"])])
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "triage-backlog")
+        self.assertTrue(any("planned: p" in it for it in d.open_items))
+
+    def test_claims_parses_off_the_ledger(self):
+        units = S.parse_units(ledger(
+            'fu  "close them"  repo=o/r  branch=fu  claims=WF4,m:F1'))
+        self.assertEqual(units[0].claims, ["WF4", "m:F1"])
+
+    def test_unknown_ledger_key_is_ignored(self):
+        units = S.parse_units(ledger('a  "A"  repo=o/r  branch=a  future=x'))
+        self.assertEqual((units[0].repo, units[0].branch), ("o/r", "a"))
+
+
+class ClaimedFollowups(unittest.TestCase):
+    """A claim is derived from `claims=`; nothing rewrites a follow-up."""
+
+    def _ws(self, claimer_kw=None, checked=False, dropped=False):
+        """One open WF4 plus a unit claiming it, per claimer_kw."""
+        claimer = S.Unit(slug="fu", title="close them", claims=["WF4"],
+                         dropped=dropped, **(claimer_kw or {}))
+        ws = mkws([claimer], wfs=[S.Followup("WF4", "harden it",
+                                            checked=checked)])
+        S.derive_status(ws)
+        return ws, claimer
+
+    def test_a_live_claim_takes_the_followup_out_of_open_work(self):
+        ws, _c = self._ws({"tasks_total": 2, "tasks_done": 1})
+        fu = ws.wf_followups[0]
+        self.assertFalse(fu.checked)          # the box is never touched
+        self.assertFalse(S.followup_open("WF4", fu, ws))
+        self.assertEqual(S.claimer_of("WF4", ws).slug, "fu")
+
+    def test_a_dropped_claim_reopens_it(self):
+        ws, _c = self._ws(dropped=True)
+        self.assertTrue(S.followup_open("WF4", ws.wf_followups[0], ws))
+        self.assertIsNone(S.claimer_of("WF4", ws))
+
+    def test_a_dependent_clears_at_the_claimers_code_complete(self):
+        for done, expect in ((1, False), (2, True)):
+            ws, _c = self._ws({"tasks_total": 2, "tasks_done": done})
+            ws.units.append(S.Unit(slug="dep", needs=[S.Need("N1", "WF4")]))
+            by_slug = {u.slug: u for u in ws.units}
+            self.assertEqual(S.need_state("WF4", ws, by_slug)[0], expect)
+
+    def test_a_dropped_claimer_leaves_the_dependent_on_the_box(self):
+        # Claim released, so the need falls back to the unchecked box.
+        ws, _c = self._ws(dropped=True)
+        by_slug = {u.slug: u for u in ws.units}
+        self.assertEqual(S.need_state("WF4", ws, by_slug), (False, ""))
+
+    def test_a_qualified_claim_matches_a_bare_target(self):
+        owner = S.Unit(slug="m", tasks_total=1, tasks_done=1,
+                       pr=pr(1, "MERGED"),
+                       followups=[S.Followup("F1", "tidy", checked=False)])
+        claimer = S.Unit(slug="fu", claims=["2026-01-01-demo:m:F1"],
+                         tasks_total=1, tasks_done=1)
+        ws = mkws([owner, claimer])
+        S.derive_status(ws)
+        self.assertEqual(S.claimer_of("m:F1", ws).slug, "fu")
+        self.assertFalse(S.followup_open("m:F1", owner.followups[0], ws))
+
+    def test_a_claimed_followup_is_not_reproposed(self):
+        ws, _c = self._ws({"tasks_total": 1, "tasks_done": 1,
+                           "pr": pr(1, "MERGED")})
+        d = S.decide_next(ws)
+        self.assertEqual(d.proposable, [])
+        self.assertEqual(d.open_items, [])
+        self.assertEqual(d.rule, "done")      # the claim carried it
+
+    def test_a_merged_claimer_lets_the_workstream_finish(self):
+        ws, _c = self._ws({"tasks_total": 1, "tasks_done": 1,
+                           "pr": pr(1, "MERGED")})
+        self.assertTrue(S.workstream_done(ws, {u.slug: u for u in ws.units}))
+
+    def test_a_dropped_claimer_leaves_the_workstream_open(self):
+        ws, _c = self._ws(dropped=True)
+        self.assertFalse(S.workstream_done(ws, {u.slug: u for u in ws.units}))
+
+    def test_the_board_hides_a_claimed_followup_from_the_backlog(self):
+        ws, _c = self._ws({"tasks_total": 2, "tasks_done": 1})
+        self.assertEqual(S.build_board(ws).backlog, [])
+
+    def test_a_blocked_line_names_a_qualified_followup_in_full(self):
+        owner = S.Unit(slug="m", tasks_total=1, tasks_done=1,
+                       pr=pr(1, "MERGED"),
+                       followups=[S.Followup("F1", "tidy", checked=False)])
+        dep = S.Unit(slug="dep", needs=[S.Need("N1", "2026-01-01-demo:m:F1")])
+        d = S.decide_next(mkws([owner, dep]))
+        self.assertEqual(d.blocked, ["dep — needs m:F1"])
+
+
+class SuggestRendering(unittest.TestCase):
+    def test_material_renders_for_the_assistant(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(store, "2026-01-01-demo",
+                 workstream_md=("---\nname: demo\n"
+                                "design: ~/specs/x-design.md\n---\n"),
+                 units_md=ledger('m  "did m"  repo=o/r  branch=m'),
+                 backlog_md=("## Follow-ups\n"
+                             "- [ ] WF4  harden it  (from m, 2026-01-01T00:00Z)\n"),
+                 units={"m": {"progress": "## Tasks\n- [x] T1  x\n",
+                              "log": "- t  created base=master\n"}})
+        out = N.generate(store, "2026-01-01-demo",
+                         {"m": pr(1, "MERGED")})
+        self.assertIn("no store work left", out)
+        self.assertIn("Proposable:\n- WF4  from=m  harden it", out)
+        self.assertIn("Covered:\n- m — did m", out)
+        self.assertIn("Design: ~/specs/x-design.md", out)
+        tmp.cleanup()
+
+    def test_no_material_emitted_when_a_move_exists(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        out = N.generate(store, "2026-01-01-demo", three_move_store(store))
+        for marker in ("Proposable:", "Covered:", "Design:"):
+            self.assertNotIn(marker, out)
+        tmp.cleanup()
 
 
 class NextEndToEnd(unittest.TestCase):

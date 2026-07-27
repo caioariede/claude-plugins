@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.15 · July 2026</p>
+    <p class="version">Version 0.16 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -486,7 +486,7 @@
   </span>
 </div>
 <p class="flow-aside"><code>ws-board</code> — glance at status anytime, from any session; read-only.</p>
-<p class="flow-aside"><b>Units: up front or ad-hoc</b> — decide the split beforehand (ask your brainstorm/spec step to include the unit breakdown; <code>ws-init</code> seeds it into the backlog from the design) or start units ad-hoc at any moment with <code>ws-start</code>.</p>
+<p class="flow-aside"><b>You never decide the whole split up front.</b> <code>ws-init</code> creates an empty container — it never reads the design to invent units. Start the next unit with <code>ws-start</code> whenever you know what it is, and when you don't, <code>ws-next</code> proposes one: it reads the design (and any accumulated follow-ups) once nothing else can move, and you pick. Recording a deliberate deviation from the design is <code>ws-backlog --plan</code>.</p>
 </div></section>
 <section id="installation">
 <h2>Installation</h2>
@@ -529,7 +529,7 @@ $ /ws-config set spec-driven-development superpowers</pre>
 <div class="cmd-head"><span class="cmd-name">ws-init</span><span class="cmd-sig">&lt;workstream name&gt;</span></div>
 <p class="cmd-when"><b>Use when</b> you need a new workstream and none exists yet — before starting any unit with <code>ws-start</code>.</p>
 <div class="cmd-body">
-Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, and the <code>units/</code> directory. Sets up the container only — it creates no unit and no worktree.
+Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, the <code>units/</code> directory, and an empty <code>backlog.md</code>. Sets up the container only — it creates no unit, no planned unit, and no worktree, and it never reads <code>design:</code> to invent a unit breakdown. The design stays the live source of the split; <code>ws-next</code> consults it when there is nothing else to do.
 </div>
 <pre class="cmd-ex">$ /ws-init task templates</pre>
 </div>
@@ -685,7 +685,7 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <ol class="steps">
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
 <li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. With the superpowers flavor active, <a href="#spec-watch">spec-watch</a> nudges this step automatically the moment the design doc is written. <code>ws-init</code> creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan.</li>
-<li><b>Split the spec into units</b> with <code>ws-start</code>, one per shippable slice — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
+<li><b>Split the spec into units</b> with <code>ws-start</code>, one slice at a time rather than all of them up front — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
 <li><b>Let each unit plan itself.</b> <code>ws-resume</code> runs <code>writing-plans</code> scoped to that unit (tasks land as <code>T1..</code> in its <code>progress.md</code>), then executes with <code>subagent-driven-development</code>.</li>
 </ol>
 <aside class="note note-rule"><b>Planning lives in units, not above them.</b> After the spec, go straight to <code>ws-init</code> → <code>ws-start</code>. The <code>writing-plans</code> step is deferred into each unit's <code>ws-resume</code>, so every plan is scoped to one worktree.</aside>
@@ -700,15 +700,15 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <tr><th>Command</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger). Run before any unit exists.</td></tr>
-<tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>.</td></tr>
+<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger + empty backlog). Run before any unit exists. Creates no unit.</td></tr>
+<tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit.</td></tr>
 <tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, continue its tasks, or ship it — reopening a gone worktree and reconciling base drift as needed.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>
 <tr><td><code>ws-block</code></td><td>Add or remove a unit's needs (dependencies). An unmet need derives the <code>blocked</code> status.</td></tr>
 <tr><td><code>ws-backlog</code></td><td>Capture future work — routes a follow-up (<code>F&lt;n&gt;</code>/<code>WF&lt;n&gt;</code>) or a planned unit to its right home so nothing orphans.</td></tr>
-<tr><td><code>ws-next</code></td><td>List every unit that can move right now, ranked, then ask which unit moves and where it runs. Read-only — decides, doesn't do.</td></tr>
+<tr><td><code>ws-next</code></td><td>List every unit that can move right now, ranked, then ask which unit moves and where it runs. When nothing can move, proposes the next unit from the design or from accumulated follow-ups. Read-only — decides, doesn't do.</td></tr>
 <tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
-<tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record.</td></tr>
+<tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record. Releases any follow-ups the unit claimed, so they re-open on their own.</td></tr>
 <tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only, and reconciles the spec-watch script.</td></tr>
 </tbody>
 </table>
