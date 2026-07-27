@@ -574,7 +574,7 @@ def workstream_done(ws: Workstream, by_slug: Dict[str, Unit]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Decision engine — ws-next router (SPEC decision table, first match wins)
+# Decision engine — ws-next router (SPEC decision table, ranked)
 # ---------------------------------------------------------------------------
 
 DEFAULT_BRANCHES = {"master", "main", "trunk", "develop", "dev"}
@@ -638,6 +638,13 @@ class Move:
 # a finished unit is one PR away, work in flight beats work not begun.
 _RULE_RANK = {"restack": 0, "ship": 1, "resume": 2, "start": 3}
 
+_RULE_HEADLINE = {
+    "restack": "base moved; rebase before proceeding",
+    "ship": "tasks done, no PR — ship it",
+    "resume": "advance the in-flight unit",
+    "start": "start the next planned unit",
+}
+
 
 def enumerate_moves(ws: Workstream,
                     by_slug: Dict[str, Unit]) -> List[Move]:
@@ -689,7 +696,7 @@ class Decision:
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
     unit: Optional[str] = None      # unit slug when the command is unit-scoped
     branch: Optional[str] = None    # ledger branch; None until a worktree exists
-    also: List[str] = field(default_factory=list)      # parallel-startable
+    moves: List[Move] = field(default_factory=list)    # ranked; moves[0] default
     blocked: List[str] = field(default_factory=list)   # "<unit> — needs ..."
     open_items: List[str] = field(default_factory=list)
     headline: str = ""
@@ -704,7 +711,7 @@ def _startable_planned(ws: Workstream,
 
 
 def decide_next(ws: Workstream) -> Decision:
-    """The single best next action, first-match-wins per the SPEC table.
+    """Every move runnable now, ranked, with moves[0] as the default.
     Blocked units are never resumed — the router advances their blocker."""
     derive_status(ws)
     by_slug = {u.slug: u for u in ws.units}
@@ -721,47 +728,19 @@ def decide_next(ws: Workstream) -> Decision:
             labels.append(lab)
         blocked_lines.append(f"{u.slug} — needs {', '.join(labels)}")
 
-    def out(rule, command=None, unit=None, branch=None, also=None,
+    def out(rule, command=None, unit=None, branch=None, moves=None,
             open_items=None, headline=""):
         return Decision(rule=rule, command=command, unit=unit,
-                        branch=branch or None, also=also or [],
+                        branch=branch or None, moves=moves or [],
                         blocked=blocked_lines, open_items=open_items or [],
                         headline=headline)
 
-    # 1 — branch drifted off its recorded base (retarget / base merged).
-    for u in ws.units:
-        if u.status not in ("merged", "dropped") and _drifted(u):
-            return out("restack", f"ws-restack {u.slug}", u.slug, u.branch,
-                       headline="base moved; rebase before proceeding")
-
-    # In-flight units, critical path first: one that unblocks others beats
-    # one that unblocks nothing (stable, so ledger order breaks ties).
-    ordered = sorted(
-        [u for u in ws.units if u.status in ("building", "in-review")],
-        key=lambda u: -_dependents(u, ws, by_slug))
-
-    # 2 — tasks all checked but no PR: ship it (ws-resume opens the PR).
-    for u in ordered:
-        if u.code_complete and not u.pr:
-            return out("ship", f"ws-resume {u.slug}", u.slug, u.branch,
-                       headline="tasks done, no PR — ship it")
-
-    # 3 — in progress (building/in-review, not blocked): advance it.
-    if ordered:
-        u = ordered[0]
-        return out("resume", f"ws-resume {u.slug}", u.slug, u.branch,
-                   headline="advance the in-flight unit")
-
-    # 4 — a startable planned unit (needs satisfied, no ledger line yet).
-    startable = _startable_planned(ws, by_slug)
-    if startable:
-        p = startable[0]
-        cmd = f'ws-start {ws.ws_id} "{p.what or p.slug}"'
-        if p.base and p.base not in DEFAULT_BRANCHES:
-            cmd += f" --base {p.base}"
-        return out("start", cmd, p.slug,
-                   also=[q.slug for q in startable[1:]],
-                   headline="start the next planned unit")
+    # Everything runnable now, ranked; the leader is the default.
+    moves = enumerate_moves(ws, by_slug)
+    if moves:
+        top = moves[0]
+        return out(top.rule, top.command, top.unit, top.branch, moves,
+                   headline=_RULE_HEADLINE[top.rule])
 
     # triage — a unit blocked ONLY by dropped/removed targets can't clear on
     # its own; route to ws-block ahead of backlog triage (it stays active).

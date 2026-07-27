@@ -507,7 +507,35 @@ class DecideNext(unittest.TestCase):
             S.PlannedUnit(slug="p2", base="master", what="two")])
         d = S.decide_next(ws)
         self.assertEqual(d.rule, "start")
-        self.assertEqual(len(d.also), 1)
+        self.assertEqual([m.unit for m in d.moves], ["p1", "p2"])
+
+    def test_default_fields_describe_the_first_move(self):
+        a = S.Unit(slug="a", branch="feat-a", tasks_total=4, tasks_done=1)
+        b = S.Unit(slug="b", branch="feat-b", tasks_total=2, tasks_done=2)
+        d = S.decide_next(self._ws([a, b]))
+        self.assertEqual((d.rule, d.unit, d.branch), ("ship", "b", "feat-b"))
+        self.assertEqual(d.command, d.moves[0].command)
+        self.assertEqual([m.unit for m in d.moves], ["b", "a"])
+
+    def test_triage_and_done_carry_no_moves(self):
+        merged = S.Unit(slug="m", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
+        ws = self._ws([merged], wfs=[S.Followup("WF1", "later", checked=False)])
+        d = S.decide_next(ws)
+        self.assertEqual((d.rule, d.moves), ("triage-backlog", []))
+        self.assertEqual(S.decide_next(self._ws([merged])).moves, [])
+
+    def test_drifted_units_rank_by_dependents(self):
+        # Both drifted; b unblocks c, a unblocks nothing, so b leads even
+        # though a comes first in the ledger.
+        a = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=1,
+                   pr=pr(1, "OPEN", True, "master"),
+                   log=[("t", "created", "base=feat-x")])
+        b = S.Unit(slug="b", branch="b", tasks_total=2, tasks_done=1,
+                   pr=pr(2, "OPEN", True, "master"),
+                   log=[("t", "created", "base=feat-y")])
+        c = S.Unit(slug="c", branch="c", needs=[S.Need("N1", "b")])
+        d = S.decide_next(self._ws([a, b, c]))
+        self.assertEqual((d.rule, d.unit), ("restack", "b"))
 
     def test_triage_dropped_blocker(self):
         gone = S.Unit(slug="gone", tasks_total=1, tasks_done=1, dropped=True)
