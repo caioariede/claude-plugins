@@ -40,4 +40,8 @@ set-plugin-version version:
 
 # Every check CI runs.
 check: check-plugin-version check-guide
-    python3 -m unittest discover -s "{{justfile_directory()}}/../../tools/tests"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{justfile_directory()}}/../.."
+    python3 -m unittest discover -s tools/tests
+    python3 -m unittest discover -s plugins/workstreams/tests

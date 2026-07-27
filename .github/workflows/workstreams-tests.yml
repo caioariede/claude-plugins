@@ -1,0 +1,25 @@
+name: workstreams-tests
+on:
+  pull_request:
+    paths:
+      - "plugins/workstreams/skills/**"
+      - "plugins/workstreams/hooks/**"
+      - "plugins/workstreams/tests/**"
+      - ".github/workflows/workstreams-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/workstreams/skills/**"
+      - "plugins/workstreams/hooks/**"
+      - "plugins/workstreams/tests/**"
+      - ".github/workflows/workstreams-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Discover needs the repo root as CWD; the suites resolve their
+      # own paths from __file__ and drive the engines as subprocesses.
+      - name: workstreams engine suites
+        run: python3 -m unittest discover -s plugins/workstreams/tests

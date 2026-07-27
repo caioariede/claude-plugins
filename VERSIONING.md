@@ -89,6 +89,9 @@ cd plugins/workstreams && just gen-guide-pdf
 
 ## CI
 
-`.github/workflows/workstreams-version.yml` runs the same checks as
-`just check`, calling `tools/plugin_version.py` directly so the logic
-lives in exactly one place.
+`.github/workflows/workstreams-version.yml` runs the version and guide
+checks, calling `tools/plugin_version.py` directly so the logic lives in
+exactly one place. `.github/workflows/workstreams-tests.yml` runs the
+engine suites on any change under `skills/`, `hooks/`, or `tests/`.
+
+`just check` runs everything both workflows do.
