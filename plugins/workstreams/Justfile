@@ -1,63 +1,43 @@
+tool := justfile_directory() / "../../tools/plugin_version.py"
+plugin := justfile_directory()
+guide := justfile_directory() / "skills/ws-guide/assets/WORKSTREAMS-GUIDE"
+
 # Regenerate the Workstreams guide PDF from its HTML source.
-# The version line in the HTML is injected from plugin.json, whose
-# version is derived as max() of the per-skill metadata.version.
-# After bumping a skill, run `just sync-plugin-version` first.
+# The stamped version is major.minor, so patch releases need no
+# regen. Bump first, then regenerate.
 gen-guide-pdf:
     #!/usr/bin/env bash
     set -euo pipefail
-    dir="{{justfile_directory()}}/skills/ws-guide/assets"
-    version=$(jq -r .version "{{justfile_directory()}}/.claude-plugin/plugin.json")
+    version=$(python3 "{{tool}}" series "{{plugin}}")
     stamp=$(date +"%B %Y")
     sed -i '' -E "s|<p class=\"version\">Version [^<]*</p>|<p class=\"version\">Version $version · $stamp</p>|" \
-        "$dir/WORKSTREAMS-GUIDE.html"
+        "{{guide}}.html"
     chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     "$chrome" --headless --disable-gpu --no-pdf-header-footer \
-        --print-to-pdf="$dir/WORKSTREAMS-GUIDE.pdf" \
-        "file://$dir/WORKSTREAMS-GUIDE.html"
-    echo "wrote $dir/WORKSTREAMS-GUIDE.pdf (version $version)"
+        --print-to-pdf="{{guide}}.pdf" "file://{{guide}}.html"
+    echo "wrote {{guide}}.pdf (version $version)"
 
-# Fail when the guide HTML's version line disagrees with plugin.json.
-# CI runs this; fix by running `just gen-guide-pdf` and committing.
+# Fail when the guide's stamp disagrees with plugin.json's series.
 check-guide:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    version=$(jq -r .version "{{justfile_directory()}}/.claude-plugin/plugin.json")
-    if grep -q "Version $version" "{{justfile_directory()}}/skills/ws-guide/assets/WORKSTREAMS-GUIDE.html"; then
-        echo "guide version OK ($version)"
-    else
-        echo "guide version drift: plugin.json=$version, HTML has:" >&2
-        grep -o "Version [^<]*" "{{justfile_directory()}}/skills/ws-guide/assets/WORKSTREAMS-GUIDE.html" >&2
-        echo "run: just gen-guide-pdf" >&2
-        exit 1
-    fi
+    python3 "{{tool}}" check-guide "{{plugin}}" "{{guide}}.html"
 
-# Set plugin.json version to max() of every skill's metadata.version.
-# Skills are the source of truth; the plugin umbrella tracks the
-# highest. Run after bumping any skill's version.
-sync-plugin-version:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    dir="{{justfile_directory()}}"
-    max=$(grep -hE '^[[:space:]]*version:[[:space:]]*"' "$dir"/skills/*/SKILL.md \
-        | sed -E 's/.*"([^"]+)".*/\1/' | sort -V | tail -1)
-    plugin="$dir/.claude-plugin/plugin.json"
-    tmp=$(mktemp)
-    jq --arg v "$max" '.version = $v' "$plugin" > "$tmp" && mv "$tmp" "$plugin"
-    echo "plugin.json version = $max"
+# Apply the highest-severity skill bump to the plugin version and
+# rewrite the snapshot. A no-op when no skill version moved. Run it
+# once, last, before finalizing: interleaving skill edits with runs
+# accumulates increments.
+bump-plugin-version:
+    python3 "{{tool}}" bump "{{plugin}}"
 
-# Fail when plugin.json version disagrees with max() of skill versions.
-# CI runs this; fix by running `just sync-plugin-version` and committing.
+# Fail when plugin.json disagrees with what the snapshot plus the
+# live skill versions imply.
 check-plugin-version:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    dir="{{justfile_directory()}}"
-    max=$(grep -hE '^[[:space:]]*version:[[:space:]]*"' "$dir"/skills/*/SKILL.md \
-        | sed -E 's/.*"([^"]+)".*/\1/' | sort -V | tail -1)
-    have=$(jq -r .version "$dir/.claude-plugin/plugin.json")
-    if [ "$have" = "$max" ]; then
-        echo "plugin version OK ($have = max skill version)"
-    else
-        echo "plugin version drift: plugin.json=$have, max skill version=$max" >&2
-        echo "run: just sync-plugin-version" >&2
-        exit 1
-    fi
+    python3 "{{tool}}" check "{{plugin}}"
+
+# Force a plugin version into both plugin.json and the snapshot.
+# The escape hatch for a deliberate promotion, such as 1.0.0.
+set-plugin-version version:
+    python3 "{{tool}}" set "{{plugin}}" "{{version}}"
+
+# Every check CI runs.
+check: check-plugin-version check-guide
+    python3 -m unittest discover -s "{{justfile_directory()}}/../../tools/tests"
