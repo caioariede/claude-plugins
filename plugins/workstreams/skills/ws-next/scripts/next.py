@@ -2,9 +2,11 @@
 """ws-next — recommend the next workstream action, deterministically.
 
 Resolves the workstream + PR state via ws_cli, ranks every runnable move
-in the shared engine (ws_store.decide_next), and prints them numbered
-with the default first. The skill relays this and drives the interactive
-Chain (flavor hook / where to run it); the script only decides.
+in the shared engine (ws_store.decide_next), and prints them in rank
+order with the first marked default. Ordinals are deliberately absent:
+the skill's picker owns the numbers on screen. The skill relays this and
+drives the interactive Chain (unit pick, then the flavor hook); the
+script only decides.
 
 Usage: next.py [ws-id]
 Exit 2 with a machine-readable first line when the caller must pick.
@@ -31,12 +33,12 @@ def render_decision(d: S.Decision) -> str:
     lines = []
     if d.headline:
         lines.append(d.headline)
-    for i, m in enumerate(d.moves, 1):
-        mark = "   [default]" if i == 1 else ""
+    for i, m in enumerate(d.moves):
+        mark = "   [default]" if i == 0 else ""
         tail = f"   run={m.command}"
         if m.branch:
             tail += f"   branch={m.branch}"
-        lines.append(f"{i}. {m.unit} — {_VERB[m.rule]}: {m.why}{mark}{tail}")
+        lines.append(f"  {m.unit} — {_VERB[m.rule]}: {m.why}{mark}{tail}")
     if d.command and not d.moves:
         bits = [f"unit: {d.unit}"] if d.unit else []
         if d.branch:

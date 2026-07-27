@@ -604,13 +604,33 @@ class NextEndToEnd(unittest.TestCase):
                         "b": {"progress": "## Tasks\n- [x] T1  x\n"}})
         out = N.generate(store, "2026-01-01-demo", {"feat-a-2": None,
                                                     "b": None})
-        self.assertIn("1. b — ship it: tasks done, no PR   [default]"
+        self.assertIn("  b — ship it: tasks done, no PR   [default]"
                       "   run=ws-resume b   branch=b", out)
-        self.assertIn("2. a — advance: 1 of 2 tasks left"
+        self.assertIn("  a — advance: 1 of 2 tasks left"
                       "   run=ws-resume a   branch=feat-a-2", out)
-        self.assertIn('3. p — start: "do it", stacks on b'
+        self.assertIn('  p — start: "do it", stacks on b'
                       '   run=ws-start 2026-01-01-demo "do it" --base b', out)
+        # Rank rides line order now that no ordinal carries it.
+        self.assertLess(out.index("  b — ship it"), out.index("  a — advance"))
+        self.assertLess(out.index("  a — advance"), out.index("  p — start"))
         self.assertNotIn("Next:", out)
+        tmp.cleanup()
+
+    def test_move_lines_carry_no_ordinals(self):
+        # Every number on screen belongs to the live picker; a numbered
+        # move list collides with its option numbers.
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(store, "2026-01-01-demo",
+                 units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2',
+                                 'b  "B"  repo=o/r  branch=b'),
+                 backlog_md="## Planned units\n- [ ] p  base=b  — do it\n",
+                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"},
+                        "b": {"progress": "## Tasks\n- [x] T1  x\n"}})
+        out = N.generate(store, "2026-01-01-demo", {"feat-a-2": None,
+                                                    "b": None})
+        for line in out.splitlines():
+            self.assertNotRegex(line, r"^\s*\d+\.")
         tmp.cleanup()
 
     def test_start_move_carries_no_branch(self):
@@ -619,7 +639,7 @@ class NextEndToEnd(unittest.TestCase):
         write_ws(store, "2026-01-01-demo",
                  backlog_md="## Planned units\n- [ ] p  base=master  — do it\n")
         out = N.generate(store, "2026-01-01-demo", {})
-        self.assertIn('1. p — start: "do it"   [default]'
+        self.assertIn('  p — start: "do it"   [default]'
                       '   run=ws-start 2026-01-01-demo "do it"', out)
         self.assertNotIn("branch=", out)
         tmp.cleanup()
