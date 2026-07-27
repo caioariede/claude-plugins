@@ -630,6 +630,7 @@ class Decision:
     rule: str                       # restack|ship|resume|start|triage-*|done
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
     unit: Optional[str] = None      # unit slug when the command is unit-scoped
+    branch: Optional[str] = None    # ledger branch; None until a worktree exists
     also: List[str] = field(default_factory=list)      # parallel-startable
     blocked: List[str] = field(default_factory=list)   # "<unit> — needs ..."
     open_items: List[str] = field(default_factory=list)
@@ -662,16 +663,17 @@ def decide_next(ws: Workstream) -> Decision:
             labels.append(lab)
         blocked_lines.append(f"{u.slug} — needs {', '.join(labels)}")
 
-    def out(rule, command=None, unit=None, also=None, open_items=None,
-            headline=""):
-        return Decision(rule=rule, command=command, unit=unit, also=also or [],
+    def out(rule, command=None, unit=None, branch=None, also=None,
+            open_items=None, headline=""):
+        return Decision(rule=rule, command=command, unit=unit,
+                        branch=branch or None, also=also or [],
                         blocked=blocked_lines, open_items=open_items or [],
                         headline=headline)
 
     # 1 — branch drifted off its recorded base (retarget / base merged).
     for u in ws.units:
         if u.status not in ("merged", "dropped") and _drifted(u):
-            return out("restack", f"ws-restack {u.slug}", u.slug,
+            return out("restack", f"ws-restack {u.slug}", u.slug, u.branch,
                        headline="base moved; rebase before proceeding")
 
     # In-flight units, critical path first: one that unblocks others beats
@@ -683,13 +685,13 @@ def decide_next(ws: Workstream) -> Decision:
     # 2 — tasks all checked but no PR: ship it (ws-resume opens the PR).
     for u in ordered:
         if u.code_complete and not u.pr:
-            return out("ship", f"ws-resume {u.slug}", u.slug,
+            return out("ship", f"ws-resume {u.slug}", u.slug, u.branch,
                        headline="tasks done, no PR — ship it")
 
     # 3 — in progress (building/in-review, not blocked): advance it.
     if ordered:
         u = ordered[0]
-        return out("resume", f"ws-resume {u.slug}", u.slug,
+        return out("resume", f"ws-resume {u.slug}", u.slug, u.branch,
                    headline="advance the in-flight unit")
 
     # 4 — a startable planned unit (needs satisfied, no ledger line yet).
@@ -716,7 +718,7 @@ def decide_next(ws: Workstream) -> Decision:
                     in ("dropped", "removed")]
             cmd = (f"ws-block {u.slug} clear {nids[0]}" if nids
                    else f"ws-restack {u.slug}")
-            return out("triage-dropped", cmd, u.slug,
+            return out("triage-dropped", cmd, u.slug, u.branch,
                        headline="blocker dropped/removed — re-point or clear")
 
     # 5 — no runnable step, but open backlog / blocked units remain: triage.

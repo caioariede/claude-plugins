@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Decides the next action; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -27,7 +27,7 @@ python3 <this-skill-dir>/scripts/next.py [ws-id]
 Print the script's stdout as-is. Its shape:
 
 - a one-line headline (why this is the next move),
-- `Next: <command>   (unit: <slug>)` — the action to run, already fully resolved (every argument literal, no `<placeholder>` left in),
+- `Next: <command>   (unit: <slug>, branch: <branch>)` — the action to run, already fully resolved (every argument literal, no `<placeholder>` left in). `branch:` is the unit's ledger branch; it is absent when the unit has none yet (a `ws-start` recommendation — no worktree exists),
 - `Also unblocked (parallel): <slug>, <slug>` — only when more than one unit is startable now,
 - `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
 - `Open backlog:` + a list — triage/done states only, where there is no `Next:` line.
@@ -40,4 +40,4 @@ Same as ws-board — the first stderr token says why: `MANY_WORKSTREAMS <list>` 
 
 ## Chain
 
-When the script emits a `Next:` command, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) — fill `<unit>`/`<branch>` from the named unit and `<command>` from the `Next:` line verbatim. The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). No active flavor defines the hook → default: offer to run it now (default yes), then run it — it works from the current session. A triage or done state (no `Next:`) has no runnable command — skip the hook, present the items, and stop. Name the unit for a unit-scoped command so a parallel-session user knows which one.
+When the script emits a `Next:` command, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) — fill `<unit>` and `<branch>` from the `Next:` line's tail and `<command>` from that line verbatim. No `branch:` in the tail leaves `<branch>` unfillable, so instructions naming it drop out (SPEC §Flavor hooks) — the worktree does not exist yet, and `ws-start` fires its own `hook-ws-start-after` once it does. The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). No active flavor defines the hook → default: offer to run it now (default yes), then run it — it works from the current session. A triage or done state (no `Next:`) has no runnable command — skip the hook, present the items, and stop. Name the unit for a unit-scoped command so a parallel-session user knows which one.

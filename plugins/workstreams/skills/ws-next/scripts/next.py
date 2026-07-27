@@ -26,7 +26,10 @@ def render_decision(d: S.Decision) -> str:
     if d.headline:
         lines.append(d.headline)
     if d.command:
-        tail = f"   (unit: {d.unit})" if d.unit else ""
+        bits = [f"unit: {d.unit}"] if d.unit else []
+        if d.branch:
+            bits.append(f"branch: {d.branch}")
+        tail = f"   ({', '.join(bits)})" if bits else ""
         lines.append(f"Next: {d.command}{tail}")
     if d.also:
         lines.append("Also unblocked (parallel): " + ", ".join(d.also))

@@ -431,6 +431,28 @@ class DecideNext(unittest.TestCase):
         self.assertEqual(d.rule, "resume")          # advance the blocker
         self.assertTrue(any("dep — needs base" in b for b in d.blocked))
 
+    def test_unit_scoped_rules_carry_the_ledger_branch(self):
+        u = S.Unit(slug="a", branch="feat-a", tasks_total=2, tasks_done=1)
+        self.assertEqual(S.decide_next(self._ws([u])).branch, "feat-a")
+
+    def test_restack_carries_the_ledger_branch(self):
+        u = S.Unit(slug="top", branch="top-2", tasks_total=1, tasks_done=1,
+                   pr=pr(5, "OPEN", False, "master"),
+                   log=[("t", "created", "base=feat-base")])
+        d = S.decide_next(self._ws([u]))
+        self.assertEqual((d.rule, d.branch), ("restack", "top-2"))
+
+    def test_start_has_no_branch(self):
+        ws = self._ws([], planned=[
+            S.PlannedUnit(slug="p", base="master", what="x")])
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "start")
+        self.assertIsNone(d.branch)
+
+    def test_branchless_ledger_line_reports_none(self):
+        u = S.Unit(slug="a", tasks_total=2, tasks_done=1)
+        self.assertIsNone(S.decide_next(self._ws([u])).branch)
+
 
 class NextEndToEnd(unittest.TestCase):
     def test_resume_in_flight_from_disk(self):
@@ -441,6 +463,26 @@ class NextEndToEnd(unittest.TestCase):
                  units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"}})
         out = N.generate(store, "2026-01-01-demo", {"a": None})
         self.assertIn("Next: ws-resume a", out)
+        tmp.cleanup()
+
+    def test_tail_prints_the_branch_when_the_worktree_exists(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(store, "2026-01-01-demo",
+                 units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2'),
+                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"}})
+        out = N.generate(store, "2026-01-01-demo", {"feat-a-2": None})
+        self.assertIn("Next: ws-resume a   (unit: a, branch: feat-a-2)", out)
+        tmp.cleanup()
+
+    def test_tail_omits_branch_for_a_start_recommendation(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(store, "2026-01-01-demo",
+                 backlog_md="## Planned units\n- [ ] p  base=master  — do it\n")
+        out = N.generate(store, "2026-01-01-demo", {})
+        self.assertIn('Next: ws-start 2026-01-01-demo "do it"   (unit: p)', out)
+        self.assertNotIn("branch:", out)
         tmp.cleanup()
 
 

@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.11.0 · July 2026</p>
+    <p class="version">Version 0.12.0 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -673,6 +673,7 @@ hook-ws-next-after.choices.h      = &lt;command&gt;
 hook-ws-next-after.choices.h.desc = Yes, here
 hook-ws-next-after.choices.n      =
 hook-ws-next-after.choices.n.desc = No</pre>
+<p>An option whose instruction names something the skill can't supply is dropped from the pick. When <code>ws-next</code> recommends <code>ws-start</code>, the unit has no branch yet, so "Yes, in a new window" disappears and the pick narrows to here-or-no — <code>ws-start</code> offers the window itself once the worktree exists.</p>
 <aside class="note note-tip"><b>Silence or force it to taste.</b> In your store <code>flavors.ini</code>, set <code>hook-ws-start-after.prompt =</code> (empty) to always open without asking, or <code>hook-ws-start-after =</code> (empty) to never open — one line each, merged over the built-in. The same levers work on <code>hook-ws-next-after</code> and its <code>.choices.*</code> keys.</aside>
 
 <h3 id="spec-watch">Spec-watch: from spec to workstream</h3>
