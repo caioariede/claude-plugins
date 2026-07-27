@@ -51,6 +51,19 @@ def pr(number, state="OPEN", is_draft=False, base="master"):
     return S.PR(number=number, state=state, is_draft=is_draft, base=base)
 
 
+def mkws(units=None, planned=None, wfs=None, ws_id="2026-01-01-demo"):
+    ws = S.Workstream(ws_id=ws_id, name="demo")
+    ws.units = units or []
+    ws.planned = planned or []
+    ws.wf_followups = wfs or []
+    return ws
+
+
+def moves_of(ws):
+    S.derive_status(ws)
+    return S.enumerate_moves(ws, {u.slug: u for u in ws.units})
+
+
 class ParseLog(unittest.TestCase):
     def test_dropped_kind_not_substring(self):
         log = ("- 2026-01-01T00:00Z  created base=master\n"
@@ -340,6 +353,96 @@ class RecordedBase(unittest.TestCase):
     def test_none_without_a_base_line(self):
         u = S.Unit(slug="x", log=[("t1", "note", "hi")])
         self.assertIsNone(S.recorded_base(u))
+
+
+class EnumerateMoves(unittest.TestCase):
+    def test_every_in_flight_unit_gets_a_move(self):
+        a = S.Unit(slug="a", branch="a", tasks_total=5, tasks_done=2)
+        b = S.Unit(slug="b", branch="b", tasks_total=3, tasks_done=1)
+        ms = moves_of(mkws([a, b]))
+        self.assertEqual([m.unit for m in ms], ["a", "b"])
+        self.assertEqual({m.rule for m in ms}, {"resume"})
+
+    def test_resume_why_counts_remaining_tasks(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=5, tasks_done=2)
+        self.assertEqual(moves_of(mkws([u]))[0].why, "3 of 5 tasks left")
+
+    def test_unit_without_tasks_says_so(self):
+        u = S.Unit(slug="a", branch="a")
+        self.assertEqual(moves_of(mkws([u]))[0].why, "no tasks planned yet")
+
+    def test_one_move_per_unit_ship_beats_resume(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=2)
+        ms = moves_of(mkws([u]))
+        self.assertEqual([(m.unit, m.rule, m.why) for m in ms],
+                         [("a", "ship", "tasks done, no PR")])
+
+    def test_blocked_unit_emits_no_move(self):
+        base = S.Unit(slug="base", branch="base", tasks_total=2, tasks_done=1)
+        dep = S.Unit(slug="dep", branch="dep", needs=[S.Need("N1", "base")])
+        self.assertEqual([m.unit for m in moves_of(mkws([base, dep]))],
+                         ["base"])
+
+    def test_blocked_but_drifted_unit_still_restacks(self):
+        base = S.Unit(slug="base", branch="base", tasks_total=2, tasks_done=1)
+        dep = S.Unit(slug="dep", branch="dep", needs=[S.Need("N1", "base")],
+                     pr=pr(2, "OPEN", True, "master"),
+                     log=[("t", "created", "base=base")])
+        ms = moves_of(mkws([base, dep]))
+        self.assertEqual([(m.unit, m.rule) for m in ms],
+                         [("dep", "restack"), ("base", "resume")])
+        self.assertEqual(ms[0].why, "base moved off base")
+
+    def test_merged_and_dropped_units_emit_nothing(self):
+        merged = S.Unit(slug="m", branch="m", tasks_total=1, tasks_done=1,
+                        pr=pr(1, "MERGED"))
+        gone = S.Unit(slug="g", branch="g", dropped=True)
+        self.assertEqual(moves_of(mkws([merged, gone])), [])
+
+    def test_startable_planned_becomes_a_start_move(self):
+        ws = mkws(planned=[S.PlannedUnit(slug="p", base="feat-b",
+                                         what="do the thing")])
+        m = moves_of(ws)[0]
+        self.assertEqual((m.unit, m.rule, m.branch), ("p", "start", None))
+        self.assertEqual(
+            m.command,
+            'ws-start 2026-01-01-demo "do the thing" --base feat-b')
+        self.assertEqual(m.why, '"do the thing", stacks on feat-b')
+
+    def test_planned_on_the_default_branch_has_no_base_flag(self):
+        ws = mkws(planned=[S.PlannedUnit(slug="p", base="master", what="x")])
+        m = moves_of(ws)[0]
+        self.assertEqual(m.command, 'ws-start 2026-01-01-demo "x"')
+        self.assertEqual(m.why, '"x"')
+
+    def test_planned_blocked_by_needs_emits_nothing(self):
+        base = S.Unit(slug="base", branch="base", tasks_total=2, tasks_done=1)
+        ws = mkws([base], planned=[S.PlannedUnit(slug="p", base="base",
+                                                 what="x")])
+        self.assertEqual([m.unit for m in moves_of(ws)], ["base"])
+
+    def test_rank_orders_restack_ship_resume_start(self):
+        drift = S.Unit(slug="d", branch="d", tasks_total=1, tasks_done=1,
+                       pr=pr(9, "OPEN", False, "master"),
+                       log=[("t", "created", "base=feat-x")])
+        shipit = S.Unit(slug="s", branch="s", tasks_total=1, tasks_done=1)
+        going = S.Unit(slug="g", branch="g", tasks_total=4, tasks_done=1)
+        ws = mkws([shipit, going, drift],
+                  planned=[S.PlannedUnit(slug="p", base="master", what="x")])
+        self.assertEqual([m.rule for m in moves_of(ws)],
+                         ["restack", "ship", "resume", "start"])
+
+    def test_equal_rule_ranks_by_dependents_then_ledger(self):
+        a = S.Unit(slug="a", branch="a", tasks_total=4, tasks_done=1)
+        b = S.Unit(slug="b", branch="b", tasks_total=4, tasks_done=1)
+        c = S.Unit(slug="c", branch="c", needs=[S.Need("N1", "b")])
+        ms = moves_of(mkws([a, b, c]))
+        self.assertEqual([m.unit for m in ms], ["b", "a"])
+
+    def test_planned_keep_backlog_order(self):
+        ws = mkws(planned=[S.PlannedUnit(slug="p1", base="master", what="one"),
+                           S.PlannedUnit(slug="p2", base="master", what="two")])
+        self.assertEqual([m.unit for m in moves_of(ws)], ["p1", "p2"])
 
 
 class DecideNext(unittest.TestCase):

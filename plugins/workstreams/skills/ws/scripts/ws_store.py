@@ -626,6 +626,64 @@ def _dependents(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> int:
 
 
 @dataclass
+class Move:
+    unit: str                       # unit slug (ledger unit or planned)
+    rule: str                       # restack|ship|resume|start
+    command: str                    # resolved ws-* command
+    branch: Optional[str] = None    # None until a worktree exists
+    why: str = ""                   # short display phrase
+
+
+# Rule priority for ranking: a rebase unblocks everything downstream,
+# a finished unit is one PR away, work in flight beats work not begun.
+_RULE_RANK = {"restack": 0, "ship": 1, "resume": 2, "start": 3}
+
+
+def enumerate_moves(ws: Workstream,
+                    by_slug: Dict[str, Unit]) -> List[Move]:
+    """Every move runnable right now, ranked: at most one per unit,
+    ordered by rule priority, then dependents (critical path first),
+    then source order. moves[0] is the router's default."""
+    ranked: List[Tuple[Tuple[int, int, int], Move]] = []
+
+    for i, u in enumerate(ws.units):
+        if u.status in ("merged", "dropped"):
+            continue
+        deps = -_dependents(u, ws, by_slug)
+        if _drifted(u):
+            ranked.append(((_RULE_RANK["restack"], deps, i),
+                           Move(u.slug, "restack", f"ws-restack {u.slug}",
+                                u.branch or None,
+                                f"base moved off {recorded_base(u)}")))
+            continue
+        if u.status not in ("building", "in-review"):
+            continue                # blocked: the blocker moves first
+        if u.code_complete and not u.pr:
+            ranked.append(((_RULE_RANK["ship"], deps, i),
+                           Move(u.slug, "ship", f"ws-resume {u.slug}",
+                                u.branch or None, "tasks done, no PR")))
+        else:
+            why = (f"{u.tasks_total - u.tasks_done} of {u.tasks_total} "
+                   "tasks left" if u.tasks_total else "no tasks planned yet")
+            ranked.append(((_RULE_RANK["resume"], deps, i),
+                           Move(u.slug, "resume", f"ws-resume {u.slug}",
+                                u.branch or None, why)))
+
+    for j, p in enumerate(_startable_planned(ws, by_slug)):
+        what = p.what or p.slug
+        cmd = f'ws-start {ws.ws_id} "{what}"'
+        why = f'"{_gist(what)}"'
+        if p.base and p.base not in DEFAULT_BRANCHES:
+            cmd += f" --base {p.base}"
+            why += f", stacks on {p.base}"
+        ranked.append(((_RULE_RANK["start"], 0, j),
+                       Move(p.slug, "start", cmd, None, why)))
+
+    ranked.sort(key=lambda pair: pair[0])
+    return [m for _key, m in ranked]
+
+
+@dataclass
 class Decision:
     rule: str                       # restack|ship|resume|start|triage-*|done
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
