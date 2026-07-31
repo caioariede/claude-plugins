@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.16 · July 2026</p>
+    <p class="version">Version 0.17 · July 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -451,6 +451,7 @@
       <li class="toc-sub"><a href="#install-skills-cli">Agent Skills CLI (skills.sh)</a></li>
       <li class="toc-sub"><a href="#install-marketplace">Claude Code marketplace</a></li>
       <li><a href="#commands">The workflow commands</a></li>
+      <li><a href="#focus">Focus, backlog &amp; follow-ups</a></li>
       <li><a href="#flavors">Flavors</a></li>
       <li class="toc-sub"><a href="#customizing">Customizing</a></li>
       <li class="toc-sub"><a href="#flavor-hooks">Flavor hooks</a></li>
@@ -464,6 +465,8 @@
 <section id="idea"><h2>The idea</h2><p class="lead">A workstream is one feature split into many small units of work, each living in its own throwaway git worktree.</p><p>When a feature is too big for a single branch, you break it into <b>units</b> — a slice, a follow-up, a stacked layer. Each unit gets an isolated git worktree and branch of its own, so units never step on each other and can be built, reviewed, and merged independently. The worktree is a pure code checkout: a scratch space you can create, abandon, and recreate at will.</p><p>The catch is that a checkout can vanish — dropped, garbage-collected, or replaced — so nothing you care about keeping can live inside it. Every durable datum — a unit's charter of intent, its progress and follow-ups, its history of decisions and restacks, and its identity map from unit to repo and branch — lives in a single <b>global store</b> under <code>~/.local/share/workstreams/</code>, one directory per workstream, shared across repos. Volatile facts that git and GitHub already own (current branch, base, PR number, status) are never copied in; they are derived live.</p><pre class="diagram">~/.local/share/workstreams/&lt;ws-id&gt;/
   workstream.md          # metadata only
   units.md               # append-only ledger (unit ↔ repo/branch identity map)
+  backlog.md             # planned units + deferred follow-ups
+  focus.md               # outcome queue (steers ws-next proposals)
   units/&lt;unit-id&gt;/
     charter.md           # STATIC: why this unit exists — the north star
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
@@ -529,7 +532,7 @@ $ /ws-config set spec-driven-development superpowers</pre>
 <div class="cmd-head"><span class="cmd-name">ws-init</span><span class="cmd-sig">&lt;workstream name&gt;</span></div>
 <p class="cmd-when"><b>Use when</b> you need a new workstream and none exists yet — before starting any unit with <code>ws-start</code>.</p>
 <div class="cmd-body">
-Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, the <code>units/</code> directory, and an empty <code>backlog.md</code>. Sets up the container only — it creates no unit, no planned unit, and no worktree, and it never reads <code>design:</code> to invent a unit breakdown. The design stays the live source of the split; <code>ws-next</code> consults it when there is nothing else to do.
+Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, the <code>units/</code> directory, an empty <code>backlog.md</code>, and an empty <code>focus.md</code>. Sets up the container only — it creates no unit, no planned unit, and no worktree, and it never reads <code>design:</code> to invent a unit breakdown. The design stays the live source of the split; <code>ws-next</code> consults it when there is nothing else to do.
 </div>
 <pre class="cmd-ex">$ /ws-init task templates</pre>
 </div>
@@ -556,7 +559,7 @@ With no argument, infers the unit from the current worktree's branch. Ensures th
 <div class="cmd-head"><span class="cmd-name">ws-board</span><span class="cmd-sig">[ws-id] [unit-id]</span></div>
 <p class="cmd-when"><b>Use when</b> you want to see or share where a workstream stands — "show the board", "what's done", "workstream status".</p>
 <div class="cmd-body">
-Reads the ledger, derives each unit's status and task counts, and renders copy-paste-ready markdown grouped by state (Done, In progress, Blocked, Not started, Dropped) with open follow-ups listed across units. Given a <code>unit-id</code>, prints that unit's full checklist and recent notes.
+Reads the ledger, derives each unit's status and task counts, and renders copy-paste-ready markdown grouped by state (Done, In progress, Blocked, Not started, Dropped) with open follow-ups listed across units. When an outcome is active in <code>focus.md</code>, a <code>Focus:</code> line appears above the table. Given a <code>unit-id</code>, prints that unit's full checklist and recent notes.
 </div>
 <pre class="cmd-ex">$ /ws-board 2026-07-03-task-templates</pre>
 </div>
@@ -578,9 +581,20 @@ Adds or removes a unit's <b>needs</b> in its <code>progress.md</code> <code>## N
 <div class="cmd-head"><span class="cmd-name">ws-backlog</span><span class="cmd-sig">"&lt;what&gt;" [--defer | --here | --plan --base &lt;x&gt; [--needs a,b]] [--to &lt;unit&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> future work surfaces mid-workstream and needs capturing — a bug or follow-up out of scope for the unit you're in, a "we should also do X later" idea, or a whole unit worth planning.</p>
 <div class="cmd-body">
-Routes the item to its one correct home so nothing orphans: a unit's <code>progress.md</code> <code>## Follow-ups</code> (<code>F&lt;n&gt;</code>, fixed before this unit's PR merges), the workstream's <code>backlog.md</code> <code>## Follow-ups</code> (<code>WF&lt;n&gt;</code>, deferred), or <code>backlog.md</code> <code>## Planned units</code> (a future unit). Inside a unit it asks the one thing it can't derive — resolve before this PR merges? — while flags decide it non-interactively. It never writes <code>## Tasks</code>: the plan comes from planning, not by hand.
+Routes the item to its one correct home so nothing orphans: a unit's <code>progress.md</code> <code>## Follow-ups</code> (<code>F&lt;n&gt;</code>, fixed before this unit's PR merges), the workstream's <code>backlog.md</code> <code>## Follow-ups</code> (<code>WF&lt;n&gt;</code>, deferred), or <code>backlog.md</code> <code>## Planned units</code> (a dependency reservation for a future unit — records <code>base=</code>/<code>needs=</code>, not a roadmap slice <code>ws-next</code> will auto-start). Inside a unit it asks the one thing it can't derive — resolve before this PR merges? — while flags decide it non-interactively. It never writes <code>## Tasks</code>: the plan comes from planning, not by hand.
 </div>
 <pre class="cmd-ex">$ /ws-backlog "retry backoff is wrong" --defer</pre>
+</div>
+
+<div class="cmd">
+<div class="cmd-head"><span class="cmd-name">ws-focus</span><span class="cmd-sig">show | add "&lt;outcome&gt;" | activate &lt;slug&gt; | done [slug] [ws-id]</span></div>
+<p class="cmd-when"><b>Use when</b> you want to name what the workstream is aiming for next — a demo milestone, a user-visible outcome, or a north-star slice — and steer what <code>ws-next</code> proposes.</p>
+<div class="cmd-body">
+Maintains <code>focus.md</code> — a manual outcome queue, separate from units and backlog. One line is <b>active</b> (<code>[&gt;]</code>) at a time; the rest are queued (<code>[ ]</code>) or recently done (<code>[x]</code>, last three kept). Nothing auto-advances — you activate the next outcome explicitly. <code>add</code> appends and promotes to active when none is set; <code>activate</code> switches which outcome is active; <code>done</code> marks one complete. Workstream-scoped, store-only.
+</div>
+<pre class="cmd-ex">$ /ws-focus add "user can see a live board"
+$ /ws-focus show
+$ /ws-focus done</pre>
 </div>
 
 <div class="cmd">
@@ -607,7 +621,7 @@ Shows exactly what will be removed and requires explicit confirmation, then remo
 <div class="cmd-head"><span class="cmd-name">ws-next</span><span class="cmd-sig">[ws-id]</span></div>
 <p class="cmd-when"><b>Use when</b> you're unsure which <code>ws-*</code> command or which unit to act on next — after finishing a unit, when a PR merges, or any "what now?" moment.</p>
 <div class="cmd-body">
-Reads the ledger and each unit's live status, then lists every unit you could act on right now — ranked, with one marked as the default — and what each needs. It decides, it doesn't do the work (<code>ws-resume</code> does). Read-only, like <code>ws-board</code>. The list carries no numbers: with more than one move it first asks which unit should move — "not now" leading — and only then where that work should run, a question an active flavor can take over with a <a href="#flavor-hooks">flavor hook</a> and its own choices. Nothing starts on its own.
+Reads the ledger and each unit's live status, then lists every unit you could act on right now — ranked, with one marked as the default — and what each needs. When nothing can move, it proposes the next unit from the design, accumulated follow-ups, or the active focus outcome. It decides, it doesn't do the work (<code>ws-resume</code> does). Read-only, like <code>ws-board</code>. The list carries no numbers: with more than one move it first asks which unit should move — "not now" leading — and only then where that work should run, a question an active flavor can take over with a <a href="#flavor-hooks">flavor hook</a> and its own choices. Nothing starts on its own.
 </div>
 <pre class="cmd-ex">$ /ws-next 2026-07-03-task-templates</pre>
 </div>
@@ -621,6 +635,26 @@ Edits only <code>~/.local/share/workstreams/flavors.ini</code> and the <a href="
 <pre class="cmd-ex">$ /ws-config
 $ /ws-config set worktree-management wmx</pre>
 </div>
+</section>
+<section id="focus"><h2>Focus, backlog &amp; follow-ups</h2>
+<p class="lead">Three store homes capture different kinds of "not done yet" — an outcome you steer toward, a future unit you've reserved, or a follow-up to fix later. They don't overlap: each has its own file, lifecycle, and role in routing.</p>
+
+<table class="grid">
+<thead><tr><th>What</th><th>Where</th><th>Written by</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td><b>Focus outcome</b></td><td><code>focus.md</code> <code>## Focus</code></td><td><code>ws-focus</code></td><td>Steers <code>ws-next</code> proposals — "what are we aiming for?" Not a unit; no branch or PR.</td></tr>
+<tr><td><b>Planned unit</b></td><td><code>backlog.md</code> <code>## Planned units</code></td><td><code>ws-backlog --plan</code></td><td>Dependency reservation for a future <code>ws-start</code> — records <code>base=</code>/<code>needs=</code>. <code>ws-next</code> does <em>not</em> auto-start these; <code>ws-board</code> shows them as not started.</td></tr>
+<tr><td><b>Follow-up</b></td><td>Unit <code>progress.md</code> <code>F&lt;n&gt;</code> or backlog <code>WF&lt;n&gt;</code></td><td><code>ws-backlog</code></td><td>Captured work — a bug, polish item, or "do later." In-unit <code>F&lt;n&gt;</code> closes before the PR merges; deferred <code>WF&lt;n&gt;</code> outlives the unit.</td></tr>
+</tbody>
+</table>
+
+<p><b>Focus</b> is steering, not execution. One outcome is active (<code>[&gt;]</code>) at a time; others queue (<code>[ ]</code>) or sit in recent history (<code>[x]</code>, last three kept). When set, <code>ws-next</code> prefers design-sourced candidates that advance the active focus over non-blocking follow-ups, and <code>ws-board</code> prints a <code>Focus:</code> line above the status table. Nothing promotes or completes a focus line on its own — use <code>ws-focus activate</code> and <code>ws-focus done</code>.</p>
+
+<p><b>Planned units</b> are not a roadmap queue. They record stack and dependency fields so a later <code>ws-start</code> can pick them up with the right <code>base=</code> and <code>needs=</code>. A line disappears from "not started" once a ledger slug matches — no manual check-off.</p>
+
+<p><b>Follow-ups</b> are concrete items, not north-star outcomes. Route in-unit when you'll fix it before merge; defer to the workstream backlog when it can wait. A follow-up unit (<code>claims=</code> on its ledger line) closes a batch without re-proposing them.</p>
+
+<aside class="note note-tip"><b>When to use which.</b> Name the milestone with <code>ws-focus add</code>. Reserve a future unit's dependencies with <code>ws-backlog --plan</code>. Capture a specific bug or polish item with <code>ws-backlog --defer</code> or <code>--here</code>.</aside>
 </section>
 <section id="flavors"><h2>Flavors</h2>
 <p class="lead">External tools are pluggable. The skills never hardwire a worktree tool, a planning methodology, or a forge — each is a <b>flavor</b> you choose, so the same <code>ws-*</code> commands drive whatever you've configured.</p>
@@ -700,13 +734,14 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <tr><th>Command</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger + empty backlog). Run before any unit exists. Creates no unit.</td></tr>
+<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger + empty backlog + empty focus). Run before any unit exists. Creates no unit.</td></tr>
 <tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit.</td></tr>
 <tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, continue its tasks, or ship it — reopening a gone worktree and reconciling base drift as needed.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>
 <tr><td><code>ws-block</code></td><td>Add or remove a unit's needs (dependencies). An unmet need derives the <code>blocked</code> status.</td></tr>
-<tr><td><code>ws-backlog</code></td><td>Capture future work — routes a follow-up (<code>F&lt;n&gt;</code>/<code>WF&lt;n&gt;</code>) or a planned unit to its right home so nothing orphans.</td></tr>
-<tr><td><code>ws-next</code></td><td>List every unit that can move right now, ranked, then ask which unit moves and where it runs. When nothing can move, proposes the next unit from the design or from accumulated follow-ups. Read-only — decides, doesn't do.</td></tr>
+<tr><td><code>ws-backlog</code></td><td>Capture future work — routes a follow-up (<code>F&lt;n&gt;</code>/<code>WF&lt;n&gt;</code>) or a planned unit (dependency reservation) to its right home so nothing orphans.</td></tr>
+<tr><td><code>ws-focus</code></td><td>Maintain the outcome queue in <code>focus.md</code> — set, switch, or complete what the workstream is aiming for; steers <code>ws-next</code> proposals.</td></tr>
+<tr><td><code>ws-next</code></td><td>List every unit that can move right now, ranked, then ask which unit moves and where it runs. When nothing can move, proposes the next unit from focus, the design, or accumulated follow-ups. Read-only — decides, doesn't do.</td></tr>
 <tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
 <tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record. Releases any follow-ups the unit claimed, so they re-open on their own.</td></tr>
 <tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only, and reconciles the spec-watch script.</td></tr>
@@ -716,6 +751,8 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <pre class="diagram">~/.local/share/workstreams/&lt;ws-id&gt;/
 ├── workstream.md          # metadata only (id, name, goal, design)
 ├── units.md               # append-only ledger: unit ↔ repo/branch identity
+├── backlog.md             # planned units + deferred follow-ups
+├── focus.md               # outcome queue (steers ws-next)
 └── units/
     └── &lt;unit-id&gt;/
         ├── charter.md      # STATIC: why this unit exists (the north star)

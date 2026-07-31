@@ -1,5 +1,5 @@
 {
-  "plugin": "0.17.0",
+  "plugin": "0.17.1",
   "skills": {
     "ws": "0.16.0",
     "ws-backlog": "0.1.0",
@@ -8,7 +8,7 @@
     "ws-config": "0.6.0",
     "ws-drop": "0.5.0",
     "ws-focus": "0.1.0",
-    "ws-guide": "0.7.1",
+    "ws-guide": "0.7.2",
     "ws-init": "0.4.0",
     "ws-next": "0.10.0",
     "ws-restack": "0.3.0",
