@@ -34,13 +34,6 @@ def _store() -> Path:
     return Path(env) if env else S.store_root()
 
 
-def _read(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return ""
-
-
 def _focus_path(store: Path, ws_id: str) -> Path:
     return store / ws_id / "focus.md"
 
@@ -48,17 +41,15 @@ def _focus_path(store: Path, ws_id: str) -> Path:
 def _load(store: Path, ws_id: str) -> Tuple[Optional[S.FocusItem],
                                             List[S.FocusItem],
                                             List[S.FocusItem]]:
-    return S.parse_focus(_read(_focus_path(store, ws_id)))
+    return S.parse_focus(S._read(_focus_path(store, ws_id)))
 
 
-def _render(active: Optional[S.FocusItem],
-            queued: List[S.FocusItem],
-            done: List[S.FocusItem]) -> str:
-    lines = ["## Focus"]
-    for item in ([active] if active else []) + queued + done[-3:]:
-        mark = {"active": ">", "queued": " ", "done": "x"}[item.state]
-        lines.append(f"- [{mark}] {item.slug}  — {item.outcome}")
-    return "\n".join(lines) + "\n"
+def _open_slugs(active: Optional[S.FocusItem],
+                queued: List[S.FocusItem]) -> set:
+    slugs = {item.slug for item in queued}
+    if active:
+        slugs.add(active.slug)
+    return slugs
 
 
 def _write(store: Path, ws_id: str,
@@ -67,25 +58,29 @@ def _write(store: Path, ws_id: str,
            done: List[S.FocusItem]) -> None:
     path = _focus_path(store, ws_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_render(active, queued, done), encoding="utf-8")
+    path.write_text(S.render_focus(active, queued, done), encoding="utf-8")
 
 
 def cmd_show(store: Path, ws_id: str) -> str:
     active, queued, done = _load(store, ws_id)
-    return _render(active, queued, done).rstrip("\n")
+    return S.render_focus(active, queued, done).rstrip("\n")
 
 
-def cmd_add(store: Path, ws_id: str, outcome: str) -> str:
+def cmd_add(store: Path, ws_id: str, outcome: str) -> None:
+    outcome = outcome.strip()
+    if not outcome:
+        raise Fail("BAD_ARGS add requires a non-empty outcome")
     slug = S.make_slug(outcome)
     active, queued, done = _load(store, ws_id)
-    item = S.FocusItem(slug=slug, outcome=outcome.strip(), state="queued")
+    if slug in _open_slugs(active, queued):
+        raise Fail(f"DUPLICATE_SLUG focus slug {slug!r} already open")
+    item = S.FocusItem(slug=slug, outcome=outcome, state="queued")
     if active is None:
         item.state = "active"
         active = item
     else:
         queued.append(item)
     _write(store, ws_id, active, queued, done)
-    return slug
 
 
 def cmd_activate(store: Path, ws_id: str, slug: str) -> None:
@@ -143,8 +138,10 @@ def _parse_ws_slug(store: Path, rest: List[str],
     if len(rest) >= 2:
         return _resolve_ws(store, [rest[0]]), rest[1]
     if len(rest) == 1:
-        if slug_optional and len(C.resolve_workstream(store, rest[0])) == 1:
-            return C.resolve_workstream(store, rest[0])[0], None
+        if slug_optional:
+            hits = C.resolve_workstream(store, rest[0])
+            if len(hits) == 1:
+                return hits[0], None
         ws_id = _resolve_ws(store, [])
         return ws_id, rest[0]
     return _resolve_ws(store, []), None
@@ -154,8 +151,9 @@ def _parse_add(store: Path, rest: List[str]) -> Tuple[str, str]:
     if not rest:
         raise Fail("BAD_ARGS add requires an outcome")
     if len(rest) >= 2:
-        if len(C.resolve_workstream(store, rest[0])) == 1:
-            return C.resolve_workstream(store, rest[0])[0], " ".join(rest[1:])
+        hits = C.resolve_workstream(store, rest[0])
+        if len(hits) == 1:
+            return hits[0], " ".join(rest[1:])
         return _resolve_ws(store, []), " ".join(rest)
     return _resolve_ws(store, []), rest[0]
 

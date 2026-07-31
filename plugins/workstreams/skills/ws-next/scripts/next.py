@@ -25,8 +25,7 @@ import ws_cli as C     # noqa: E402
 
 # Display verbs for the four move rules; the ws-* command itself rides
 # the machine tail, which the skill strips before showing the list.
-_VERB = {"restack": "restack", "ship": "ship it",
-         "resume": "advance", "start": "start"}
+_VERB = {"restack": "restack", "ship": "ship it", "resume": "advance"}
 
 
 def render_decision(d: S.Decision) -> str:
@@ -67,12 +66,11 @@ def render_decision(d: S.Decision) -> str:
     if d.design:
         lines.append(f"Design: {d.design}")
     if d.active_focus:
-        f = d.active_focus
-        lines.append(f"ActiveFocus: {f.slug}  — {f.outcome}")
+        lines.append(f"ActiveFocus: {S.focus_item_text(d.active_focus)}")
     if d.focus_queue:
         lines.append("FocusQueue:")
         for f in d.focus_queue:
-            lines.append(f"- {f.slug}  — {f.outcome}")
+            lines.append(f"- {S.focus_item_text(f)}")
     return "\n".join(lines)
 
 

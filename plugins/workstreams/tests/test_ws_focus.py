@@ -32,6 +32,14 @@ class ParseFocus(unittest.TestCase):
     def test_make_slug(self):
         self.assertEqual(S.make_slug("OAuth errors surface!"), "oauth-errors-surface")
 
+    def test_parse_focus_caps_done_history(self):
+        lines = ["## Focus"]
+        for i in range(5):
+            lines.append(f"- [x] d{i}  — out {i}")
+        active, queued, done = S.parse_focus("\n".join(lines) + "\n")
+        self.assertIsNone(active)
+        self.assertEqual([f.slug for f in done], ["d2", "d3", "d4"])
+
 
 class PlannedDemoted(unittest.TestCase):
     def test_planned_no_longer_start_move(self):
@@ -52,6 +60,23 @@ class FocusEmission(unittest.TestCase):
         self.assertIsNotNone(d.active_focus)
         self.assertEqual(d.active_focus.slug, "mvp")
         self.assertEqual(len(d.focus_queue), 1)
+
+    def test_moves_emit_active_focus(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=1, pr=None)
+        ws = S.Workstream(ws_id="2026-01-01-demo", name="demo")
+        ws.units = [u]
+        ws.active_focus = S.FocusItem("mvp", "see shell", "active")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "resume")
+        self.assertIsNotNone(d.active_focus)
+        self.assertEqual(d.active_focus.slug, "mvp")
+
+    def test_suggest_when_only_active_focus(self):
+        ws = S.Workstream(ws_id="2026-01-01-demo", name="demo")
+        ws.active_focus = S.FocusItem("mvp", "see shell", "active")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "suggest")
+        self.assertIn("focus: mvp", d.headline)
 
     def test_next_renders_focus_blocks(self):
         import tempfile
@@ -171,13 +196,26 @@ class FocusScript(unittest.TestCase):
             del os.environ["WS_STORE"]
 
     def test_render_keeps_last_three_done(self):
-        F = self._import_focus()
         done = [S.FocusItem(f"d{i}", f"out {i}", "done") for i in range(5)]
-        text = F._render(None, [], done)
+        text = S.render_focus(None, [], done)
         self.assertIn("d2", text)
         self.assertIn("d4", text)
         self.assertNotIn("d0", text)
         self.assertNotIn("d1", text)
+
+    def test_add_rejects_duplicate_slug(self):
+        from test_ws_board import write_ws
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            os.environ["WS_STORE"] = str(store)
+            F = self._import_focus()
+            write_ws(store, "2026-01-01-demo",
+                     focus_md=("## Focus\n"
+                               "- [ ] oauth-errors  — OAuth errors\n"))
+            with self.assertRaises(F.Fail) as ctx:
+                F.cmd_add(store, "2026-01-01-demo", "OAuth errors!")
+            self.assertIn("DUPLICATE_SLUG", str(ctx.exception))
+            del os.environ["WS_STORE"]
 
     def test_show_renders_focus(self):
         from test_ws_board import write_ws

@@ -110,7 +110,6 @@ class Workstream:
     wf_followups: List[Followup] = field(default_factory=list)  # backlog WF<n>
     active_focus: Optional[FocusItem] = None
     focus_queued: List[FocusItem] = field(default_factory=list)
-    focus_done: List[FocusItem] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +292,7 @@ def make_slug(text: str) -> str:
 
 
 _FOCUS_STATE = {" ": "queued", ">": "active", "x": "done", "X": "done"}
+_FOCUS_MARK = {"active": ">", "queued": " ", "done": "x"}
 
 
 def parse_focus(text: str) -> Tuple[Optional[FocusItem], List[FocusItem],
@@ -326,7 +326,25 @@ def parse_focus(text: str) -> Tuple[Optional[FocusItem], List[FocusItem],
             done.append(item)
         else:
             queued.append(item)
-    return active, queued, done
+    return active, queued, done[-3:]
+
+
+def focus_item_text(item: FocusItem) -> str:
+    return f"{item.slug}  — {item.outcome}"
+
+
+def format_focus_line(item: FocusItem) -> str:
+    mark = _FOCUS_MARK[item.state]
+    return f"- [{mark}] {focus_item_text(item)}"
+
+
+def render_focus(active: Optional[FocusItem],
+                 queued: List[FocusItem],
+                 done: List[FocusItem]) -> str:
+    lines = ["## Focus"]
+    items = ([active] if active else []) + queued + done[-3:]
+    lines.extend(format_focus_line(item) for item in items)
+    return "\n".join(lines) + "\n"
 
 
 def parse_log(text: str) -> List[Tuple[str, str, str]]:
@@ -378,7 +396,7 @@ def load_workstream(ws_dir: Path) -> Workstream:
     ws = Workstream(ws_id=ws_id, name=name, design=design)
     ws.units = parse_units(_read(ws_dir / "units.md"))
     ws.planned, ws.wf_followups = parse_backlog(_read(ws_dir / "backlog.md"))
-    ws.active_focus, ws.focus_queued, ws.focus_done = parse_focus(
+    ws.active_focus, ws.focus_queued, _done = parse_focus(
         _read(ws_dir / "focus.md"))
 
     for u in ws.units:
@@ -750,7 +768,7 @@ def _dependents(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> int:
 @dataclass
 class Move:
     unit: str                       # unit slug (ledger unit or planned)
-    rule: str                       # restack|ship|resume|start
+    rule: str                       # restack|ship|resume
     command: str                    # resolved ws-* command
     branch: Optional[str] = None    # None until a worktree exists
     why: str = ""                   # short display phrase
@@ -758,13 +776,12 @@ class Move:
 
 # Rule priority for ranking: a rebase unblocks everything downstream,
 # a finished unit is one PR away, work in flight beats work not begun.
-_RULE_RANK = {"restack": 0, "ship": 1, "resume": 2, "start": 3}
+_RULE_RANK = {"restack": 0, "ship": 1, "resume": 2}
 
 _RULE_HEADLINE = {
     "restack": "base moved; rebase before proceeding",
     "ship": "tasks done, no PR — ship it",
     "resume": "advance the in-flight unit",
-    "start": "start the next planned unit",
 }
 
 
@@ -819,7 +836,7 @@ class Proposable:
 
 @dataclass
 class Decision:
-    rule: str  # restack|ship|resume|start|triage-*|suggest|empty|done
+    rule: str  # restack|ship|resume|triage-*|suggest|empty|done
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
     unit: Optional[str] = None      # unit slug when the command is unit-scoped
     branch: Optional[str] = None    # ledger branch; None until a worktree exists
@@ -833,14 +850,6 @@ class Decision:
     design: str = ""
     active_focus: Optional[FocusItem] = None
     focus_queue: List[FocusItem] = field(default_factory=list)
-
-
-def _startable_planned(ws: Workstream,
-                       by_slug: Dict[str, Unit]) -> List[PlannedUnit]:
-    ledger = set(by_slug)
-    return [p for p in ws.planned
-            if p.slug not in ledger
-            and not planned_unmet_needs(p, ws, by_slug)]
 
 
 def _followup_blockers(ws: Workstream,
@@ -928,7 +937,9 @@ def decide_next(ws: Workstream) -> Decision:
     if moves:
         top = moves[0]
         return out(top.rule, top.command, top.unit, top.branch, moves,
-                   headline=_RULE_HEADLINE[top.rule])
+                   headline=_RULE_HEADLINE[top.rule],
+                   active_focus=ws.active_focus,
+                   focus_queue=ws.focus_queued)
 
     # triage — a unit blocked ONLY by dropped/removed targets can't clear on
     # its own; route to ws-block ahead of backlog triage (it stays active).
@@ -963,7 +974,7 @@ def decide_next(ws: Workstream) -> Decision:
     # done. `suggest` is strictly last resort — any move above suppresses
     # it, so the router never doubles as a unit-proposal machine.
     proposable = proposable_followups(ws, by_slug)
-    if proposable or ws.design:
+    if proposable or ws.design or ws.active_focus:
         headline = ("focus: {} — propose the next unit".format(
             ws.active_focus.slug)
                     if ws.active_focus
