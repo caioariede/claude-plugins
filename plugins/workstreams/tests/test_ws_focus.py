@@ -208,6 +208,19 @@ class FocusScript(unittest.TestCase):
             self.assertEqual(sum(1 for f in queued if f.state == "active"), 0)
             del os.environ["WS_STORE"]
 
+    def test_add_cli_sole_workstream_quoted_outcome(self):
+        from test_ws_board import write_ws
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            os.environ["WS_STORE"] = str(store)
+            F = self._import_focus()
+            write_ws(store, "2026-01-01-demo", focus_md="## Focus\n")
+            rc = F.main(["add", "ship oauth flow"])
+            self.assertEqual(rc, 0)
+            text = (store / "2026-01-01-demo" / "focus.md").read_text()
+            self.assertIn("- [>] ship-oauth-flow  — ship oauth flow", text)
+            del os.environ["WS_STORE"]
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

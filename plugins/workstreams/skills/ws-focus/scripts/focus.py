@@ -153,11 +153,11 @@ def _parse_ws_slug(store: Path, rest: List[str],
 def _parse_add(store: Path, rest: List[str]) -> Tuple[str, str]:
     if not rest:
         raise Fail("BAD_ARGS add requires an outcome")
-    if len(rest) >= 2 and len(C.resolve_workstream(store, rest[0])) == 1:
-        return C.resolve_workstream(store, rest[0])[0], " ".join(rest[1:])
-    ws_id = _resolve_ws(store, rest[:1] if len(rest) == 1 else [])
-    outcome = rest[0] if len(rest) == 1 else " ".join(rest[1:])
-    return ws_id, outcome
+    if len(rest) >= 2:
+        if len(C.resolve_workstream(store, rest[0])) == 1:
+            return C.resolve_workstream(store, rest[0])[0], " ".join(rest[1:])
+        return _resolve_ws(store, []), " ".join(rest)
+    return _resolve_ws(store, []), rest[0]
 
 
 def main(argv: List[str]) -> int:
