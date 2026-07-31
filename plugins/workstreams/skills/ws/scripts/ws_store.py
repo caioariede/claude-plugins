@@ -791,16 +791,6 @@ def enumerate_moves(ws: Workstream,
                            Move(u.slug, "resume", f"ws-resume {u.slug}",
                                 u.branch or None, why)))
 
-    for j, p in enumerate(_startable_planned(ws, by_slug)):
-        what = p.what or p.slug
-        cmd = f'ws-start {ws.ws_id} "{what}"'
-        why = f'"{_gist(what)}"'
-        if p.base and p.base not in DEFAULT_BRANCHES:
-            cmd += f" --base {p.base}"
-            why += f", stacks on {p.base}"
-        ranked.append(((_RULE_RANK["start"], 0, j),
-                       Move(p.slug, "start", cmd, None, why)))
-
     ranked.sort(key=lambda pair: pair[0])
     return [m for _key, m in ranked]
 

@@ -31,6 +31,15 @@ class ParseFocus(unittest.TestCase):
         self.assertEqual(S.make_slug("OAuth errors surface!"), "oauth-errors-surface")
 
 
+class PlannedDemoted(unittest.TestCase):
+    def test_planned_no_longer_start_move(self):
+        ws = S.Workstream(ws_id="2026-01-01-demo", name="demo")
+        ws.planned = [S.PlannedUnit(slug="p", base="master", what="x")]
+        S.derive_status(ws)
+        moves = S.enumerate_moves(ws, {})
+        self.assertEqual(moves, [])
+
+
 class LoadFocus(unittest.TestCase):
     def test_load_workstream_reads_focus(self):
         import tempfile

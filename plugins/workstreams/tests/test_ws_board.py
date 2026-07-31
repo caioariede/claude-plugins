@@ -68,7 +68,7 @@ def moves_of(ws):
 
 
 def three_move_store(store):
-    """One ship, one advance, one start -> the pr_state map for them."""
+    """One ship, one advance, one planned (no move) -> pr_state map."""
     write_ws(store, "2026-01-01-demo",
              units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2',
                              'b  "B"  repo=o/r  branch=b'),
@@ -420,21 +420,9 @@ class EnumerateMoves(unittest.TestCase):
         gone = S.Unit(slug="g", branch="g", dropped=True)
         self.assertEqual(moves_of(mkws([merged, gone])), [])
 
-    def test_startable_planned_becomes_a_start_move(self):
-        ws = mkws(planned=[S.PlannedUnit(slug="p", base="feat-b",
-                                         what="do the thing")])
-        m = moves_of(ws)[0]
-        self.assertEqual((m.unit, m.rule, m.branch), ("p", "start", None))
-        self.assertEqual(
-            m.command,
-            'ws-start 2026-01-01-demo "do the thing" --base feat-b')
-        self.assertEqual(m.why, '"do the thing", stacks on feat-b')
-
-    def test_planned_on_the_default_branch_has_no_base_flag(self):
+    def test_startable_planned_emits_no_move(self):
         ws = mkws(planned=[S.PlannedUnit(slug="p", base="master", what="x")])
-        m = moves_of(ws)[0]
-        self.assertEqual(m.command, 'ws-start 2026-01-01-demo "x"')
-        self.assertEqual(m.why, '"x"')
+        self.assertEqual(moves_of(ws), [])
 
     def test_planned_blocked_by_needs_emits_nothing(self):
         base = S.Unit(slug="base", branch="base", tasks_total=2, tasks_done=1)
@@ -451,7 +439,7 @@ class EnumerateMoves(unittest.TestCase):
         ws = mkws([shipit, going, drift],
                   planned=[S.PlannedUnit(slug="p", base="master", what="x")])
         self.assertEqual([m.rule for m in moves_of(ws)],
-                         ["restack", "ship", "resume", "start"])
+                         ["restack", "ship", "resume"])
 
     def test_equal_rule_ranks_by_dependents_then_ledger(self):
         a = S.Unit(slug="a", branch="a", tasks_total=4, tasks_done=1)
@@ -463,7 +451,7 @@ class EnumerateMoves(unittest.TestCase):
     def test_planned_keep_backlog_order(self):
         ws = mkws(planned=[S.PlannedUnit(slug="p1", base="master", what="one"),
                            S.PlannedUnit(slug="p2", base="master", what="two")])
-        self.assertEqual([m.unit for m in moves_of(ws)], ["p1", "p2"])
+        self.assertEqual(moves_of(ws), [])
 
 
 class DecideNext(unittest.TestCase):
@@ -511,15 +499,15 @@ class DecideNext(unittest.TestCase):
         ws = self._ws([base], planned=[
             S.PlannedUnit(slug="next-thing", base="base", what="do the thing")])
         d = S.decide_next(ws)
-        self.assertEqual(d.rule, "start")
-        self.assertEqual(d.command,
-                         'ws-start 2026-01-01-demo "do the thing" --base base')
+        self.assertNotEqual(d.rule, "start")
+        self.assertIn("planned: next-thing", d.open_items[0])
 
     def test_rule4_no_base_flag_for_default_branch(self):
         ws = self._ws([], planned=[
             S.PlannedUnit(slug="p", base="master", what="x")])
-        self.assertEqual(S.decide_next(ws).command,
-                         'ws-start 2026-01-01-demo "x"')
+        d = S.decide_next(ws)
+        self.assertNotEqual(d.rule, "start")
+        self.assertIn("planned: p", d.open_items[0])
 
     def test_rule4_lists_parallel_startable(self):
         base = S.Unit(slug="base", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
@@ -527,8 +515,9 @@ class DecideNext(unittest.TestCase):
             S.PlannedUnit(slug="p1", base="master", what="one"),
             S.PlannedUnit(slug="p2", base="master", what="two")])
         d = S.decide_next(ws)
-        self.assertEqual(d.rule, "start")
-        self.assertEqual([m.unit for m in d.moves], ["p1", "p2"])
+        self.assertNotEqual(d.rule, "start")
+        self.assertEqual(d.moves, [])
+        self.assertEqual(len(d.open_items), 2)
 
     def test_default_fields_describe_the_first_move(self):
         a = S.Unit(slug="a", branch="feat-a", tasks_total=4, tasks_done=1)
@@ -587,8 +576,9 @@ class DecideNext(unittest.TestCase):
         ws = self._ws([], planned=[
             S.PlannedUnit(slug="p", base="master", what="x")])
         d = S.decide_next(ws)
-        self.assertEqual(d.rule, "start")
+        self.assertNotEqual(d.rule, "start")
         self.assertIsNone(d.branch)
+        self.assertIn("planned: p", d.open_items[0])
 
     def test_branchless_ledger_line_reports_none(self):
         u = S.Unit(slug="a", tasks_total=2, tasks_done=1)
@@ -856,11 +846,9 @@ class NextEndToEnd(unittest.TestCase):
                       "   run=ws-resume b   branch=b", out)
         self.assertIn("  a — advance: 1 of 2 tasks left"
                       "   run=ws-resume a   branch=feat-a-2", out)
-        self.assertIn('  p — start: "do it", stacks on b'
-                      '   run=ws-start 2026-01-01-demo "do it" --base b', out)
+        self.assertNotIn("p — start", out)
         # Rank rides line order now that no ordinal carries it.
         self.assertLess(out.index("  b — ship it"), out.index("  a — advance"))
-        self.assertLess(out.index("  a — advance"), out.index("  p — start"))
         self.assertNotIn("Next:", out)
         tmp.cleanup()
 
@@ -880,8 +868,9 @@ class NextEndToEnd(unittest.TestCase):
         write_ws(store, "2026-01-01-demo",
                  backlog_md="## Planned units\n- [ ] p  base=master  — do it\n")
         out = N.generate(store, "2026-01-01-demo", {})
-        self.assertIn('  p — start: "do it"   [default]'
-                      '   run=ws-start 2026-01-01-demo "do it"', out)
+        self.assertIn("no active unit; open backlog remains — triage", out)
+        self.assertIn("- planned: p — do it", out)
+        self.assertNotIn("p — start", out)
         self.assertNotIn("branch=", out)
         tmp.cleanup()
 
