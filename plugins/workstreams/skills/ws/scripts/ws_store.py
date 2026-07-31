@@ -569,6 +569,18 @@ class Board:
     total_count: int = 0
     complete: bool = False
     has_blocked: bool = False
+    focus_line: str = ""
+
+
+def focus_line_for(ws: Workstream) -> str:
+    if not ws.active_focus:
+        return ""
+    f = ws.active_focus
+    line = f"Focus: {f.slug} — {f.outcome}"
+    n = len(ws.focus_queued)
+    if n:
+        line += f" (+{n} queued)"
+    return line
 
 
 def _pr_seg(u: Unit) -> str:
@@ -636,6 +648,7 @@ def build_board(ws: Workstream) -> Board:
                 f"- {fu.fid} {_gist(fu.desc)} (follow-up from {origin})")
 
     b.complete = workstream_done(ws, by_slug)
+    b.focus_line = focus_line_for(ws)
     return b
 
 

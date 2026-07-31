@@ -31,6 +31,10 @@ def render_board(b: S.Board) -> str:
         head += " · ✅ complete"
     lines = [head, ""]
 
+    if b.focus_line:
+        lines.append(b.focus_line)
+        lines.append("")
+
     if b.has_blocked:
         cols = [("⏳ Not started", b.not_started), ("⛔ Blocked", b.blocked),
                 ("🔄 In progress", b.in_progress), ("✅ Done", b.done)]
@@ -62,6 +66,10 @@ def render_unit(ws: S.Workstream, store: Path, unit_slug: str) -> str:
     out = [f"*{u.slug}* — {u.status}" + (f" · #{u.pr.number}"
                                          if u.pr and u.pr.number else ""),
            f"_{u.title}_" if u.title else ""]
+
+    fl = S.focus_line_for(ws)
+    if fl:
+        out += ["", fl]
 
     raw = _read(store / ws.ws_id / "units" / u.slug / "progress.md")
     tasks = _section_lines(raw, "Tasks")

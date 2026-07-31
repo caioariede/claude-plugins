@@ -217,6 +217,16 @@ class BlockedDerivation(unittest.TestCase):
 
 
 class BoardRendering(unittest.TestCase):
+    def test_board_shows_active_focus(self):
+        ws = mkws()
+        ws.active_focus = S.FocusItem("mvp", "see shell", "active")
+        ws.focus_queued = [S.FocusItem("q", "later", "queued")]
+        b = S.build_board(ws)
+        self.assertIn("Focus: mvp", b.focus_line)
+        self.assertIn("(+1 queued)", b.focus_line)
+        out = B.render_board(b)
+        self.assertIn("Focus: mvp — see shell (+1 queued)", out)
+
     def test_no_blocked_column_when_none(self):
         ws = S.Workstream(ws_id="w", name="demo")
         ws.units = [S.Unit(slug="a", tasks_total=1, tasks_done=1,
