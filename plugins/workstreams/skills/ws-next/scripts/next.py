@@ -66,6 +66,13 @@ def render_decision(d: S.Decision) -> str:
         lines += [f"- {c}" for c in d.covered]
     if d.design:
         lines.append(f"Design: {d.design}")
+    if d.active_focus:
+        f = d.active_focus
+        lines.append(f"ActiveFocus: {f.slug}  — {f.outcome}")
+    if d.focus_queue:
+        lines.append("FocusQueue:")
+        for f in d.focus_queue:
+            lines.append(f"- {f.slug}  — {f.outcome}")
     return "\n".join(lines)
 
 

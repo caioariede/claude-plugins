@@ -40,6 +40,33 @@ class PlannedDemoted(unittest.TestCase):
         self.assertEqual(moves, [])
 
 
+class FocusEmission(unittest.TestCase):
+    def test_suggest_includes_active_focus(self):
+        ws = S.Workstream(ws_id="2026-01-01-demo", name="demo", design="/spec.md")
+        ws.active_focus = S.FocusItem("mvp", "see the shell", "active")
+        ws.focus_queued = [S.FocusItem("next", "polish", "queued")]
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "suggest")
+        self.assertIsNotNone(d.active_focus)
+        self.assertEqual(d.active_focus.slug, "mvp")
+        self.assertEqual(len(d.focus_queue), 1)
+
+    def test_next_renders_focus_blocks(self):
+        import tempfile
+        from test_ws_board import write_ws
+        sys.path.insert(0, str(ROOT / "skills" / "ws-next" / "scripts"))
+        import next as N  # noqa: E402
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            write_ws(store, "2026-01-01-demo",
+                     focus_md="## Focus\n- [>] mvp  — see shell\n- [ ] later  — polish\n",
+                     workstream_md="---\nname: demo\ndesign: /x\n---\n")
+            out = N.generate(store, "2026-01-01-demo", {})
+            self.assertIn("ActiveFocus: mvp  — see shell", out)
+            self.assertIn("FocusQueue:", out)
+            self.assertIn("- later  — polish", out)
+
+
 class LoadFocus(unittest.TestCase):
     def test_load_workstream_reads_focus(self):
         import tempfile

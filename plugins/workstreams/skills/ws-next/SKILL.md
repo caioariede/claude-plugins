@@ -33,14 +33,14 @@ Print the script's stdout, minus each move line's machine tail — everything fr
 - `Next: <command>   (unit: <slug>, branch: <b>)` — only in the triage-dropped fallback, which has no move list,
 - `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
 - `Open backlog:` + a list — no-move states only,
-- `Proposable:` / `Covered:` / `Design:` — the `suggest` state's material. Like each move's `run=` tail, these are for you, not the user: consume them, don't print them.
+- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` — the `suggest` state's material. Like each move's `run=` tail, these are for you, not the user: consume them, don't print them.
 
 Keep `ws-*` commands out of the list — the choice on offer is which unit to move, and a wall of commands buries it. The one command for the unit that gets picked comes later, from Chain. Don't re-derive or re-rank — the rules ran in code. Keep the `[default]` move as the default unless the session gives you a concrete reason to prefer another (the user just said they want a particular unit finished); if you override it, say why.
 
 When there is **no** move at all the script emitted one of these states, named in its headline:
 
 - `blocker dropped/removed` — triage-dropped, which carries a `Next:` command.
-- `no store work left` — **`suggest`**; go to Propose a unit.
+- `no store work left` / `focus: <slug>` — **`suggest`**; go to Propose a unit.
 - `open backlog remains` / `advance a blocker` — residue no proposal can take (a planned unit behind an unresolvable need, an `F<n>` in a live blocked unit). Help the user work the listed items; don't invent a command.
 - `no units yet` — an empty workstream with no design and nothing open. Say so and name `ws-start`; there is nothing to route.
 - `workstream done` — offer to close it.

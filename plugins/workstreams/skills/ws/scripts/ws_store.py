@@ -818,6 +818,8 @@ class Decision:
     proposable: List[Proposable] = field(default_factory=list)
     covered: List[str] = field(default_factory=list)   # "<slug> — <title>"
     design: str = ""
+    active_focus: Optional[FocusItem] = None
+    focus_queue: List[FocusItem] = field(default_factory=list)
 
 
 def _startable_planned(ws: Workstream,
@@ -899,12 +901,14 @@ def decide_next(ws: Workstream) -> Decision:
 
     def out(rule, command=None, unit=None, branch=None, moves=None,
             open_items=None, headline="", proposable=None, covered=None,
-            design=""):
+            design="", active_focus=None, focus_queue=None):
         return Decision(rule=rule, command=command, unit=unit,
                         branch=branch or None, moves=moves or [],
                         blocked=blocked_lines, open_items=open_items or [],
                         headline=headline, proposable=proposable or [],
-                        covered=covered or [], design=design)
+                        covered=covered or [], design=design,
+                        active_focus=active_focus,
+                        focus_queue=focus_queue or [])
 
     # Everything runnable now, ranked; the leader is the default.
     moves = enumerate_moves(ws, by_slug)
@@ -947,10 +951,16 @@ def decide_next(ws: Workstream) -> Decision:
     # it, so the router never doubles as a unit-proposal machine.
     proposable = proposable_followups(ws, by_slug)
     if proposable or ws.design:
+        headline = ("focus: {} — propose the next unit".format(
+            ws.active_focus.slug)
+                    if ws.active_focus
+                    else "no store work left — propose the next unit")
         return out("suggest", None, None, open_items=open_items,
-                   headline="no store work left — propose the next unit",
+                   headline=headline,
                    proposable=proposable,
-                   covered=_covered_scope(ws, by_slug), design=ws.design)
+                   covered=_covered_scope(ws, by_slug), design=ws.design,
+                   active_focus=ws.active_focus,
+                   focus_queue=ws.focus_queued)
     # Open work the proposal path can't take: a planned unit stuck behind
     # an unresolvable need, an F<n> in a live blocked unit, a hand-broken
     # need cycle.
