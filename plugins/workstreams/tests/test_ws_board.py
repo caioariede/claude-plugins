@@ -24,7 +24,7 @@ import next as N          # noqa: E402
 
 
 def write_ws(store, ws_id, units_md="", backlog_md="", workstream_md="",
-             units=None):
+             focus_md="", units=None):
     """units: {slug: {progress, log}} -> writes unit files."""
     d = store / ws_id
     (d / "units").mkdir(parents=True, exist_ok=True)
@@ -32,6 +32,8 @@ def write_ws(store, ws_id, units_md="", backlog_md="", workstream_md="",
         workstream_md or f"---\nname: {ws_id}\n---\n", "utf-8")
     (d / "units.md").write_text(units_md, "utf-8")
     (d / "backlog.md").write_text(backlog_md, "utf-8")
+    if focus_md:
+        (d / "focus.md").write_text(focus_md, "utf-8")
     for slug, files in (units or {}).items():
         ud = d / "units" / slug
         ud.mkdir(parents=True, exist_ok=True)

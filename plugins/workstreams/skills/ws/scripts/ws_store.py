@@ -94,6 +94,13 @@ class PlannedUnit:
 
 
 @dataclass
+class FocusItem:
+    slug: str
+    outcome: str
+    state: str  # queued | active | done
+
+
+@dataclass
 class Workstream:
     ws_id: str
     name: str
@@ -101,6 +108,9 @@ class Workstream:
     units: List[Unit] = field(default_factory=list)
     planned: List[PlannedUnit] = field(default_factory=list)
     wf_followups: List[Followup] = field(default_factory=list)  # backlog WF<n>
+    active_focus: Optional[FocusItem] = None
+    focus_queued: List[FocusItem] = field(default_factory=list)
+    focus_done: List[FocusItem] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +287,48 @@ def _parse_wf(body: str, checked: bool) -> Followup:
     return Followup(fid=fid, desc=rest.strip(), checked=checked, origin=origin)
 
 
+def make_slug(text: str) -> str:
+    s = re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+    return s or "focus"
+
+
+_FOCUS_STATE = {" ": "queued", ">": "active", "x": "done", "X": "done"}
+
+
+def parse_focus(text: str) -> Tuple[Optional[FocusItem], List[FocusItem],
+                                    List[FocusItem]]:
+    headings = {"Focus": "focus"}
+    section: Optional[str] = None
+    active: Optional[FocusItem] = None
+    queued: List[FocusItem] = []
+    done: List[FocusItem] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        sec = _section_of(line, headings)
+        if sec is not None:
+            section = sec
+            continue
+        if section != "focus" or not line.startswith("- ["):
+            continue
+        m = re.match(r'^-\s+\[( |x|X|>)\]\s+(.*)$', line)
+        if not m:
+            continue
+        mark = m.group(1)
+        slug, outcome = _split_dash(m.group(2).strip())
+        slug = slug.strip()
+        if not slug:
+            slug = make_slug(outcome)
+        item = FocusItem(slug=slug, outcome=outcome.strip(),
+                         state=_FOCUS_STATE[mark])
+        if item.state == "active":
+            active = item
+        elif item.state == "done":
+            done.append(item)
+        else:
+            queued.append(item)
+    return active, queued, done
+
+
 def parse_log(text: str) -> List[Tuple[str, str, str]]:
     """Log lines: `- <ts>  <kind>  <payload>` → (ts, kind, payload).
 
@@ -326,6 +378,8 @@ def load_workstream(ws_dir: Path) -> Workstream:
     ws = Workstream(ws_id=ws_id, name=name, design=design)
     ws.units = parse_units(_read(ws_dir / "units.md"))
     ws.planned, ws.wf_followups = parse_backlog(_read(ws_dir / "backlog.md"))
+    ws.active_focus, ws.focus_queued, ws.focus_done = parse_focus(
+        _read(ws_dir / "focus.md"))
 
     for u in ws.units:
         udir = ws_dir / "units" / u.slug
