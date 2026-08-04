@@ -8,7 +8,7 @@ description: >-
   backlog capture (ws-backlog), or routing which unit moves (ws-next).
 argument-hint: 'show | add "<outcome>" | activate <slug> | done [slug] [--ws <ws-id>]'
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   author: Caio Ariede
 compatibility: requires python3 on PATH
 ---
@@ -53,7 +53,7 @@ Pass `$ARGUMENTS` through. Relay `show` stdout as bare markdown. Write subcomman
 
 ## Exit 2 — you pick
 
-Same tokens as ws-board: `MANY_WORKSTREAMS`, `AMBIGUOUS`, `NO_MATCH`, `NO_STORE`. Focus-specific: `NO_ACTIVE` (done with no active line), `DUPLICATE_SLUG`, `BAD_ARGS`.
+Same tokens as ws-board: `MANY_WORKSTREAMS` (no cwd-branch match), `AMBIGUOUS`, `NO_MATCH`, `NO_STORE`. Focus-specific: `NO_ACTIVE` (done with no active line), `DUPLICATE_SLUG`, `BAD_ARGS`. Zero-arg workstream locate matches ws-board (SPEC Command scope).
 
 ## Scope
 

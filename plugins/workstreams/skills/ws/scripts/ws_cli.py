@@ -250,10 +250,55 @@ def resolve_slug(store: Path, token: str) -> List[Tuple[str, str]]:
     return hits
 
 
+def current_branch(cwd: Optional[Path] = None) -> Optional[str]:
+    """HEAD branch in cwd, or None when detached / not a git repo."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(cwd) if cwd else None,
+            capture_output=True, text=True, timeout=5)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if out.returncode != 0:
+        return None
+    br = (out.stdout or "").strip()
+    if not br or br == "HEAD":
+        return None
+    return br
+
+
+def resolve_branch(store: Path, branch: str) -> List[Tuple[str, str]]:
+    """Ledger units whose branch= matches — (ws_id, slug) pairs."""
+    hits = []
+    for ws_id in list_workstreams(store):
+        units = S.parse_units((store / ws_id / "units.md").read_text("utf-8"))
+        for u in units:
+            if u.branch == branch:
+                hits.append((ws_id, u.slug))
+    return hits
+
+
+def infer_workstream(store: Path, branch: Optional[str] = None
+                     ) -> Optional[str]:
+    """Workstream owning the cwd branch's ledger unit, when unique.
+
+    Same locate as ws-backlog / ws-resume: match `git` HEAD (or an
+    explicit `branch`) against ledger `branch=` across the store.
+    Returns None when missing, ambiguous, or unmatched.
+    """
+    br = branch if branch is not None else current_branch()
+    if not br:
+        return None
+    ws_ids = list(dict.fromkeys(w for w, _ in resolve_branch(store, br)))
+    return ws_ids[0] if len(ws_ids) == 1 else None
+
+
 def resolve_args(store: Path, args: List[str]) -> Tuple[str, Optional[str]]:
     """Return (ws_id, unit_slug|None). Raises Pick when the caller must
     choose. A workstream matches by full id or date-stripped slug; else a
-    lone token falls through to the unit bare-slug resolver."""
+    lone token falls through to the unit bare-slug resolver. With no args
+    and multiple workstreams, the cwd branch selects when it matches
+    exactly one ledger unit (SPEC Command scope)."""
     all_ws = list_workstreams(store)
     if len(args) >= 2:
         ws_hits = resolve_workstream(store, args[0])
@@ -282,4 +327,7 @@ def resolve_args(store: Path, args: List[str]) -> Tuple[str, Optional[str]]:
         raise Pick("NO_STORE no workstreams found in the store")
     if len(all_ws) == 1:
         return all_ws[0], None
+    inferred = infer_workstream(store)
+    if inferred:
+        return inferred, None
     raise Pick("MANY_WORKSTREAMS " + ", ".join(all_ws))

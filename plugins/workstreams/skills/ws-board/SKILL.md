@@ -3,7 +3,7 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.5.4"
+  version: "0.5.5"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -16,7 +16,7 @@ Read-only. A bundled script parses the store, resolves the active `forge` flavor
 
 ## Run it
 
-`scripts/board.py`, relative to this skill's directory (`${CLAUDE_PLUGIN_ROOT}/skills/ws-board/scripts/board.py` when set). Pass `$ARGUMENTS` through — `[ws-id] [unit-id]`, both optional; a bare workstream slug works (date prefix optional):
+`scripts/board.py`, relative to this skill's directory (`${CLAUDE_PLUGIN_ROOT}/skills/ws-board/scripts/board.py` when set). Pass `$ARGUMENTS` through — `[ws-id] [unit-id]`, both optional; a bare workstream slug works (date prefix optional). With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC Command scope); otherwise `MANY_WORKSTREAMS`:
 
 ```
 python3 <this-skill-dir>/scripts/board.py [ws-id] [unit-id]
@@ -30,7 +30,7 @@ Print stdout as **bare GFM markdown, never inside a code fence** — a fence mak
 
 ## Exit 2 — you pick
 
-The first stderr token says why: `MANY_WORKSTREAMS <list>` (ask which; the slug alone works), `AMBIGUOUS <matches>` (ask which), `NO_MATCH` / `NO_STORE` (report plainly). If `python3` or the forge CLI is missing, the board still renders PR-blind (every unit falls back to `building`) — say so if it looks that way.
+The first stderr token says why: `MANY_WORKSTREAMS <list>` (no cwd-branch match and more than one workstream — ask which; the slug alone works), `AMBIGUOUS <matches>` (ask which), `NO_MATCH` / `NO_STORE` (report plainly). If `python3` or the forge CLI is missing, the board still renders PR-blind (every unit falls back to `building`) — say so if it looks that way.
 
 ## Next step
 

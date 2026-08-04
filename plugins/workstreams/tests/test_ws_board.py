@@ -322,8 +322,33 @@ class ArgResolver(unittest.TestCase):
             C.resolve_args(self.store, ["nope"])
 
     def test_zero_args_many_raises_pick(self):
-        with self.assertRaises(C.Pick):
-            C.resolve_args(self.store, [])
+        # No cwd-branch match → still ask which workstream.
+        orig = C.current_branch
+        C.current_branch = lambda cwd=None: "main"
+        try:
+            with self.assertRaises(C.Pick) as cm:
+                C.resolve_args(self.store, [])
+            self.assertTrue(str(cm.exception).startswith("MANY_WORKSTREAMS"))
+        finally:
+            C.current_branch = orig
+
+    def test_zero_args_infers_from_cwd_branch(self):
+        orig = C.current_branch
+        C.current_branch = lambda cwd=None: "bar"
+        try:
+            self.assertEqual(C.resolve_args(self.store, []),
+                             ("2026-01-02-beta", None))
+        finally:
+            C.current_branch = orig
+
+    def test_infer_workstream_unique_and_ambiguous(self):
+        self.assertEqual(C.infer_workstream(self.store, "foo"),
+                         "2026-01-01-alpha")
+        self.assertIsNone(C.infer_workstream(self.store, "nope"))
+        # Same branch name in two workstreams → no unique inference.
+        write_ws(self.store, "2026-03-03-gamma",
+                 units_md=ledger('other  "O"  repo=o/r  branch=foo'))
+        self.assertIsNone(C.infer_workstream(self.store, "foo"))
 
     def test_two_args_passthrough(self):
         self.assertEqual(

@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.16.0"
+  version: "0.16.1"
   author: Caio Ariede
 ---
 
@@ -202,6 +202,9 @@ orchestration terminal is your own convention to name, not a role defined here.
 
 - **Workstream-scoped** — touches only the global store + GitHub (`ws-init`,
   `ws-start`, `ws-next`, `ws-board`, `ws-drop`, `ws-block`). Runs from anywhere.
+  With no workstream arg and more than one workstream in the store, the cwd's
+  current branch selects when it matches exactly one ledger unit's `branch=`
+  (same locate as `ws-backlog` / `ws-resume`); otherwise the command asks.
 - **Unit-scoped** — git operations on one unit's branch, so it resolves that
   unit's worktree first (`ws-resume`, `ws-restack`). `ws-resume` `cd`s into the
   worktree in the current session (already inside → continue); `ws-restack`
