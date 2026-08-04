@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.16.1"
+  version: "0.17.0"
   author: Caio Ariede
 ---
 
@@ -72,8 +72,18 @@ Merge ordering (a stacked unit cannot merge before its base) stays owned by git/
   resolves it by scanning `<store>/*/units.md`: exactly one match →
   use it; more than one → list the matches and require the `<ws-id>:` prefix; none
   → error. Skills reference this rule; never restate it.
-- **slug** = lowercase; non-alnum → `-`; collapse repeats; trim.
-- **branch** = `<slug>` unless the caller supplies one. Git refnames disallow
+- **slug** = lowercase; non-alnum → `-`; collapse repeats; trim. Then **shorten**:
+  drop filler words (`a an and the this that so it its of to for from in into on
+  with when then just at as by but or i we you my our your be is are was were
+  can will would should`), keep at most the first 4 remaining words, then hard-cap
+  32 chars by cutting at a `-` boundary — never mid-word. If dropping filler
+  leaves nothing, keep the unfiltered words. Prefer a `<verb>-<object>` shape.
+  The rule is fixed so every caller derives the same slug from the same text —
+  a `backlog.md` planned line and the ledger line that later matches it must
+  agree. Shortening loses nothing: the intent survives verbatim in the ledger
+  `"<title>"` and in `charter.md`. A `-N` suffix is appended after the cap.
+- **branch** = `<slug>` unless the caller supplies one (`ws-start --slug`, which
+  is sanitized but not shortened). Git refnames disallow
   `:`, so the branch is not the canonical id. If `<slug>` already exists in the
   target repo (local or remote) — including when the slug matches the base
   branch — disambiguate with `-N`, a repo-scoped git check separate from
@@ -110,6 +120,7 @@ when the base is in this one:
 # Units — <ws-id> (append-only)
 - <ts>  <slug>  "<title>"  repo=<org/repo>  branch=<b>  [restart-of=<slug>]  [stacked-on=<ws-id>:<slug> | <slug>]  [claims=<target>[,<target>]]
 ```
+`<title>` = the `<what>` verbatim — the unshortened intent, so a short `<slug>` costs nothing.
 `claims=` lists the follow-up targets this unit was created to close (§Follow-up units); each target is a `WF<n>` or `<unit-id>:F<n>` per §Dependencies.
 **`backlog.md`** (workstream future work; mutable):
 ```

@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.17 · July 2026</p>
+    <p class="version">Version 0.18 · August 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -538,10 +538,10 @@ Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) a
 </div>
 
 <div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; &lt;what this unit does&gt; [--base &lt;unit-id|branch&gt;]</span></div>
+<div class="cmd-head"><span class="cmd-name">ws-start</span><span class="cmd-sig">&lt;ws-id&gt; &lt;what this unit does&gt; [--base &lt;unit-id|branch&gt;] [--slug &lt;slug&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> starting a new unit of work in an existing workstream — its own worktree plus ledger entry. Run <code>ws-init</code> first if no workstream exists.</p>
 <div class="cmd-body">
-Mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, resolves the repo (<code>--repo</code> › a <code>--base</code> unit's repo › cwd) and the base, then creates the <code>&lt;slug&gt;</code> branch and worktree off the base via the active <code>worktree-management</code> flavor's <code>create</code>. Appends the ledger line and seeds <code>charter.md</code> (the unit's static intent), <code>progress.md</code>, and <code>log.md</code>; <code>ws-resume</code> plans and builds.
+Mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, resolves the repo (<code>--repo</code> › a <code>--base</code> unit's repo › cwd) and the base, then creates the <code>&lt;slug&gt;</code> branch and worktree off the base via the active <code>worktree-management</code> flavor's <code>create</code>. Appends the ledger line and seeds <code>charter.md</code> (the unit's static intent), <code>progress.md</code>, and <code>log.md</code>; <code>ws-resume</code> plans and builds. The <code>&lt;slug&gt;</code> is a shortened form of <code>&lt;what&gt;</code> — filler words dropped, four words and 32 characters at most — so branch names stay readable while the full sentence lives on in the ledger title and <code>charter.md</code>. Pass <code>--slug</code> to name it yourself.
 </div>
 <pre class="cmd-ex">$ /ws-start 2026-07-03-task-templates "add is_template flag" --base schema-migration</pre>
 </div>

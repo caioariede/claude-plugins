@@ -32,6 +32,24 @@ class ParseFocus(unittest.TestCase):
     def test_make_slug(self):
         self.assertEqual(S.make_slug("OAuth errors surface!"), "oauth-errors-surface")
 
+    def test_make_slug_drops_filler_and_caps_words(self):
+        self.assertEqual(
+            S.make_slug("Add a retry wrapper to the Stripe webhook handler "
+                        "so duplicate events are ignored"),
+            "add-retry-wrapper-stripe",
+        )
+
+    def test_make_slug_caps_chars_at_word_boundary(self):
+        slug = S.make_slug("reconcile subscription entitlements nightly")
+        self.assertEqual(slug, "reconcile-subscription")
+        self.assertLessEqual(len(slug), 32)
+
+    def test_make_slug_keeps_all_filler_input(self):
+        self.assertEqual(S.make_slug("the and of"), "the-and-of")
+
+    def test_make_slug_empty_input(self):
+        self.assertEqual(S.make_slug("!!!"), "focus")
+
     def test_parse_focus_caps_done_history(self):
         lines = ["## Focus"]
         for i in range(5):
@@ -127,8 +145,7 @@ class FocusScript(unittest.TestCase):
             F.cmd_add(store, "2026-01-01-demo",
                       "I can log in and see the dashboard shell")
             text = (store / "2026-01-01-demo" / "focus.md").read_text()
-            self.assertIn("- [>] i-can-log-in-and-see-the-dashboard-shell",
-                          text)
+            self.assertIn("- [>] log-see-dashboard-shell", text)
             self.assertNotIn("- [ ]", text)
             del os.environ["WS_STORE"]
 

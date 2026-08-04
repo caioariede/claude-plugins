@@ -286,9 +286,31 @@ def _parse_wf(body: str, checked: bool) -> Followup:
     return Followup(fid=fid, desc=rest.strip(), checked=checked, origin=origin)
 
 
+_SLUG_FILLER = {
+    "a", "an", "and", "the", "this", "that", "so", "it", "its", "of", "to",
+    "for", "from", "in", "into", "on", "with", "when", "then", "just",
+    "at", "as", "by", "but", "or",
+    "i", "we", "you", "my", "our", "your",
+    "be", "is", "are", "was", "were", "can", "will", "would", "should",
+}
+_SLUG_MAX_WORDS = 4
+_SLUG_MAX_CHARS = 32
+
+
 def make_slug(text: str) -> str:
-    s = re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
-    return s or "focus"
+    """SPEC §IDs slug: sanitize, drop filler, cap words then chars."""
+    words = [w for w in re.split(r'[^a-z0-9]+', text.lower()) if w]
+    if not words:
+        return "focus"
+
+    # Filler only shortens; it never empties the slug
+    kept = [w for w in words if w not in _SLUG_FILLER] or words
+    s = "-".join(kept[:_SLUG_MAX_WORDS])
+
+    # Cap at a word boundary, never mid-word
+    if len(s) > _SLUG_MAX_CHARS:
+        s = s[:_SLUG_MAX_CHARS].rsplit('-', 1)[0]
+    return s.strip('-') or kept[0][:_SLUG_MAX_CHARS]
 
 
 _FOCUS_STATE = {" ": "queued", ">": "active", "x": "done", "X": "done"}
