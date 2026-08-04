@@ -804,6 +804,11 @@ def enumerate_moves(ws: Workstream,
             continue
         if u.status not in ("building", "in-review"):
             continue                # blocked: the blocker moves first
+        # Ready PR + tasks done waits on review - not a move.
+        # Drift took restack above; draft PRs stay building
+        # and still resume (mark ready).
+        if u.code_complete and u.pr and not u.pr.is_draft:
+            continue
         if u.code_complete and not u.pr:
             ranked.append(((_RULE_RANK["ship"], deps, i),
                            Move(u.slug, "ship", f"ws-resume {u.slug}",
@@ -836,12 +841,13 @@ class Proposable:
 
 @dataclass
 class Decision:
-    rule: str  # restack|ship|resume|triage-*|suggest|empty|done
+    rule: str  # restack|ship|resume|triage-*|suggest|waiting|empty|done
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
     unit: Optional[str] = None      # unit slug when the command is unit-scoped
     branch: Optional[str] = None    # ledger branch; None until a worktree exists
     moves: List[Move] = field(default_factory=list)    # ranked; moves[0] default
     blocked: List[str] = field(default_factory=list)   # "<unit> — needs ..."
+    waiting: List[str] = field(default_factory=list)   # "<unit> — PR #N"
     open_items: List[str] = field(default_factory=list)
     headline: str = ""
     # `suggest` only — material for the proposal the skill composes.
@@ -921,12 +927,23 @@ def decide_next(ws: Workstream) -> Decision:
             labels.append(lab)
         blocked_lines.append(f"{u.slug} — needs {', '.join(labels)}")
 
+    # Code-complete ready PRs emit no move; surface them so
+    # a no-move workstream does not claim "done" while
+    # review is still pending.
+    waiting_lines = []
+    for u in ws.units:
+        if u.status != "in-review" or not u.code_complete:
+            continue
+        why = (f"PR #{u.pr.number}" if u.pr and u.pr.number else "PR open")
+        waiting_lines.append(f"{u.slug} — {why}")
+
     def out(rule, command=None, unit=None, branch=None, moves=None,
             open_items=None, headline="", proposable=None, covered=None,
             design="", active_focus=None, focus_queue=None):
         return Decision(rule=rule, command=command, unit=unit,
                         branch=branch or None, moves=moves or [],
-                        blocked=blocked_lines, open_items=open_items or [],
+                        blocked=blocked_lines, waiting=waiting_lines,
+                        open_items=open_items or [],
                         headline=headline, proposable=proposable or [],
                         covered=covered or [], design=design,
                         active_focus=active_focus,
@@ -970,9 +987,10 @@ def decide_next(ws: Workstream) -> Decision:
         if followup_open(fu.fid, fu, ws):
             open_items.append(f"{fu.fid} — {_gist(fu.desc)}")
 
-    # Terminal fork, first match wins: suggest > triage-backlog > empty >
-    # done. `suggest` is strictly last resort — any move above suppresses
-    # it, so the router never doubles as a unit-proposal machine.
+    # Terminal fork, first match wins: suggest > triage-backlog >
+    # waiting > empty > done. `suggest` is strictly last resort — any
+    # move above suppresses it, so the router never doubles as a
+    # unit-proposal machine.
     proposable = proposable_followups(ws, by_slug)
     if proposable or ws.design or ws.active_focus:
         headline = ("focus: {} — propose the next unit".format(
@@ -994,6 +1012,10 @@ def decide_next(ws: Workstream) -> Decision:
                 else "no runnable step — advance a blocker or triage backlog")
         return out("triage-backlog", None, None, open_items=open_items,
                    headline=head)
+
+    if waiting_lines:
+        return out("waiting", None, None,
+                   headline="waiting on review — nothing to advance")
 
     if not ws.units:
         return out("empty", None, None,

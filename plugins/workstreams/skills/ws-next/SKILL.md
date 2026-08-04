@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.10.1"
+  version: "0.10.2"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -32,6 +32,7 @@ Print the script's stdout, minus each move line's machine tail — everything fr
 - `<unit> — <verb>: <why>` per runnable move, indented, ranked by line order, `[default]` on the first — no ordinals, so every number on screen belongs to the live picker. The verb is `restack`, `ship it`, `advance` or `start`. The stripped tail carries `run=<command>` (already fully resolved — every argument literal, no `<placeholder>` left in) and, when the unit has a worktree, `branch=<branch>`,
 - `Next: <command>   (unit: <slug>, branch: <b>)` — only in the triage-dropped fallback, which has no move list,
 - `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
+- `Waiting: <unit> — PR #<n>` — one line per code-complete ready-PR unit with no move, omitted when none,
 - `Open backlog:` + a list — no-move states only,
 - `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` only in `suggest`. `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
 
@@ -42,6 +43,7 @@ When there is **no** move at all the script emitted one of these states, named i
 - `blocker dropped/removed` — triage-dropped, which carries a `Next:` command.
 - `no store work left` / `focus: <slug>` — **`suggest`**; go to Propose a unit. When active focus exists the headline is `focus: <slug> — propose the next unit`.
 - `open backlog remains` / `advance a blocker` — residue no proposal can take (a planned unit behind an unresolvable need, an `F<n>` in a live blocked unit). Help the user work the listed items; don't invent a command.
+- `waiting on review` — every live unit is code-complete with a ready PR; nothing for the agent to advance. Relay the `Waiting:` lines; don't invent a command.
 - `no units yet` — an empty workstream with no design and nothing open. Say so and name `ws-start`; there is nothing to route.
 - `workstream done` — offer to close it.
 

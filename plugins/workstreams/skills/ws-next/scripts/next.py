@@ -46,6 +46,8 @@ def render_decision(d: S.Decision) -> str:
         lines.append(f"Next: {d.command}{tail}")
     for b in d.blocked:
         lines.append(f"Blocked: {b}")
+    for w in d.waiting:
+        lines.append(f"Waiting: {w}")
     if d.open_items:
         lines.append("Open backlog:")
         lines += [f"- {it}" for it in d.open_items]

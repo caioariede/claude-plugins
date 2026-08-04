@@ -416,12 +416,32 @@ class EnumerateMoves(unittest.TestCase):
         u = S.Unit(slug="a", branch="a", tasks_total=5, tasks_done=2)
         self.assertEqual(moves_of(mkws([u]))[0].why, "3 of 5 tasks left")
 
-    def test_code_complete_with_a_pr_names_the_pr(self):
+    def test_code_complete_ready_pr_emits_no_move(self):
         u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
                    pr=pr(12, "OPEN", False, "master"),
                    log=[("t", "created", "base=master")])
+        self.assertEqual(moves_of(mkws([u])), [])
+
+    def test_code_complete_draft_pr_still_resumes(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
+                   pr=pr(12, "OPEN", True, "master"),
+                   log=[("t", "created", "base=master")])
         m = moves_of(mkws([u]))[0]
         self.assertEqual((m.rule, m.why), ("resume", "tasks done, PR #12"))
+
+    def test_in_review_with_tasks_left_still_resumes(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=1,
+                   pr=pr(12, "OPEN", False, "master"),
+                   log=[("t", "created", "base=master")])
+        m = moves_of(mkws([u]))[0]
+        self.assertEqual((m.rule, m.why), ("resume", "1 of 2 tasks left"))
+
+    def test_code_complete_ready_pr_still_restacks_when_drifted(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
+                   pr=pr(12, "OPEN", False, "master"),
+                   log=[("t", "created", "base=feat-base")])
+        ms = moves_of(mkws([u]))
+        self.assertEqual([(m.unit, m.rule) for m in ms], [("a", "restack")])
 
     def test_unit_without_tasks_says_so(self):
         u = S.Unit(slug="a", branch="a")
@@ -667,6 +687,24 @@ class TerminalFork(unittest.TestCase):
     def test_nothing_open_is_done(self):
         self.assertEqual(S.decide_next(mkws([self._merged()])).rule, "done")
 
+    def test_code_complete_ready_pr_is_waiting_not_done(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
+                   pr=pr(12, "OPEN", False, "master"),
+                   log=[("t", "created", "base=master")])
+        d = S.decide_next(mkws([u]))
+        self.assertEqual(d.rule, "waiting")
+        self.assertEqual(d.moves, [])
+        self.assertEqual(d.waiting, ["a — PR #12"])
+        self.assertIn("waiting on review", d.headline)
+
+    def test_waiting_with_design_still_suggests(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
+                   pr=pr(12, "OPEN", False, "master"),
+                   log=[("t", "created", "base=master")])
+        d = S.decide_next(mkws([u], design="~/specs/x-design.md"))
+        self.assertEqual(d.rule, "suggest")
+        self.assertEqual(d.waiting, ["a — PR #12"])
+
     def test_open_backlog_reaches_both_readers(self):
         # Open backlog is the user's list, Proposable the assistant's —
         # different readers, so an open follow-up belongs to both.
@@ -907,6 +945,20 @@ class NextEndToEnd(unittest.TestCase):
         self.assertIn("- planned: p — do it", out)
         self.assertNotIn("p — start", out)
         self.assertNotIn("branch=", out)
+        tmp.cleanup()
+
+    def test_waiting_ready_pr_renders_waiting_lines(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(store, "2026-01-01-demo",
+                 units_md=ledger('a  "A"  repo=o/r  branch=a'),
+                 units={"a": {"progress": "## Tasks\n- [x] T1  x\n",
+                              "log": "- t  created base=master\n"}})
+        out = N.generate(store, "2026-01-01-demo",
+                         {"a": pr(12, "OPEN", False, "master")})
+        self.assertIn("waiting on review — nothing to advance", out)
+        self.assertIn("Waiting: a — PR #12", out)
+        self.assertNotIn(" — advance:", out)
         tmp.cleanup()
 
     def test_triage_fallback_keeps_the_next_line(self):
