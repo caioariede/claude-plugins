@@ -803,14 +803,58 @@ class TerminalFork(unittest.TestCase):
         self.assertEqual(d.open_items,
                          ["planned: p — stuck", "WF1 — later"])
 
-    def test_any_move_suppresses_suggest(self):
-        """The guard on the whole design: proposing is last resort."""
+    def test_mid_flight_move_suppresses_proposal_alongside(self):
+        """Non-terminal moves block proposal material even with design."""
         live = S.Unit(slug="a", tasks_total=2, tasks_done=1)
         ws = mkws([live], wfs=[S.Followup("WF1", "later", checked=False)],
                       design="~/specs/x-design.md")
         d = S.decide_next(ws)
         self.assertEqual(d.rule, "resume")
         self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+
+    def test_terminal_moves_attach_proposal_material(self):
+        ship = S.Unit(slug="ship-me", tasks_total=1, tasks_done=1, pr=None)
+        advance = S.Unit(slug="adv-me", tasks_total=1, tasks_done=1,
+                         pr=pr(5247, is_draft=True))
+        ws = mkws([ship, advance], design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "ship")
+        self.assertNotEqual(d.rule, "suggest")
+        self.assertEqual(d.design, "~/specs/x-design.md")
+        self.assertTrue(d.covered)
+
+    def test_restack_suppresses_proposal_alongside(self):
+        drift = S.Unit(slug="top", tasks_total=1, tasks_done=1,
+                       pr=pr(5, "OPEN", False, "master"),
+                       log=[("t", "created", "base=feat-base")])
+        ws = mkws([drift], design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "restack")
+        self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+
+    def test_terminal_moves_no_material_without_source(self):
+        ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+        d = S.decide_next(mkws([ship]))
+        self.assertEqual(d.rule, "ship")
+        self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+
+    def test_mixed_terminal_and_mid_flight_suppresses_proposal(self):
+        ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+        live = S.Unit(slug="a", tasks_total=2, tasks_done=1)
+        ws = mkws([ship, live], design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "ship")
+        self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+
+    def test_terminal_moves_active_focus_only_attaches_material(self):
+        ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+        ws = mkws([ship])
+        ws.active_focus = S.FocusItem("mvp", "see shell", "active")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "ship")
+        self.assertEqual(d.design, "")
+        self.assertIsNotNone(d.active_focus)
+        self.assertTrue(d.covered)
 
     def test_unresolvable_planned_need_triages_over_empty(self):
         # No proposable material and no design, but open work remains, so

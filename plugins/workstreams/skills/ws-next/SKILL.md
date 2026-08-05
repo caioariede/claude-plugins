@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.10.4"
+  version: "0.11.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -14,7 +14,7 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 
 **Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives each unit's status, and ranks every move runnable right now — one per unit, default first. It writes nothing; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
 
-**One carve-out.** The `suggest` state is the only place in this skill where you decide anything rather than relay it — see Propose a unit. Ranked moves always came out of code.
+**Two carve-outs.** Ranked moves always came out of code. **Propose a unit** is the only place you compose new work — in full `suggest` (no moves) or when the user picks **Start something new** from Chain (terminal moves plus proposal material from the script).
 
 ## Run the script
 
@@ -34,7 +34,7 @@ Print the script's stdout, minus each move line's machine tail — everything fr
 - `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
 - `Waiting: <unit> — PR #<n>` — one line per code-complete ready-PR unit with no move, omitted when none,
 - `Open backlog:` + a list — no-move states only,
-- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` only in `suggest`. `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
+- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside terminal moves (see Chain). `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
 
 Keep `ws-*` commands out of the list — the choice on offer is which unit to move, and a wall of commands buries it. The one command for the unit that gets picked comes later, from Chain. Don't re-derive or re-rank — the rules ran in code. Keep the `[default]` move as the default unless the session gives you a concrete reason to prefer another (the user just said they want a particular unit finished); if you override it, say why.
 
@@ -53,9 +53,9 @@ Same as ws-board — the first stderr token says why: `MANY_WORKSTREAMS <list>` 
 
 ## Propose a unit
 
-Only in `suggest`, which the script emits only when **no** move exists — reaching it is the proof that proposing is the right thing to do. Never propose while any move is on the table.
+Enter this section in full `suggest` (no moves) or when the user picks **Start something new** from Chain. Never enter it while any **non-terminal** move exists — mid-flight `resume` or `restack` suppresses proposal; all-terminal moves with proposal material do not.
 
-Three steering sources, all supplied by the script: the `Proposable:` follow-ups (the open ones no live unit already claims — each with a `from=` origin when the id doesn't already carry it, and `blocks=` when it blocks a live unit), the design spec at `Design:`, and `ActiveFocus:` / `FocusQueue:` when set. Read the design spec **now**; this state is the only reason to open it. Diff it against `Covered:` — the ledger slugs, titles, and planned units the store already accounts for.
+Three steering sources, all supplied by the script: the `Proposable:` follow-ups (the open ones no live unit already claims — each with a `from=` origin when the id doesn't already carry it, and `blocks=` when it blocks a live unit), the design spec at `Design:`, and `ActiveFocus:` / `FocusQueue:` when set. Read the design spec when `Design:` is emitted; that is when unbuilt scope lives outside the store. Diff it against `Covered:` — the ledger slugs, titles, and planned units the store already accounts for.
 
 Compose 1–3 candidates under five constraints:
 
@@ -73,10 +73,12 @@ For Chain below, an accepted proposal behaves exactly like a `start` move: a uni
 
 ## Chain
 
-Settle the unit first. Two or more moves → ask which one moves: `Not now` is the first and preselected option, then the top three moves in the script's order, labelled by unit slug with `<verb>: <why>` as the description and the first marked as the default move. Moves past the third stay in the relayed list and are picked by naming the unit. A single move skips this question entirely. Picking a unit runs nothing — it only decides which move the next question is about — and a dismissal reads as `Not now`, which ends by printing the default move's resolved command.
+**Detecting Start something new.** When `moves` is non-empty and the script emitted any of `Proposable:` / `Covered:` / `Design:` (machine blocks you consume, not relay), terminal moves carry proposal material — offer **Start something new** per the picker rules below.
+
+Settle the unit first. Two or more moves, **or** one move with proposal material alongside → ask which one moves: `Not now` is the first and preselected option, then the top three moves in the script's order, labelled by unit slug with `<verb>: <why>` as the description and the first marked as the default move, then **Start something new** last when proposal material is present (never preselected, never default). Moves past the third stay in the relayed list and are picked by naming the unit. A single move with no proposal material skips this question entirely. Picking a unit runs nothing — it only decides which move the next question is about — and a dismissal reads as `Not now`, which ends by printing the default move's resolved command. Picking **Start something new** goes to Propose a unit; an accepted proposal fires `hook-ws-next-after` like a `start` move.
 
 **Soft nudge (2+ moves, when `ActiveFocus:` was emitted).** Prefer the unit whose charter/tasks plausibly serve the active focus; say why if you override the script's default. Never override a restack or ship move. Never override a move that unblocks dependents unless the user explicitly picks otherwise.
 
 With the unit settled, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) for that move — `<unit>`, `<branch>` and `<command>` come from its line. A move with no `branch=` leaves `<branch>` unfillable, so choices naming it drop out (SPEC §Flavor hooks) — a `start` move has no worktree yet, and `ws-start` fires its own `hook-ws-start-after` once it does.
 
-The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). The named command starts code work, so it is never what a dismissal does: the safe choice comes first and running it here is an explicit pick. Whatever the outcome, end by printing the picked unit's resolved command, so it can run in another session. No active flavor defines the hook → offer "not now / run here" (opt-in — Not now first). A no-move state has no move to hook — skip it, present what the state calls for, and stop; the one exception is an accepted `suggest` proposal, which fires the hook as a `start` move would. Name the unit for a unit-scoped command so a parallel-session user knows which one.
+The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). The named command starts code work, so it is never what a dismissal does: the safe choice comes first and running it here is an explicit pick. Whatever the outcome, end by printing the picked unit's resolved command, so it can run in another session. No active flavor defines the hook → offer "not now / run here" (opt-in — Not now first). A no-move state has no move to hook — skip it, present what the state calls for, and stop; the exception is Propose a unit (full `suggest` or an accepted **Start something new** pick), which fires the hook as a `start` move would. Name the unit for a unit-scoped command so a parallel-session user knows which one.

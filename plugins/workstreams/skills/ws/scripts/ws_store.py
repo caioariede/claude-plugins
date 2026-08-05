@@ -872,7 +872,8 @@ class Decision:
     waiting: List[str] = field(default_factory=list)   # "<unit> — PR #N"
     open_items: List[str] = field(default_factory=list)
     headline: str = ""
-    # `suggest` only — material for the proposal the skill composes.
+    # Proposal material for the skill — full `suggest` or alongside
+    # terminal moves when `_moves_all_terminal` holds.
     proposable: List[Proposable] = field(default_factory=list)
     covered: List[str] = field(default_factory=list)   # "<slug> — <title>"
     design: str = ""
@@ -951,6 +952,36 @@ def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit]) -> List[str]:
     return out
 
 
+def _proposal_material(
+        ws: Workstream,
+        by_slug: Dict[str, Unit]) -> Tuple[List[Proposable], List[str], str]:
+    """Follow-ups, covered scope, and design path for Propose a unit."""
+    return (proposable_followups(ws, by_slug),
+            _covered_scope(ws, by_slug),
+            ws.design)
+
+
+def _has_proposal_source(ws: Workstream,
+                         proposable: List[Proposable]) -> bool:
+    return bool(proposable or ws.design or ws.active_focus)
+
+
+def _moves_all_terminal(moves: List[Move],
+                        by_slug: Dict[str, Unit]) -> bool:
+    """True when every move is ship or resume on a code-complete unit."""
+    for m in moves:
+        if m.rule == "restack":
+            return False
+        if m.rule == "ship":
+            continue
+        if m.rule == "resume":
+            if not by_slug[m.unit].code_complete:
+                return False
+            continue
+        return False
+    return True
+
+
 def decide_next(ws: Workstream) -> Decision:
     """Every move runnable now, ranked, with moves[0] as the default.
     Blocked units are never resumed — the router advances their blocker."""
@@ -998,8 +1029,14 @@ def decide_next(ws: Workstream) -> Decision:
     moves = enumerate_moves(ws, by_slug)
     if moves:
         top = moves[0]
+        proposable, covered, design = _proposal_material(ws, by_slug)
+        attach = (_moves_all_terminal(moves, by_slug)
+                  and _has_proposal_source(ws, proposable))
         return out(top.rule, top.command, top.unit, top.branch, moves,
                    headline=_RULE_HEADLINE[top.rule],
+                   proposable=proposable if attach else [],
+                   covered=covered if attach else [],
+                   design=design if attach else "",
                    active_focus=ws.active_focus,
                    focus_queue=ws.focus_queued)
 
@@ -1033,19 +1070,17 @@ def decide_next(ws: Workstream) -> Decision:
             open_items.append(f"{fu.fid} — {_gist(fu.desc)}")
 
     # Terminal fork, first match wins: suggest > triage-backlog >
-    # waiting > empty > done. `suggest` is strictly last resort — any
-    # move above suppresses it, so the router never doubles as a
-    # unit-proposal machine.
-    proposable = proposable_followups(ws, by_slug)
-    if proposable or ws.design or ws.active_focus:
+    # waiting > empty > done. `suggest` when no moves exist; terminal
+    # moves may carry proposal material alongside (see early return).
+    proposable, covered, design = _proposal_material(ws, by_slug)
+    if _has_proposal_source(ws, proposable):
         headline = ("focus: {} — propose the next unit".format(
             ws.active_focus.slug)
                     if ws.active_focus
                     else "no store work left — propose the next unit")
         return out("suggest", None, None, open_items=open_items,
                    headline=headline,
-                   proposable=proposable,
-                   covered=_covered_scope(ws, by_slug), design=ws.design,
+                   proposable=proposable, covered=covered, design=design,
                    active_focus=ws.active_focus,
                    focus_queue=ws.focus_queued)
     # Open work the proposal path can't take: a planned unit stuck behind
