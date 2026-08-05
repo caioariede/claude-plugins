@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.4.0"
+  version: "0.4.1"
   author: Caio Ariede
 ---
 
@@ -30,4 +30,4 @@ metadata:
    - If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide before proceeding.
 
 ## Next
-After the action, `ws-next` — it runs from any session; offer to run it now (default yes) (SPEC Next-step chaining).
+After the action, `ws-next` — it runs from any session; offer to run it now (§Next-step chaining).

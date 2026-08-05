@@ -4,7 +4,7 @@ description: Use to view or change workstream flavors — which external tool ba
 argument-hint: "[show | set <group> <flavor> | add <group> <flavor> | set-overrides <path> | list [group]]"
 compatibility: requires python3
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
   author: Caio Ariede
 ---
 
@@ -27,7 +27,7 @@ The script resolves every shell dep itself (`command -v`) and prints `?` where s
 Present the settled result. An **active** flavor left with a missing dep is broken — name the missing tool and the remedy (install it, or `ws-config set <group> <other-flavor>`).
 
 ## The offer (show; interactive sessions only — never a subagent/headless run)
-Every line starting with `OFFER <group> <flavor>` names a candidate for a group with no explicit `[active]` — match the `OFFER` prefix; position in the output carries no meaning. Settle `?` candidates first and drop any that settle to missing. Then, per group: one candidate → offer to set it (default yes); several → a choice including keeping the default. Combine all groups into ONE prompt — never sequential asks. Accept → `config.py set <group> <flavor>`; decline → `config.py set <group> <default>` (pins the default, so the offer never repeats); dismissed → nothing. No OFFER lines → no prompt. (Why non-default wins: defaults are the always-available baseline; installing wmx or superpowers signals intent to use it.)
+Every line starting with `OFFER <group> <flavor>` names a candidate for a group with no explicit `[active]` — match the `OFFER` prefix; position in the output carries no meaning. Settle `?` candidates first and drop any that settle to missing. Then, per group: one candidate → offer to set it (opt-out); several → a choice including keeping the default. Combine all groups into ONE prompt — never sequential asks. Accept → `config.py set <group> <flavor>`; decline → `config.py set <group> <default>` (pins the default, so the offer never repeats); dismissed → nothing. No OFFER lines → no prompt. (Why non-default wins: defaults are the always-available baseline; installing wmx or superpowers signals intent to use it.)
 
 ## Errors
 Nonzero exit with a machine-readable first stderr token: `UNKNOWN_GROUP`, `UNKNOWN_FLAVOR` (the known flavors are listed), `ALREADY_EXISTS`, `BAD_ARGS`, `BAD_STORE` (the store `flavors.ini` is unparseable — show the user the message so they can repair the file). Relay the message and recover — fix the argument or ask the user.

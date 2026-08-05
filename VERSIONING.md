@@ -80,8 +80,9 @@ cd plugins/<plugin> && just set-plugin-version version=1.0.0
 
 ## The guide stamp
 
-`WORKSTREAMS-GUIDE.html` stamps `major.minor` only, so patch releases
-need no PDF regen. After a minor or major bump:
+`WORKSTREAMS-GUIDE.html` stamps full semver `X.Y.Z` to match
+`plugin.json`. Patch bumps require updating the HTML stamp; run
+`just gen-guide-pdf` when shipping the PDF:
 
 ```bash
 cd plugins/workstreams && just gen-guide-pdf

@@ -29,7 +29,7 @@ jobs:
       # check-guide`, calling the one script both delegate to.
       - name: plugin.json matches the skill-version snapshot
         run: python3 tools/plugin_version.py check plugins/workstreams
-      - name: Guide stamp matches plugin.json's series
+      - name: Guide stamp matches plugin.json version
         run: |
           python3 tools/plugin_version.py check-guide \
             plugins/workstreams \

@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.10.2"
+  version: "0.10.3"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -65,7 +65,7 @@ Compose 1–3 candidates under five constraints:
 3. **Never re-propose `Covered:` scope.** A dropped unit is covered — the drop was a decision, and its reason is in that unit's `log.md`. Redoing dropped work is `ws-start`'s `restart-of` path, chosen by the user.
 4. **Say what a candidate does, not what section it came from.** The chosen text becomes the unit's slug and its `charter.md` purpose, so it has to read as intent on its own.
 
-Present them with `Not now` first and preselected (work-starting, per SPEC Next-step chaining). A pick resolves to `ws-start <ws-id> "<what>"`, plus `--claims <targets>` when the candidate closes follow-ups, plus `--base` when it stacks. Nothing is written until that runs — a declined proposal leaves the store untouched and is not recorded, so it may come back next time it is still true.
+Present them with `Not now` first and preselected (opt-in, §Next-step chaining). A pick resolves to `ws-start <ws-id> "<what>"`, plus `--claims <targets>` when the candidate closes follow-ups, plus `--base` when it stacks. Nothing is written until that runs — a declined proposal leaves the store untouched and is not recorded, so it may come back next time it is still true.
 
 A candidate that claims follow-ups must list **every** one it covers in `--claims`: the claim is what takes them out of the backlog and unblocks whatever needed them, so a follow-up you describe but omit stays open and keeps its dependent blocked.
 
@@ -79,4 +79,4 @@ Settle the unit first. Two or more moves → ask which one moves: `Not now` is t
 
 With the unit settled, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) for that move — `<unit>`, `<branch>` and `<command>` come from its line. A move with no `branch=` leaves `<branch>` unfillable, so choices naming it drop out (SPEC §Flavor hooks) — a `start` move has no worktree yet, and `ws-start` fires its own `hook-ws-start-after` once it does.
 
-The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). The named command starts code work, so it is never what a dismissal does: the safe choice comes first and running it here is an explicit pick. Whatever the outcome, end by printing the picked unit's resolved command, so it can run in another session. No active flavor defines the hook → offer "not now / run here", not-now first. A no-move state has no move to hook — skip it, present what the state calls for, and stop; the one exception is an accepted `suggest` proposal, which fires the hook as a `start` move would. Name the unit for a unit-scoped command so a parallel-session user knows which one.
+The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). The named command starts code work, so it is never what a dismissal does: the safe choice comes first and running it here is an explicit pick. Whatever the outcome, end by printing the picked unit's resolved command, so it can run in another session. No active flavor defines the hook → offer "not now / run here" (opt-in — Not now first). A no-move state has no move to hook — skip it, present what the state calls for, and stop; the one exception is an accepted `suggest` proposal, which fires the hook as a `start` move would. Name the unit for a unit-scoped command so a parallel-session user knows which one.

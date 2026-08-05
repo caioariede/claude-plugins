@@ -11,7 +11,7 @@ description: >-
   onto a merged base (ws-restack).
 argument-hint: '<unit> needs <target> ["note"] | <unit> clear N<n>'
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   author: Caio Ariede
 ---
 
@@ -44,4 +44,4 @@ metadata:
 Workstream-scoped (SPEC "Command scope") — store-only, runs from any session. It never touches a worktree or git.
 
 ## Chain
-After the edit, fire `hook-ws-block-after` (SPEC §Flavor hooks) — fills `<unit>`/`<branch>` from the target unit, `<command>` = `ws-next <ws-id>`. No active flavor defines it → default chaining (SPEC Next-step chaining): offer to run **`ws-next`** now (default yes) — dependencies changed, so re-route. Mention the affected unit so a parallel-session user knows which one.
+After the edit, fire `hook-ws-block-after` (SPEC §Flavor hooks) — fills `<unit>`/`<branch>` from the target unit, `<command>` = `ws-next <ws-id>`. No active flavor defines it → default chaining (§Next-step chaining): offer to run **`ws-next`** now — dependencies changed, so re-route. Mention the affected unit so a parallel-session user knows which one.

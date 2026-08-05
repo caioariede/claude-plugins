@@ -8,7 +8,7 @@ description: >-
   backlog capture (ws-backlog), or routing which unit moves (ws-next).
 argument-hint: 'show | add "<outcome>" | activate <slug> | done [slug] [--ws <ws-id>]'
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   author: Caio Ariede
 compatibility: requires python3 on PATH
 ---
@@ -61,4 +61,6 @@ Workstream-scoped — writes only `focus.md` in the store, never a worktree.
 
 ## Chain
 
-Fire `hook-ws-focus-after` (SPEC §Flavor hooks). No active flavor defines it → default chaining (SPEC Next-step chaining): after a **write** (`add`, `activate`, `done`) → offer **`ws-next`** now (focus changed what `suggest` proposes); after **`show`** → offer **`ws-board`** to see unit status alongside the outcome queue. Name the workstream so a parallel-session user knows which.
+When chained from `ws-init` on an empty queue, prompt for the first outcome (may suggest wording from `workstream.goal`; do not auto-write), then run `add`.
+
+Fire `hook-ws-focus-after` (SPEC §Flavor hooks). No active flavor defines it → default chaining (§Next-step chaining): after a **write** (`add`, `activate`, `done`) → offer **`ws-next`** (focus changed what `suggest` proposes); after **`show`** → offer **`ws-board`** to see unit status alongside the outcome queue. Name the workstream so a parallel-session user knows which.

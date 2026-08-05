@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.17.0"
+  version: "0.17.1"
   author: Caio Ariede
 ---
 
@@ -223,25 +223,44 @@ orchestration terminal is your own convention to name, not a role defined here.
   ergonomics for parallel work, never required.
 
 ## Next-step chaining
-Every `ws-*` skill ends by naming the single best next command and offering to
-run it (`ws-next` lists every runnable move, settles which unit, then offers
-that one — choosing a unit runs nothing, so the not-now default lands on the
-step after it). A command that starts or continues code work (`ws-resume`,
-`ws-start`, `ws-restack`) is offered **default not-now** — running it is an
-explicit pick, never what a dismissal does; a read-only command (`ws-next`,
-`ws-board`) keeps **default yes**. A skill may delegate this offer to a flavor
-hook (§Flavor hooks) — when an active flavor defines it, the hook's prompt
-replaces the default offer, and the chosen instruction is all that runs. What
-the choices offer is the flavor's business; the skill only distinguishes
-outcomes: a choice resolving to `<command>` runs the command in this session;
-any other choice is the flavor handing the work off its own way — run it,
-re-emit the command, and stop. No flavor defines the hook → the default offer
-above. The skill may *mention* the relevant unit so a parallel-session user
-knows where they would go — informational, not a precondition to running.
-`ws-next` is the router; defer to it when the next step isn't singular. The
-offer is a work-starting command only from the skill that just provisioned the
-unit (`ws-start`) or the router that picked one (`ws-next`); every other skill
-offers `ws-next`.
+Every `ws-*` skill ends by naming the single best next command and
+offering to run it.
+
+**opt-out** — offer the next command; proceed unless the user
+declines. **opt-in** — offer the next command; run only on explicit
+pick; dismissal must not start work.
+
+(`ws-next` lists every runnable move, settles which unit, then offers
+that one — choosing a unit runs nothing, so an opt-in dismissal lands
+on the step after it.)
+
+A command that starts or continues code work (`ws-resume`,
+`ws-start`, `ws-restack`) is offered **opt-in** when named from most
+skills — running it is an explicit pick, never what a dismissal does.
+Read-only commands (`ws-next`, `ws-board`) and store-only setup
+(`ws-focus`) keep **opt-out**. **Provisioned-unit handoff:** `ws-start`
+may offer `ws-resume` opt-out even though `ws-resume` is code work —
+the unit was just provisioned.
+
+A skill may delegate this offer to a flavor hook (§Flavor hooks) —
+when an active flavor defines it, the hook's prompt replaces the
+default offer, and the chosen instruction is all that runs. What the
+choices offer is the flavor's business; the skill only distinguishes
+outcomes: a choice resolving to `<command>` runs the command in this
+session; any other choice is the flavor handing the work off its own
+way — run it, re-emit the command, and stop. No flavor defines the
+hook → the default offer above. The skill may *mention* the relevant
+unit so a parallel-session user knows where they would go —
+informational, not a precondition to running.
+
+`ws-next` is the router; defer to it when the next step isn't
+singular. Each skill's Chain section names its next command; defaults
+are opt-out for read-only routing (`ws-next`, `ws-board`) and
+store-only setup (`ws-focus`). `ws-init` offers `ws-focus`; most others
+offer `ws-next` unless their Chain names something else.
+The offer is a work-starting command only from the skill that just
+provisioned the unit (`ws-start`) or the router that picked one
+(`ws-next`).
 
 ## Worktree = code only
 Never write store files into a worktree. Find a unit's worktree via the ledger branch, using the active `worktree-management` flavor's `locate` (SPEC §Flavors). Drop and recreate worktrees freely — progress survives in the store.

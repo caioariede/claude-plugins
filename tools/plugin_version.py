@@ -30,7 +30,7 @@ SNAPSHOT_JSON = ".claude-plugin/skill-versions.json"
 SKILL_VERSION_RE = re.compile(
     r'^\s*version:\s*"([^"]*)"\s*$', re.MULTILINE)
 
-# Matches the guide's version line, which carries major.minor only.
+# Matches the guide's version line, which carries full semver X.Y.Z.
 STAMP_RE = re.compile(r'<p class="version">Version\s+([0-9.]+)')
 
 
@@ -254,8 +254,13 @@ def cmd_series(plugin_dir: Path) -> int:
     return 0
 
 
+def cmd_version(plugin_dir: Path) -> int:
+    print(read_plugin_version(plugin_dir))
+    return 0
+
+
 def cmd_check_guide(plugin_dir: Path, html: Path) -> int:
-    want = series(read_plugin_version(plugin_dir))
+    want = read_plugin_version(plugin_dir)
     have = read_stamp(html)
     if have == want:
         print("guide version OK (%s)" % have)
@@ -282,6 +287,8 @@ def main(argv: List[str]) -> int:
             return cmd_set(plugin_dir, args[0])
         if verb == "series" and not args:
             return cmd_series(plugin_dir)
+        if verb == "version" and not args:
+            return cmd_version(plugin_dir)
         if verb == "check-guide" and len(args) == 1:
             return cmd_check_guide(plugin_dir, Path(args[0]))
         raise Fail("BAD_ARGS unknown verb/arity: " + " ".join(argv))

@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.18 · August 2026</p>
+    <p class="version">Version 0.18.1 · August 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -477,6 +477,8 @@
   <span class="flow-step flow-plain">brainstorm · spec ·<br>decide the splits</span>
   <span class="flow-arrow">→</span>
   <span class="flow-step">ws-init</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">ws-focus</span>
   <span class="flow-arrow">→</span>
   <span class="flow-loop">
     <span class="flow-loop-label">repeat until shipped</span>
@@ -532,7 +534,7 @@ $ /ws-config set spec-driven-development superpowers</pre>
 <div class="cmd-head"><span class="cmd-name">ws-init</span><span class="cmd-sig">&lt;workstream name&gt;</span></div>
 <p class="cmd-when"><b>Use when</b> you need a new workstream and none exists yet — before starting any unit with <code>ws-start</code>.</p>
 <div class="cmd-body">
-Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, the <code>units/</code> directory, an empty <code>backlog.md</code>, and an empty <code>focus.md</code>. Sets up the container only — it creates no unit, no planned unit, and no worktree, and it never reads <code>design:</code> to invent a unit breakdown. The design stays the live source of the split; <code>ws-next</code> consults it when there is nothing else to do.
+Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, the <code>units/</code> directory, an empty <code>backlog.md</code>, and an empty <code>focus.md</code>. Sets up the container only — it creates no unit, no planned unit, and no worktree, and it never reads <code>design:</code> to invent a unit breakdown. The expected next step is <code>ws-focus</code> to name what you're aiming for; later, <code>ws-next</code> consults focus, the design, and follow-ups when routing.
 </div>
 <pre class="cmd-ex">$ /ws-init task templates</pre>
 </div>
@@ -693,7 +695,7 @@ pr-retarget    = glab mr update &lt;pr&gt; --target-branch &lt;new-base&gt;</pre
 <h3 id="flavor-hooks">Flavor hooks</h3>
 <p>A <b>hook</b> lets a flavor react at a skill's lifecycle point — an optional operation named <code>hook-&lt;skill&gt;-&lt;event&gt;</code>. Each skill documents the events it fires; at an event it runs that hook from every active flavor that defines it. Hooks fire <b>only in an interactive session</b> — a subagent or headless run fires none, so a hook never steals focus or blocks automation.</p>
 <p>Hooks can prompt. Companion keys (valid only on <code>hook-*</code> operations) make one interactive: with no <code>.prompt</code> the hook just runs; a <code>.prompt</code> and no choices is a yes/no (Yes runs the base instruction, No skips); adding <code>.choices.&lt;name&gt;</code> entries turns it into a 2–4-option pick, each with an optional <code>.choices.&lt;name&gt;.desc</code> (the chosen option's instruction runs, the base is ignored; an empty instruction — and a dismissed prompt — skips).</p>
-<p>A hook at a skill's next-step offer is a <b>chain hook</b>: its prompt replaces the default "run it now? (default yes)". The skill stays unaware of what the choices mean — a choice resolving to <code>&lt;command&gt;</code> runs the named command in this session; any other choice is the flavor handing the work off its own way, so the skill runs it, re-emits the command, and stops.</p>
+<p>A hook at a skill's next-step offer is a <b>chain hook</b>: its prompt replaces the default opt-out offer (proceed unless declined). The skill stays unaware of what the choices mean — a choice resolving to <code>&lt;command&gt;</code> runs the named command in this session; any other choice is the flavor handing the work off its own way, so the skill runs it, re-emits the command, and stops.</p>
 <p>The built-in <code>wmx</code> flavor uses both kinds: it creates worktrees windowless, then at the end of <code>ws-start</code> asks whether to open a new window, and at the end of <code>ws-next</code> asks where the picked unit should run.</p>
 <pre class="code">; built-in — worktree-management/wmx
 create                            = wmx worktree create &lt;branch&gt; --base &lt;base&gt; --no-window
@@ -718,11 +720,11 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out: a feature is many units, and each unit plans itself.</p>
 <ol class="steps">
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
-<li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. With the superpowers flavor active, <a href="#spec-watch">spec-watch</a> nudges this step automatically the moment the design doc is written. <code>ws-init</code> creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan.</li>
+<li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. With the superpowers flavor active, <a href="#spec-watch">spec-watch</a> nudges this step automatically the moment the design doc is written. <code>ws-init</code> creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan. Then run <code>ws-focus</code> to name what you're aiming for first.</li>
 <li><b>Split the spec into units</b> with <code>ws-start</code>, one slice at a time rather than all of them up front — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
 <li><b>Let each unit plan itself.</b> <code>ws-resume</code> runs <code>writing-plans</code> scoped to that unit (tasks land as <code>T1..</code> in its <code>progress.md</code>), then executes with <code>subagent-driven-development</code>.</li>
 </ol>
-<aside class="note note-rule"><b>Planning lives in units, not above them.</b> After the spec, go straight to <code>ws-init</code> → <code>ws-start</code>. The <code>writing-plans</code> step is deferred into each unit's <code>ws-resume</code>, so every plan is scoped to one worktree.</aside>
+<aside class="note note-rule"><b>Planning lives in units, not above them.</b> After the spec, go straight to <code>ws-init</code> → <code>ws-focus</code> → <code>ws-start</code>. The <code>writing-plans</code> step is deferred into each unit's <code>ws-resume</code>, so every plan is scoped to one worktree.</aside>
 </section>
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>
@@ -734,7 +736,7 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <tr><th>Command</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger + empty backlog + empty focus). Run before any unit exists. Creates no unit.</td></tr>
+<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger + empty backlog + empty focus). Run before any unit exists. Creates no unit. Expected next: <code>ws-focus</code>.</td></tr>
 <tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit.</td></tr>
 <tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, continue its tasks, or ship it — reopening a gone worktree and reconciling base drift as needed.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>

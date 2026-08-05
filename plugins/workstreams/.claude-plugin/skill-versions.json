@@ -1,18 +1,18 @@
 {
-  "plugin": "0.18.0",
+  "plugin": "0.18.1",
   "skills": {
-    "ws": "0.17.0",
-    "ws-backlog": "0.1.0",
-    "ws-block": "0.1.0",
-    "ws-board": "0.5.5",
-    "ws-config": "0.6.0",
+    "ws": "0.17.1",
+    "ws-backlog": "0.1.1",
+    "ws-block": "0.1.1",
+    "ws-board": "0.5.6",
+    "ws-config": "0.6.1",
     "ws-drop": "0.5.0",
-    "ws-focus": "0.1.1",
-    "ws-guide": "0.7.2",
-    "ws-init": "0.4.0",
-    "ws-next": "0.10.2",
+    "ws-focus": "0.1.2",
+    "ws-guide": "0.7.3",
+    "ws-init": "0.4.1",
+    "ws-next": "0.10.3",
     "ws-restack": "0.3.0",
-    "ws-resume": "0.4.0",
-    "ws-start": "0.6.0"
+    "ws-resume": "0.4.1",
+    "ws-start": "0.6.1"
   }
 }

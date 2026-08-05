@@ -3,7 +3,7 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.5.5"
+  version: "0.5.6"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -34,4 +34,4 @@ The first stderr token says why: `MANY_WORKSTREAMS <list>` (no cwd-branch match 
 
 ## Next step
 
-Per SPEC §Next-step chaining, offer `ws-next` — read-only, so default yes. It is the only command this skill names: the board reports, the router decides which unit moves and what that takes. Offer it bare, in board and unit-detail mode alike; never name `ws-resume` here, not even for an in-progress or blocked unit.
+Per §Next-step chaining, offer `ws-next` — read-only. It is the only command this skill names: the board reports, the router decides which unit moves and what that takes. Offer it bare, in board and unit-detail mode alike; never name `ws-resume` here, not even for an in-progress or blocked unit.

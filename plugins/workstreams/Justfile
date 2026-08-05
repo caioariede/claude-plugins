@@ -3,12 +3,12 @@ plugin := justfile_directory()
 guide := justfile_directory() / "skills/ws-guide/assets/WORKSTREAMS-GUIDE"
 
 # Regenerate the Workstreams guide PDF from its HTML source.
-# The stamped version is major.minor, so patch releases need no
-# regen. Bump first, then regenerate.
+# The stamped version is full semver X.Y.Z — patch bumps need
+# HTML stamp update (and regen when shipping PDF).
 gen-guide-pdf:
     #!/usr/bin/env bash
     set -euo pipefail
-    version=$(python3 "{{tool}}" series "{{plugin}}")
+    version=$(python3 "{{tool}}" version "{{plugin}}")
     stamp=$(date +"%B %Y")
     sed -i '' -E "s|<p class=\"version\">Version [^<]*</p>|<p class=\"version\">Version $version · $stamp</p>|" \
         "{{guide}}.html"
@@ -17,7 +17,7 @@ gen-guide-pdf:
         --print-to-pdf="{{guide}}.pdf" "file://{{guide}}.html"
     echo "wrote {{guide}}.pdf (version $version)"
 
-# Fail when the guide's stamp disagrees with plugin.json's series.
+# Fail when the guide's stamp disagrees with plugin.json.
 check-guide:
     python3 "{{tool}}" check-guide "{{plugin}}" "{{guide}}.html"
 

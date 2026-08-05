@@ -9,7 +9,7 @@ description: >-
   abandoning a unit (ws-drop), or dependencies (ws-block).
 argument-hint: '"<what>" [--defer | --here | --plan --base <x> [--needs a,b]] [--to <unit>] [--ws <ws-id>]'
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   author: Caio Ariede
 ---
 
@@ -35,4 +35,4 @@ metadata:
 Workstream-scoped (SPEC "Command scope") — store-only, runs from any session. `--here` writes a unit's `progress.md` / `log.md` **in the store**, never a worktree; the only git touch is reading the current branch to self-locate.
 
 ## Chain
-Fire `hook-ws-backlog-after` (SPEC §Flavor hooks). No active flavor defines it → default chaining (SPEC Next-step chaining): a **planned unit** was added → offer **`ws-next`** now (a new startable item may re-route); a follow-up (`F`/`WF`) → offer **`ws-board`** to see where it landed. Name the target unit / workstream so a parallel-session user knows which.
+Fire `hook-ws-backlog-after` (SPEC §Flavor hooks). No active flavor defines it → default chaining (§Next-step chaining): a **planned unit** was added → offer **`ws-next`** now (a new startable item may re-route); a follow-up (`F`/`WF`) → offer **`ws-board`** to see where it landed. Name the target unit / workstream so a parallel-session user knows which.
