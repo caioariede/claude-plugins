@@ -763,6 +763,34 @@ class TerminalFork(unittest.TestCase):
         self.assertIn("gone — abandoned idea", d.covered)   # dropped counts
         self.assertTrue(any(c.startswith("p — later work") for c in d.covered))
 
+    def test_covered_annotates_dropped_with_live_successor(self):
+        dropped = S.Unit(slug="auth", title="old auth", dropped=True)
+        successor = S.Unit(slug="auth-2", title="new auth",
+                           restart_of="auth", branch="auth-2")
+        ws = mkws([dropped, successor])
+        covered = S._covered_scope(ws, {u.slug: u for u in ws.units})
+        self.assertIn("auth — old auth (superseded by auth-2)", covered)
+        self.assertIn("auth-2 — new auth", covered)
+
+    def test_covered_annotates_dropped_with_merged_successor(self):
+        dropped = S.Unit(slug="auth", title="old auth", dropped=True)
+        successor = S.Unit(slug="auth-2", title="new auth",
+                           restart_of="auth", branch="auth-2",
+                           tasks_total=1, tasks_done=1,
+                           pr=pr(1, "MERGED"))
+        ws = mkws([dropped, successor], design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertIn("auth — old auth (superseded by auth-2)",
+                      d.covered)
+
+    def test_covered_no_annotation_without_successor(self):
+        dropped = S.Unit(slug="gone", title="abandoned idea",
+                         dropped=True)
+        ws = mkws([dropped], design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertIn("gone — abandoned idea", d.covered)
+        self.assertNotIn("superseded", " ".join(d.covered))
+
     def test_open_items_list_planned_and_followups_together(self):
         merged = self._merged()
         ws = mkws([merged],

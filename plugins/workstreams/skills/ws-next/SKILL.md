@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.10.3"
+  version: "0.10.4"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -62,7 +62,7 @@ Compose 1–3 candidates under five constraints:
 1. **Urgency beats batching.** A follow-up carrying `blocks=` is proposed **alone and first**; bundling it into a larger batch keeps that unit blocked for the life of the batch.
 1b. **Focus beats non-blocking follow-ups.** When `ActiveFocus:` is set, prefer design-sourced candidates that advance it over proposable follow-ups without `blocks=`.
 2. **Batch by cohesion.** Group follow-ups only when they touch the same area and review well together — and only when no focus-aligned design candidate exists. Prefer two units over one lumpy PR.
-3. **Never re-propose `Covered:` scope.** A dropped unit is covered — the drop was a decision, and its reason is in that unit's `log.md`. Redoing dropped work is `ws-start`'s `restart-of` path, chosen by the user.
+3. **Never re-propose `Covered:` scope.** A dropped unit is covered — the drop was a decision, and its reason is in that unit's `log.md`. A line carrying `(superseded by …)` is covered through its successor — do not re-propose that scope either. Redoing dropped work is `ws-start`'s `restart-of` path, chosen by the user.
 4. **Say what a candidate does, not what section it came from.** The chosen text becomes the unit's slug and its `charter.md` purpose, so it has to read as intent on its own.
 
 Present them with `Not now` first and preselected (opt-in, §Next-step chaining). A pick resolves to `ws-start <ws-id> "<what>"`, plus `--claims <targets>` when the candidate closes follow-ups, plus `--base` when it stacks. Nothing is written until that runs — a declined proposal leaves the store untouched and is not recorded, so it may come back next time it is still true.

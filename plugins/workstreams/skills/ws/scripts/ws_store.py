@@ -919,10 +919,33 @@ def proposable_followups(ws: Workstream,
             for fid, fu, origin in found]
 
 
+def _pick_successors(slug: str, units: List[Unit],
+                     by: Dict[str, Unit]) -> List[str]:
+    """Successors to name in a superseded annotation."""
+    all_s = [u.slug for u in units if u.restart_of == slug]
+    if not all_s:
+        return []
+    live = [s for s in all_s
+            if not by[s].dropped
+            and not (by[s].pr and by[s].pr.state == "MERGED")]
+    return live if live else [all_s[-1]]
+
+
+def _covered_entry(u: Unit, units: List[Unit],
+                   by: Dict[str, Unit]) -> str:
+    base = f"{u.slug} — {u.title}" if u.title else u.slug
+    if not u.dropped:
+        return base
+    succs = _pick_successors(u.slug, units, by)
+    if not succs:
+        return base
+    return f"{base} (superseded by {', '.join(succs)})"
+
+
 def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit]) -> List[str]:
     """What the store already covers, so a proposal can skip it. Dropped
     units count — the drop was a decision (SPEC)."""
-    out = [f"{u.slug} — {u.title}" if u.title else u.slug for u in ws.units]
+    out = [_covered_entry(u, ws.units, by_slug) for u in ws.units]
     out += [f"{p.slug} — {_gist(p.what)} (planned)" for p in ws.planned
             if p.slug not in by_slug]
     return out
