@@ -254,7 +254,10 @@ unit so a parallel-session user knows where they would go —
 informational, not a precondition to running.
 
 `ws-next` is the router; defer to it when the next step isn't
-singular. Each skill's Chain section names its next command; defaults
+singular. **`ws-resume` execute loop:** loops in-session through
+execute tasks and pauses at ship boundaries via `phase.py`; it chains
+to `ws-next` only at `done` or an explicit pause pick — not after each
+task. Each skill's Chain section names its next command; defaults
 are opt-out for read-only routing (`ws-next`, `ws-board`) and
 store-only setup (`ws-focus`). `ws-init` offers `ws-focus`; most others
 offer `ws-next` unless their Chain names something else.

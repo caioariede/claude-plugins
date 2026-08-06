@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.4.1"
+  version: "0.5.0"
   author: Caio Ariede
 ---
 
@@ -23,11 +23,41 @@ metadata:
 3. Reconcile base per SPEC Restack reconciliation — if the active `forge` flavor's `pr-status` base differs from the unit's recorded base, realign and append a `restack` line.
 4. Load state: read `charter.md` (why this unit exists + its `design:`), `progress.md` (Tasks + Follow-ups), and `log.md` (recent notes); run `git log -5` and the repo's verification command to confirm the code state.
 5. Detect the unit's state and take the one right next action — **announce it first, then act.** Actions are conditioned on the state, so re-running is safe: it never repeats a finished step, and it writes to the store only on a genuine transition (never a bare "resumed" line — see SPEC idempotency note).
-   - **Blocked-awareness guard:** before advancing (plan/execute/ship), derive the unit's needs — implicit base + `## Needs` (SPEC §Dependencies). If any is unmet, the unit is **blocked**: surface it — name the unmet target(s) and warn the unit is blocked — then require explicit confirmation to proceed anyway. `ws-resume` is the intentional override path: it warns, it does not silently proceed, and it does not hard-refuse.
-   - **Unplanned** (`## Tasks` empty): read `charter.md` and its `design:` spec, note what the base branch already ships (build on it, don't redo it), then plan via the active `spec-driven-development` flavor's `plan` (SPEC §Flavors) — write the tasks as `T1..` into `progress.md`. Then proceed as "in progress".
-   - **In progress** (some `T#` unchecked): continue at the first unchecked task via the active `spec-driven-development` flavor's `execute` — then update `progress.md`, append decisions/notes to `log.md`, record follow-ups per SPEC "Follow-up placement" (deferred → `backlog.md`).
-   - **Done** (every `T#` checked) **with no PR** (per the active `forge` flavor's `pr-status`): the work is finished but unshipped — ship it via the active `spec-driven-development` flavor's `ship` (which opens the PR via the `forge` flavor's `pr-create` + `pr-ready`).
-   - If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide before proceeding.
+   - **Blocked-awareness guard:** before advancing (plan/execute), derive the unit's needs — implicit base + `## Needs` (SPEC §Dependencies). If any is unmet, the unit is **blocked**: surface it — name the unmet target(s) and warn the unit is blocked — then require explicit confirmation to proceed anyway. `ws-resume` is the intentional override path: it warns, it does not silently proceed, and it does not hard-refuse.
+   - **Unplanned** (`## Tasks` empty): read `charter.md` and its `design:` spec, note what the base branch already ships (build on it, don't redo it), then plan via the active `spec-driven-development` flavor's `plan` (SPEC §Flavors) — write the tasks as `T1..` into `progress.md`. Do not add ship/lint/PR as a task line; verification belongs in the last execute task or the ship flavor. Then enter the execute loop (below).
+   - **In progress** (some `T#` unchecked): continue at the first unchecked task via the active `spec-driven-development` flavor's `execute` — then update `progress.md`, append decisions/notes to `log.md`, record follow-ups per SPEC "Follow-up placement" (deferred → `backlog.md`). Then enter the execute loop (below).
+   - If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide before proceeding at ship-pause.
+
+## Execute loop
+
+After plan or each execute action, run phase derivation — do not infer
+from `progress.md`:
+
+```
+python3 <this-skill-dir>/scripts/phase.py [unit-id]
+```
+
+`<this-skill-dir>` = directory containing this SKILL.md (when set,
+`${CLAUDE_PLUGIN_ROOT}/skills/ws-resume`).
+
+| Phase | Action |
+|-------|--------|
+| `loop` | Announce first unchecked task; run active flavor `execute`; update store; repeat from phase.py. No `ws-next`. Ignore other units. |
+| `ship-pause` | Summarize; offer **Not now** (preselected), **Ship `<unit>`** (ship flavor), **`ws-next`**. On Ship, re-run phase.py. |
+| `draft-pr` | Offer **Not now** (preselected), **Mark ready** (forge `pr-ready`), **`ws-next`**. On Mark ready, re-run phase.py. |
+| `blocked` | Blocked-awareness guard; stop. |
+| `done` | Chain to `ws-next` (below). |
+
+**Plan convention:** Do not add ship/lint/PR as a `## Tasks` line. Last
+execute task owns verification; opening the PR is the ship-pause step
+when `code_complete`.
+
+**No auto-ship:** At `code_complete` with no PR, never run the ship
+flavor until the user picks **Ship** at ship-pause.
 
 ## Next
-After the action, `ws-next` — it runs from any session; offer to run it now (§Next-step chaining).
+
+Chain to `ws-next` only when phase is `done`, when the user picks
+`ws-next` at a pause, or after ship/mark-ready leaves phase `done`
+(§Next-step chaining). Do not offer `ws-next` as the sole handoff
+while phase is `loop`.

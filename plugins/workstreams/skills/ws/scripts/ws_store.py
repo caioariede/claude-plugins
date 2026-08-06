@@ -576,6 +576,27 @@ def _has_unmet_need(u: Unit, ws: Workstream,
     return False
 
 
+def resume_phase(u: Unit, ws: Workstream,
+                 by_slug: Dict[str, Unit]) -> str:
+    """Phase for ws-resume loop control.
+
+    First match: blocked > loop > ship-pause > draft-pr > done.
+    Caller must derive_status(ws) first. Unplanned units (tasks_total
+    == 0) are handled by the skill's plan path — not returned here.
+    """
+    if u.dropped or (u.pr and u.pr.state == "MERGED"):
+        return "done"
+    if unit_needs(u, ws) and _has_unmet_need(u, ws, by_slug):
+        return "blocked"
+    if u.tasks_total == 0 or u.tasks_done < u.tasks_total:
+        return "loop"
+    if u.pr is None:
+        return "ship-pause"
+    if u.pr.is_draft:
+        return "draft-pr"
+    return "done"
+
+
 def planned_unmet_needs(p: PlannedUnit, ws: Workstream,
                         by_slug: Dict[str, Unit]) -> List[Tuple[str, str]]:
     """Unmet (target, note) for a planned unit: needs= plus base when base
