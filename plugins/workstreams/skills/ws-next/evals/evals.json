@@ -1,0 +1,29 @@
+{
+  "skill_name": "ws-next",
+  "evals": [
+    {
+      "id": 1,
+      "name": "blocking-wf-solo-first",
+      "prompt": "Run ws-next when terminal ship moves exist and WF4 blocks unit dep",
+      "expected_output": "Strategy picker leads with WF4 solo blocking line before batch lanes"
+    },
+    {
+      "id": 2,
+      "name": "design-only-suggest",
+      "prompt": "Run ws-next on empty workstream with design spec only",
+      "expected_output": "Strategy picker shows From design spec lane only (plus Not now)"
+    },
+    {
+      "id": 3,
+      "name": "chain-decline-prints-command",
+      "prompt": "User picks Propose next unit then Not now at candidate picker during Chain",
+      "expected_output": "Skill requires printing default move resolved command; store untouched"
+    },
+    {
+      "id": 4,
+      "name": "focus-headline-lane-order",
+      "prompt": "Run ws-next in suggest mode with active focus and open follow-ups",
+      "expected_output": "From focus lane appears before non-blocking follow-up lanes"
+    }
+  ]
+}
