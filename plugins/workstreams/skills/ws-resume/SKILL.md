@@ -48,9 +48,8 @@ python3 <this-skill-dir>/scripts/phase.py [unit-id]
 | `blocked` | Blocked-awareness guard; stop. |
 | `done` | Chain to `ws-next` (below). |
 
-**Plan convention:** Do not add ship/lint/PR as a `## Tasks` line. Last
-execute task owns verification; opening the PR is the ship-pause step
-when `code_complete`.
+**Plan convention:** Last execute task owns verification; opening the PR
+is the ship-pause step when `code_complete` (see unplanned step above).
 
 **No auto-ship:** At `code_complete` with no PR, never run the ship
 flavor until the user picks **Ship** at ship-pause.

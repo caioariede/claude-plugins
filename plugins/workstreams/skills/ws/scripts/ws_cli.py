@@ -189,7 +189,8 @@ def _run_pr_status(cmd: str) -> Optional[S.PR]:
                base=data.get("baseRefName"))
 
 
-def gather_pr_state(ws: S.Workstream, store: Path) -> Dict[str, Optional[S.PR]]:
+def gather_pr_state(ws: S.Workstream, store: Path,
+                    branches: Optional[set] = None) -> Dict[str, Optional[S.PR]]:
     template = resolve_operation(store, "forge", "pr-status")
     result: Dict[str, Optional[S.PR]] = {}
     if not template or ":" in template.split()[0]:
@@ -197,7 +198,8 @@ def gather_pr_state(ws: S.Workstream, store: Path) -> Dict[str, Optional[S.PR]]:
         # PR state (every unit falls back to `building`).
         return result
     jobs = {u.branch: _fill(template, u.branch, u.repo)
-            for u in ws.units if u.branch}
+            for u in ws.units
+            if u.branch and (branches is None or u.branch in branches)}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(_run_pr_status, cmd): br
                    for br, cmd in jobs.items()}

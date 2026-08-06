@@ -1,6 +1,5 @@
 """Tests for ws_store.resume_phase — execute-loop boundary derivation."""
 
-import importlib.util
 import sys
 import tempfile
 import unittest
@@ -8,10 +7,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "ws" / "scripts"))
+sys.path.insert(0, str(ROOT / "skills" / "ws-resume" / "scripts"))
 
+import phase as P  # noqa: E402
 import ws_store as S  # noqa: E402
-
-PHASE = ROOT / "skills" / "ws-resume" / "scripts" / "phase.py"
+from test_ws_board import ledger, write_ws  # noqa: E402
 
 
 def u(slug, *, done=0, total=0, pr=None, stacked_on=None, needs=None,
@@ -30,18 +30,10 @@ def ws(units):
     return w
 
 
-def load_phase_module():
-    spec = importlib.util.spec_from_file_location("phase", PHASE)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
 class ResumePhaseTests(unittest.TestCase):
     def phase(self, units, slug):
         w = ws(units)
         by = {x.slug: x for x in units}
-        S.derive_status(w)
         return S.resume_phase(by[slug], w, by)
 
     def test_partial_tasks_no_pr_is_loop(self):
@@ -72,28 +64,24 @@ class ResumePhaseTests(unittest.TestCase):
         dep = u("dep", done=1, total=4, stacked_on="base")
         self.assertEqual(self.phase([base, dep], "dep"), "blocked")
 
-    def test_blocked_beats_loop(self):
-        base = u("base", done=0, total=1)
-        dep = u("dep", done=0, total=3, stacked_on="base")
-        self.assertEqual(self.phase([base, dep], "dep"), "blocked")
-
 
 class PhaseCliTests(unittest.TestCase):
-    def test_prints_loop_for_partial_unit(self):
-        mod = load_phase_module()
+    def test_generate_loop_for_partial_unit(self):
         with tempfile.TemporaryDirectory() as td:
             store = Path(td)
-            d = store / "2026-01-01-demo"
-            (d / "units" / "feat").mkdir(parents=True)
-            (d / "workstream.md").write_text("---\nname: demo\n---\n")
-            (d / "units.md").write_text(
-                '# Units\n- 2026-01-01T00:00Z  feat  "F"  '
-                'repo=o/r  branch=feat\n')
-            (d / "units" / "feat" / "progress.md").write_text(
-                "## Tasks\n- [x] T1  a\n- [ ] T2  b\n")
-            (d / "units" / "feat" / "log.md").write_text("# log\n")
+            write_ws(
+                store,
+                "2026-01-01-demo",
+                units_md=ledger('feat  "F"  repo=o/r  branch=feat'),
+                units={
+                    "feat": {
+                        "progress": "## Tasks\n- [x] T1  a\n- [ ] T2  b\n",
+                        "log": "# log\n",
+                    },
+                },
+            )
             self.assertEqual(
-                mod.phase_for(store, "2026-01-01-demo", "feat", {}),
+                P.generate(store, "2026-01-01-demo", "feat", {}),
                 "loop",
             )
 

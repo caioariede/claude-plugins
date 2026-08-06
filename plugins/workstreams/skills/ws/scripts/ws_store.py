@@ -581,14 +581,13 @@ def resume_phase(u: Unit, ws: Workstream,
     """Phase for ws-resume loop control.
 
     First match: blocked > loop > ship-pause > draft-pr > done.
-    Caller must derive_status(ws) first. Unplanned units (tasks_total
-    == 0) are handled by the skill's plan path — not returned here.
+    `tasks_total == 0` returns ``loop``; the skill plans before looping.
     """
     if u.dropped or (u.pr and u.pr.state == "MERGED"):
         return "done"
-    if unit_needs(u, ws) and _has_unmet_need(u, ws, by_slug):
+    if _has_unmet_need(u, ws, by_slug):
         return "blocked"
-    if u.tasks_total == 0 or u.tasks_done < u.tasks_total:
+    if not u.code_complete:
         return "loop"
     if u.pr is None:
         return "ship-pause"
