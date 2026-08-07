@@ -893,7 +893,7 @@ class Decision:
     open_items: List[str] = field(default_factory=list)
     headline: str = ""
     # Proposal material for the skill — full `suggest` or alongside
-    # terminal moves when `_moves_all_terminal` holds.
+    # non-restack moves when `_proposal_attachable` holds.
     proposable: List[Proposable] = field(default_factory=list)
     covered: List[str] = field(default_factory=list)   # "<slug> — <title>"
     design: str = ""
@@ -986,20 +986,9 @@ def _has_proposal_source(ws: Workstream,
     return bool(proposable or ws.design or ws.active_focus)
 
 
-def _moves_all_terminal(moves: List[Move],
-                        by_slug: Dict[str, Unit]) -> bool:
-    """True when every move is ship or resume on a code-complete unit."""
-    for m in moves:
-        if m.rule == "restack":
-            return False
-        if m.rule == "ship":
-            continue
-        if m.rule == "resume":
-            if not by_slug[m.unit].code_complete:
-                return False
-            continue
-        return False
-    return True
+def _proposal_attachable(moves: List[Move]) -> bool:
+    """True when no move is restack — proposal may ride alongside."""
+    return not any(m.rule == "restack" for m in moves)
 
 
 def decide_next(ws: Workstream) -> Decision:
@@ -1050,7 +1039,7 @@ def decide_next(ws: Workstream) -> Decision:
     if moves:
         top = moves[0]
         proposable, covered, design = _proposal_material(ws, by_slug)
-        attach = (_moves_all_terminal(moves, by_slug)
+        attach = (_proposal_attachable(moves)
                   and _has_proposal_source(ws, proposable))
         return out(top.rule, top.command, top.unit, top.branch, moves,
                    headline=_RULE_HEADLINE[top.rule],

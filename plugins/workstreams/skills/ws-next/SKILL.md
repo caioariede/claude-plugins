@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.12.0"
+  version: "0.13.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -14,7 +14,7 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 
 **Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives each unit's status, and ranks every move runnable right now — one per unit, default first. It writes nothing; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
 
-**Two carve-outs.** Ranked moves always came out of code. **Propose a unit** is the only place you compose new work — in full `suggest` (no moves) or when the user picks **Propose next unit** from Chain (terminal moves plus proposal material from the script).
+**Two carve-outs.** Ranked moves always came out of code. **Propose a unit** is the only place you compose new work — in full `suggest` (no moves) or when the user picks **Propose next unit** from Chain (non-restack moves plus proposal material from the script).
 
 ## Run the script
 
@@ -34,7 +34,7 @@ Print the script's stdout, minus each move line's machine tail — everything fr
 - `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
 - `Waiting: <unit> — PR #<n>` — one line per code-complete ready-PR unit with no move, omitted when none,
 - `Open backlog:` + a list — no-move states only,
-- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside terminal moves (see Chain). `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
+- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside non-restack moves (see Chain). `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
 
 Keep `ws-*` commands out of the list — the choice on offer is which unit to move, and a wall of commands buries it. The one command for the unit that gets picked comes later, from Chain. Don't re-derive or re-rank — the rules ran in code. Keep the `[default]` move as the default unless the session gives you a concrete reason to prefer another (the user just said they want a particular unit finished); if you override it, say why.
 
@@ -53,7 +53,7 @@ Same as ws-board — the first stderr token says why: `MANY_WORKSTREAMS <list>` 
 
 ## Propose a unit
 
-Enter this section in full `suggest` (no moves) or when the user picks **Propose next unit** from Chain. Never enter it while any **non-terminal** move exists — mid-flight `resume` or `restack` suppresses proposal; all-terminal moves with proposal material do not.
+Enter this section in full `suggest` (no moves) or when the user picks **Propose next unit** from Chain. Never enter it while a **`restack`** move exists — base drift suppresses proposal. Mid-flight `resume` no longer blocks.
 
 Steering material comes from the script: `Proposable:` follow-ups (open ones no live unit claims — `blocks=` when one blocks a live unit), `Design:`, and `ActiveFocus:` / `FocusQueue:` when set. Read the design spec when `Design:` is emitted; diff it against `Covered:` — ledger slugs, titles, and planned units the store already accounts for.
 
@@ -94,7 +94,7 @@ For Chain below, an accepted proposal behaves exactly like a `start` move: a uni
 
 ## Chain
 
-**Detecting Propose next unit.** When `moves` is non-empty and the script emitted any of `Proposable:` / `Covered:` / `Design:` (machine blocks you consume, not relay), terminal moves carry proposal material — offer **Propose next unit** per the picker rules below.
+**Detecting Propose next unit.** When `moves` is non-empty and the script emitted any of `Proposable:` / `Covered:` / `Design:` (machine blocks you consume, not relay), non-restack moves may carry proposal material — offer **Propose next unit** per the picker rules below.
 
 Build the description from available sources only — omit empty ones. Name follow-ups by id when 1–2 (`WF4`, `m:F1`); with 3+, summarize (`2 follow-ups`). Add `design` when `Design:` is present; `focus: {slug}` when `ActiveFocus:` is set. Example: `from WF4, design, focus: mvp`.
 

@@ -803,14 +803,23 @@ class TerminalFork(unittest.TestCase):
         self.assertEqual(d.open_items,
                          ["planned: p — stuck", "WF1 — later"])
 
-    def test_mid_flight_move_suppresses_proposal_alongside(self):
-        """Non-terminal moves block proposal material even with design."""
+    def test_mid_flight_move_attaches_proposal_alongside(self):
+        """Mid-flight resume no longer blocks proposal material."""
         live = S.Unit(slug="a", tasks_total=2, tasks_done=1)
         ws = mkws([live], wfs=[S.Followup("WF1", "later", checked=False)],
                       design="~/specs/x-design.md")
         d = S.decide_next(ws)
         self.assertEqual(d.rule, "resume")
-        self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+        self.assertEqual(d.design, "~/specs/x-design.md")
+        self.assertTrue(d.covered)
+
+    def test_mid_flight_only_move_attaches_proposal_material(self):
+        live = S.Unit(slug="a", tasks_total=6, tasks_done=5)
+        ws = mkws([live], design="~/specs/x-design.md")
+        d = S.decide_next(ws)
+        self.assertEqual(d.rule, "resume")
+        self.assertEqual(len(d.moves), 1)
+        self.assertEqual(d.design, "~/specs/x-design.md")
 
     def test_terminal_moves_attach_proposal_material(self):
         ship = S.Unit(slug="ship-me", tasks_total=1, tasks_done=1, pr=None)
@@ -838,13 +847,14 @@ class TerminalFork(unittest.TestCase):
         self.assertEqual(d.rule, "ship")
         self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
 
-    def test_mixed_terminal_and_mid_flight_suppresses_proposal(self):
+    def test_mixed_terminal_and_mid_flight_attaches_proposal(self):
         ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
         live = S.Unit(slug="a", tasks_total=2, tasks_done=1)
         ws = mkws([ship, live], design="~/specs/x-design.md")
         d = S.decide_next(ws)
         self.assertEqual(d.rule, "ship")
-        self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+        self.assertEqual(d.design, "~/specs/x-design.md")
+        self.assertTrue(d.covered)
 
     def test_terminal_moves_active_focus_only_attaches_material(self):
         ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)

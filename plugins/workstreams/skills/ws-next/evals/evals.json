@@ -24,6 +24,24 @@
       "name": "focus-headline-lane-order",
       "prompt": "Run ws-next in suggest mode with active focus and open follow-ups",
       "expected_output": "From focus lane appears before non-blocking follow-up lanes"
+    },
+    {
+      "id": 5,
+      "name": "mid-flight-single-move-chain",
+      "prompt": "Run ws-next when one unit is mid-flight (1 of 6 tasks left) and a design spec exists; another agent owns the in-flight work",
+      "expected_output": "Chain picker runs (does not skip to hook): Not now, in-flight move [default], Propose next unit last — not preselected"
+    },
+    {
+      "id": 6,
+      "name": "restack-blocks-propose",
+      "prompt": "Run ws-next when a unit needs restack and design exists",
+      "expected_output": "No Propose next unit in Chain; hook for restack only"
+    },
+    {
+      "id": 7,
+      "name": "mixed-ship-mid-flight-chain",
+      "prompt": "Run ws-next with one ship-it move and one mid-flight move plus design",
+      "expected_output": "Chain picker lists both moves plus Propose next unit"
     }
   ]
 }
