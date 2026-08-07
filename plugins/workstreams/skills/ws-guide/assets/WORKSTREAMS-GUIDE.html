@@ -722,9 +722,10 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
 <li><b>Call <code>ws-init</code> the moment the spec exists</b> — before writing any plan. With the superpowers flavor active, <a href="#spec-watch">spec-watch</a> nudges this step automatically the moment the design doc is written. <code>ws-init</code> creates the workstream and records the design on <code>workstream.md</code>. Do <b>not</b> run <code>writing-plans</code> here; there is no top-level plan. Then run <code>ws-focus</code> to name what you're aiming for first.</li>
 <li><b>Split the spec into units</b> with <code>ws-start</code>, one slice at a time rather than all of them up front — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
-<li><b>Let each unit plan itself.</b> <code>ws-resume</code> runs <code>writing-plans</code> scoped to that unit (tasks land as <code>T1..</code> in its <code>progress.md</code>), then executes with <code>subagent-driven-development</code>.</li>
+<li><b>Let each unit plan itself.</b> First <code>ws-resume</code> on an unplanned unit runs <code>writing-plans</code> (plan saved alongside the design spec as <code>-plan.md</code>), records tasks as <code>T1..</code> in <code>progress.md</code>, and honors the Superpowers execution handoff. Later <code>ws-resume</code> runs print a short orientation (goal, progress, plan path) then continue executing.</li>
 </ol>
 <aside class="note note-rule"><b>Planning lives in units, not above them.</b> After the spec, go straight to <code>ws-init</code> → <code>ws-focus</code> → <code>ws-start</code>. The <code>writing-plans</code> step is deferred into each unit's <code>ws-resume</code>, so every plan is scoped to one worktree.</aside>
+<aside class="note note-tip"><b>Plan path.</b> Unit plans live next to the workstream design spec — not in <code>docs/superpowers/plans/</code>. The store records the path in <code>log.md</code> as <code>plan &lt;absolute-path&gt;</code>.</aside>
 </section>
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>

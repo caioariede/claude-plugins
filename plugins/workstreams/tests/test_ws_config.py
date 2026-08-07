@@ -501,6 +501,18 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertEqual(installed, [])
 
 
+class SuperpowersHooksTest(unittest.TestCase):
+    def test_superpowers_ws_resume_hooks_bundled(self):
+        ini = ROOT / "skills" / "ws" / "references" / "flavors.ini"
+        text = ini.read_text("utf-8")
+        for key in (
+            "hook-ws-resume-unplanned-before",
+            "hook-ws-resume-unplanned-after",
+            "hook-ws-resume-loop-before",
+        ):
+            self.assertIn(key, text, f"missing {key} in bundled flavors.ini")
+
+
 class HookLineOrder(unittest.TestCase):
     def test_choices_keep_merged_key_order(self):
         ops = {
