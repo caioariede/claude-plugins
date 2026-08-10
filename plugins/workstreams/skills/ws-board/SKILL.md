@@ -3,7 +3,7 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.5.6"
+  version: "0.6.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
