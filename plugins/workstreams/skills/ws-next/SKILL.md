@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.13.0"
+  version: "0.14.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -34,7 +34,7 @@ Print the script's stdout, minus each move line's machine tail — everything fr
 - `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
 - `Waiting: <unit> — PR #<n>` — one line per code-complete ready-PR unit with no move, omitted when none,
 - `Open backlog:` + a list — no-move states only,
-- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside non-restack moves (see Chain). `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
+- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` / `ProposeSummary:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside non-restack moves (see Chain). `ProposeSummary:` appears when Chain may offer **Propose next unit** — copy it verbatim as that option's description (`from …` tail). `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
 
 Keep `ws-*` commands out of the list — the choice on offer is which unit to move, and a wall of commands buries it. The one command for the unit that gets picked comes later, from Chain. Don't re-derive or re-rank — the rules ran in code. Keep the `[default]` move as the default unless the session gives you a concrete reason to prefer another (the user just said they want a particular unit finished); if you override it, say why.
 
@@ -96,7 +96,7 @@ For Chain below, an accepted proposal behaves exactly like a `start` move: a uni
 
 **Detecting Propose next unit.** When `moves` is non-empty and the script emitted any of `Proposable:` / `Covered:` / `Design:` (machine blocks you consume, not relay), non-restack moves may carry proposal material — offer **Propose next unit** per the picker rules below.
 
-Build the description from available sources only — omit empty ones. Name follow-ups by id when 1–2 (`WF4`, `m:F1`); with 3+, summarize (`2 follow-ups`). Add `design` when `Design:` is present; `focus: {slug}` when `ActiveFocus:` is set. Example: `from WF4, design, focus: mvp`.
+Build the **Propose next unit** description from `ProposeSummary:` when present — copy the tail verbatim after `from ` (the script counts `Proposable:` lines for you). When `ProposeSummary:` is absent, fall back: name follow-ups by id when 1–2 (`WF4`, `m:F1`); with 3+, summarize (`28 follow-ups`); add `design` when `Design:` is present; `focus: {slug}` when `ActiveFocus:` is set. Example: `Propose next unit — from 28 follow-ups, design`.
 
 Settle the unit first. Two or more moves, **or** one move with proposal material alongside → ask which one moves: `Not now` is the first and preselected option, then the top three moves in the script's order, labelled by unit slug with `<verb>: <why>` as the description and the first marked as the default move, then **Propose next unit** last when proposal material is present (never preselected, never default; carry the source summary as its description). Moves past the third stay in the relayed list and are picked by naming the unit. A single move with no proposal material skips this question entirely. Picking a unit runs nothing — it only decides which move the next question is about — and a dismissal reads as `Not now`, which ends by printing the default move's resolved command. Picking **Propose next unit** goes to Propose a unit; an accepted proposal fires `hook-ws-next-after` like a `start` move.
 

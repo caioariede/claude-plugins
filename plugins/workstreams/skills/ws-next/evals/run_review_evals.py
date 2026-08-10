@@ -18,7 +18,11 @@ sys.path.insert(0, str(EVALS))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import ws_store as S  # noqa: E402
-from chain_expectations import chain_offers_propose, chain_runs_unit_picker  # noqa: E402
+from chain_expectations import (  # noqa: E402
+    chain_offers_propose,
+    chain_runs_unit_picker,
+    propose_source_summary,
+)
 from lane_expectations import strategy_lanes  # noqa: E402
 from test_ws_board import mkws, pr  # noqa: E402
 
@@ -64,6 +68,15 @@ def scenario(name: str):
         d = S.decide_next(ws)
         return d, next_mod.render_decision(d)
 
+    if name == "chain-many-followups-summary":
+        live = S.Unit(slug="thread-real-signature-method", tasks_total=4,
+                      tasks_done=1)
+        wfs = [S.Followup(f"WF{i}", f"item {i}", checked=False)
+               for i in range(32, 60)]
+        ws = mkws([live], wfs=wfs, design="~/specs/signing-design.md")
+        d = S.decide_next(ws)
+        return d, next_mod.render_decision(d)
+
     raise KeyError(name)
 
 
@@ -79,6 +92,11 @@ def grade(name: str, d: S.Decision, rendered: str) -> list[dict]:
             ("design attached", bool(d.design),
              f"design={d.design!r}"),
             ("rule is resume", d.rule == "resume", f"rule={d.rule}"),
+            ("propose summary design only",
+             propose_source_summary(d) == "design",
+             f"summary={propose_source_summary(d)!r}"),
+            ("script emits ProposeSummary",
+             "ProposeSummary: design" in rendered, ""),
         ]
     elif name == "restack-blocks-propose":
         checks = [
@@ -107,6 +125,17 @@ def grade(name: str, d: S.Decision, rendered: str) -> list[dict]:
             ("design lane only", lanes == ["From design spec"],
              f"lanes={lanes}"),
         ]
+    elif name == "chain-many-followups-summary":
+        summary = propose_source_summary(d)
+        checks = [
+            ("chain picker runs", chain_runs_unit_picker(d), ""),
+            ("propose offered", chain_offers_propose(d),
+             f"proposable={len(d.proposable)}"),
+            ("summary counts follow-ups",
+             summary.startswith("28 follow-ups, design"), f"summary={summary!r}"),
+            ("script emits ProposeSummary",
+             f"ProposeSummary: {summary}" in rendered, ""),
+        ]
 
     return [{"text": t, "passed": p, "evidence": e} for t, p, e in checks]
 
@@ -116,6 +145,7 @@ def main() -> int:
     focus = {5: "mid-flight-single-move-chain",
              6: "restack-blocks-propose",
              7: "mixed-ship-mid-flight-chain",
+             8: "chain-many-followups-summary",
              1: "blocking-wf-solo-first",
              2: "design-only-suggest"}
 

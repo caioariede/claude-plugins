@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""Expected Chain picker behavior from a Decision — mirrors ws-next Chain."""
+"""Expected Chain picker behavior — re-exports scripts/chain_summary.py."""
 
 from __future__ import annotations
 
-import ws_store as S
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from chain_summary import (  # noqa: E402
+    chain_offers_propose,
+    chain_runs_unit_picker,
+    has_proposal_material,
+    propose_source_summary,
+)
 
-def has_proposal_material(d: S.Decision) -> bool:
-    return bool(d.proposable or d.covered or d.design)
-
-
-def chain_offers_propose(d: S.Decision) -> bool:
-    """True when Chain should list Propose next unit."""
-    return bool(d.moves) and has_proposal_material(d)
-
-
-def chain_runs_unit_picker(d: S.Decision) -> bool:
-    """True when Chain settles the unit before the hook."""
-    return len(d.moves) >= 2 or (len(d.moves) == 1 and has_proposal_material(d))
+__all__ = [
+    "chain_offers_propose",
+    "chain_runs_unit_picker",
+    "has_proposal_material",
+    "propose_source_summary",
+]

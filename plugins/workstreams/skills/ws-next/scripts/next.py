@@ -19,8 +19,10 @@ from pathlib import Path
 from typing import Dict, Optional, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ws_store as S   # noqa: E402
 import ws_cli as C     # noqa: E402
+from chain_summary import chain_offers_propose, propose_source_summary  # noqa: E402
 
 
 # Display verbs for the four move rules; the ws-* command itself rides
@@ -73,6 +75,10 @@ def render_decision(d: S.Decision) -> str:
         lines.append("FocusQueue:")
         for f in d.focus_queue:
             lines.append(f"- {S.focus_item_text(f)}")
+    if chain_offers_propose(d):
+        summary = propose_source_summary(d)
+        if summary:
+            lines.append(f"ProposeSummary: {summary}")
     return "\n".join(lines)
 
 

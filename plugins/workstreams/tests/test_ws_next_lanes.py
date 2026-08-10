@@ -10,7 +10,11 @@ sys.path.insert(0, str(ROOT / "skills" / "ws" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "ws-next" / "evals"))
 
 import ws_store as S  # noqa: E402
-from chain_expectations import chain_offers_propose, chain_runs_unit_picker  # noqa: E402
+from chain_expectations import (  # noqa: E402
+    chain_offers_propose,
+    chain_runs_unit_picker,
+    propose_source_summary,
+)
 from lane_expectations import strategy_lanes  # noqa: E402
 from test_ws_board import mkws, pr  # noqa: E402
 
@@ -74,6 +78,28 @@ class StrategyLaneEvals(unittest.TestCase):
         d = S.decide_next(ws)
         self.assertTrue(chain_offers_propose(d))
         self.assertTrue(chain_runs_unit_picker(d))
+
+    def test_propose_summary_design_only(self):
+        live = S.Unit(slug="cert", tasks_total=6, tasks_done=5)
+        d = S.decide_next(mkws([live], design="~/specs/cert-design.md"))
+        self.assertEqual(propose_source_summary(d), "design")
+
+    def test_propose_summary_many_followups(self):
+        live = S.Unit(slug="a", tasks_total=4, tasks_done=1)
+        wfs = [S.Followup(f"WF{i}", "x", checked=False) for i in range(32, 60)]
+        d = S.decide_next(mkws([live], wfs=wfs,
+                               design="~/specs/signing-design.md"))
+        self.assertEqual(propose_source_summary(d),
+                         "28 follow-ups, design")
+
+    def test_next_emits_propose_summary_in_chain(self):
+        sys.path.insert(0, str(ROOT / "skills" / "ws-next" / "scripts"))
+        import next as N  # noqa: E402
+        live = S.Unit(slug="a", tasks_total=4, tasks_done=1)
+        wfs = [S.Followup(f"WF{i}", "x", checked=False) for i in range(32, 60)]
+        ws = mkws([live], wfs=wfs, design="~/specs/signing-design.md")
+        out = N.render_decision(S.decide_next(ws))
+        self.assertIn("ProposeSummary: 28 follow-ups, design", out)
 
 
 if __name__ == "__main__":
