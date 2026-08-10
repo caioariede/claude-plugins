@@ -227,6 +227,13 @@ class BoardRendering(unittest.TestCase):
         out = B.render_board(b)
         self.assertIn("Focus: mvp — see shell (+1 queued)", out)
 
+    def test_board_shows_empty_focus_placeholder(self):
+        ws = S.Workstream(ws_id="w", name="demo")
+        ws.units = [S.Unit(slug="a", tasks_total=1, tasks_done=1,
+                           pr=pr(1, "MERGED"))]
+        out = B.render_board(S.build_board(ws))
+        self.assertIn("Focus: — (none set)", out)
+
     def test_no_blocked_column_when_none(self):
         ws = S.Workstream(ws_id="w", name="demo")
         ws.units = [S.Unit(slug="a", tasks_total=1, tasks_done=1,
@@ -387,6 +394,17 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("later", out)               # not started
         self.assertIn("WF1", out)                 # open backlog
         self.assertNotIn("✅ complete", out)      # backlog keeps it open
+        tmp.cleanup()
+
+    def test_unit_detail_shows_empty_focus_placeholder(self):
+        tmp = tempfile.TemporaryDirectory()
+        store = Path(tmp.name)
+        write_ws(
+            store, "2026-01-01-demo",
+            units_md=ledger('a  "A"  repo=o/r  branch=a'),
+            units={"a": {"progress": "## Tasks\n- [x] T1  x\n"}})
+        out = B.generate(store, "2026-01-01-demo", "a", {"a": None})
+        self.assertIn("Focus: — (none set)", out)
         tmp.cleanup()
 
 

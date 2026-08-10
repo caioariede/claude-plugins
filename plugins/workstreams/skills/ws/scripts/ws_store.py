@@ -634,7 +634,7 @@ class Board:
 
 def focus_line_for(ws: Workstream) -> str:
     if not ws.active_focus:
-        return ""
+        return "Focus: — (none set)"
     f = ws.active_focus
     line = f"Focus: {f.slug} — {f.outcome}"
     n = len(ws.focus_queued)

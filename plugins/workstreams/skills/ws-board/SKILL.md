@@ -26,7 +26,7 @@ A `unit-id` (or a lone bare slug) prints that unit's detail instead of the board
 
 ## Print it verbatim
 
-Print stdout as **bare GFM markdown, never inside a code fence** — a fence makes the terminal show literal `|` pipes instead of a table. The script already lays out one unit per row and adds the ⛔ Blocked column only when a unit is blocked; don't reformat or re-derive it.
+Print stdout as **bare GFM markdown, never inside a code fence** — a fence makes the terminal show literal `|` pipes instead of a table. The script already lays out one unit per row and adds the ⛔ Blocked column only when a unit is blocked; don't reformat or re-derive it. A focus line always sits between the header and the kanban table; `(none set)` means no active outcome.
 
 ## Exit 2 — you pick
 
