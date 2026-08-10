@@ -3,7 +3,8 @@
 
 Usage: phase.py [unit-id]
 
-Prints one line: blocked | loop | ship-pause | draft-pr | done
+Prints one line: blocked | plan | plan-pause | loop | ship-pause |
+draft-pr | done
 Exit 2 when the caller must pick (same tokens as ws-board).
 """
 

@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.17.4"
+  version: "0.17.5"
   author: Caio Ariede
 ---
 
@@ -169,12 +169,14 @@ kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>
 
 `plan` records the unit implementation plan path (superpowers flavor);
 append once at first save. `decision execute-mode=subagent-driven` or
-`execute-mode=inline` records which execute path ws-resume uses after
-planning.
+`execute-mode=inline` records which execute path ws-resume uses — append
+only at **plan-pause** when the user picks Subagent-driven or Inline,
+never when the plan file is first saved.
 
 **Task derivation (superpowers):** one `## Tasks` line per `### Task N:`
 heading in the unit plan file — `- [ ] T<n>  <Task N title>`,
 monotonic `T1..`. Last task owns verification (ws-resume plan convention).
+Derive at plan-pause confirmation, not at plan save.
 
 **Plan path (superpowers):** resolve from `charter.md` `design:` — same
 directory; swap `-design.md` → `-plan.md`, else `<bare-slug>-plan.md`.

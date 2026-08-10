@@ -576,17 +576,38 @@ def _has_unmet_need(u: Unit, ws: Workstream,
     return False
 
 
+def _has_plan_line(u: Unit) -> bool:
+    return any(kind == "plan" for _ts, kind, _p in u.log)
+
+
+def _has_execute_mode(u: Unit) -> bool:
+    return any(
+        kind == "decision" and payload.startswith("execute-mode=")
+        for _ts, kind, payload in u.log
+    )
+
+
 def resume_phase(u: Unit, ws: Workstream,
                  by_slug: Dict[str, Unit]) -> str:
     """Phase for ws-resume loop control.
 
-    First match: blocked > loop > ship-pause > draft-pr > done.
-    `tasks_total == 0` returns ``loop``; the skill plans before looping.
+    First match: blocked > plan > plan-pause > loop > ship-pause >
+    draft-pr > done. Planning gates on a ``plan`` log line plus an
+    ``execute-mode`` decision — not on empty tasks alone. The ``none``
+    flavor may derive tasks without either; those units skip straight
+    to ``loop``.
     """
     if u.dropped or (u.pr and u.pr.state == "MERGED"):
         return "done"
     if _has_unmet_need(u, ws, by_slug):
         return "blocked"
+    if not _has_execute_mode(u):
+        if _has_plan_line(u):
+            return "plan-pause"
+        if u.tasks_total == 0:
+            return "plan"
+        if not u.code_complete:
+            return "loop"
     if not u.code_complete:
         return "loop"
     if u.pr is None:

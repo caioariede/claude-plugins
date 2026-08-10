@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.6.1"
+  version: "0.7.0"
   author: Caio Ariede
 ---
 
@@ -22,21 +22,8 @@ metadata:
    - branch also gone → fresh start off the repo default branch (per SPEC); the store's progress is your restart baseline.
 3. Reconcile base per SPEC Restack reconciliation — if the active `forge` flavor's `pr-status` base differs from the unit's recorded base, realign and append a `restack` line.
 4. Load state: read `charter.md` (why this unit exists + its `design:`), `progress.md` (Tasks + Follow-ups), and `log.md` (recent notes); run `git log -5` and the repo's verification command to confirm the code state.
-5. Detect the unit's state and take the one right next action — **announce it first, then act.** Actions are conditioned on the state, so re-running is safe: it never repeats a finished step, and it writes to the store only on a genuine transition (never a bare "resumed" line — see SPEC idempotency note).
-   - **Blocked-awareness guard:** before advancing (plan/execute), derive the unit's needs — implicit base + `## Needs` (SPEC §Dependencies). If any is unmet, the unit is **blocked**: surface it — name the unmet target(s) and warn the unit is blocked — then require explicit confirmation to proceed anyway. `ws-resume` is the intentional override path: it warns, it does not silently proceed, and it does not hard-refuse.
-   - **Unplanned** (`## Tasks` empty): read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path (SPEC §Plan path). If the plan file already exists → **sync only:** append `plan` to `log.md`, derive `T1..` into `progress.md`; skip the `plan` op. Else: fire `hook-ws-resume-unplanned-before` (interactive); run the flavor `plan` op (`writing-plans` + handoff for superpowers); fire `hook-ws-resume-unplanned-after`. **Headless** (hooks skip): resolve plan path, set session context for the plan op, run `plan` if no file yet, then sync store. Record `decision execute-mode=…` from the handoff. Do not add ship/lint/PR task lines. Enter execute (below). `none` flavor skips hooks; its `plan` op writes `T1..` inline.
-   - **In progress** (some `T#` unchecked): unless this invocation just finished unplanned planning, fire `hook-ws-resume-loop-before` once (superpowers). Run execute for the first unchecked task (below). Enter the execute loop (below).
-   - If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide before proceeding at ship-pause.
-
-## Execute
-
-**Superpowers execute mode** (from `decision execute-mode=…` in `log.md`):
-- `inline` → run `executing-plans` **once** this invocation (batch + checkpoints), then phase.py. Do not re-invoke inside the loop.
-- default / `subagent-driven` → flavor `execute` on the first unchecked task, then the loop below.
-
-## Execute loop
-
-After execute action, run phase derivation — do not infer from `progress.md`:
+5. **Blocked-awareness guard:** before advancing (plan/execute), derive the unit's needs — implicit base + `## Needs` (SPEC §Dependencies). If any is unmet, the unit is **blocked**: surface it — name the unmet target(s) and warn the unit is blocked — then require explicit confirmation to proceed anyway. `ws-resume` is the intentional override path: it warns, it does not silently proceed, and it does not hard-refuse.
+6. Derive phase — do not infer planning or execute boundaries from `progress.md` alone:
 
 ```
 python3 <this-skill-dir>/scripts/phase.py [unit-id]
@@ -44,8 +31,10 @@ python3 <this-skill-dir>/scripts/phase.py [unit-id]
 
 | Phase | Action |
 |-------|--------|
-| `loop` | Announce first unchecked task; run flavor `execute`; update store; repeat from phase.py. No `ws-next`. |
-| `ship-pause` | Summarize; offer **Not now** (preselected), **Ship `<unit>`** (ship flavor), **`ws-next`**. On Ship, re-run phase.py. |
+| `plan` | **Plan only — no code, no tasks, no execute-mode.** Read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path (SPEC §Plan path). If the plan file already exists and `log.md` lacks a `plan` line → append `plan` only, re-run phase.py, stop at `plan-pause`. Else: fire `hook-ws-resume-unplanned-before` (interactive); run the flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**; plan-pause owns that gate); fire `hook-ws-resume-unplanned-after`. Append `plan <absolute-path>` to `log.md` when absent. Do **not** derive `T1..`, do **not** append `execute-mode`, do **not** touch source files. Re-run phase.py → `plan-pause`. **`none` flavor:** its `plan` op writes `T1..` inline and skips this gate. **Headless** (hooks skip): resolve plan path, run `plan` if no file yet, append `plan`, default `execute-mode=subagent-driven`, derive tasks, enter execute. |
+| `plan-pause` | Summarize the plan path and task headings (read the plan file — do not derive into `progress.md` yet). Offer **Not now** (preselected), **Subagent-driven**, **Inline**. On **Not now**, stop. On **Subagent-driven** / **Inline**: derive `T1..` into `progress.md` (SPEC task derivation), append `decision execute-mode=subagent-driven` or `execute-mode=inline`, re-run phase.py, enter execute (below). Never pick an execute mode or start T1 without the user's choice. |
+| `loop` | Unless this invocation just cleared `plan-pause`, fire `hook-ws-resume-loop-before` once (superpowers). Run execute for the first unchecked task (below). Enter the execute loop (below). |
+| `ship-pause` | Summarize; offer **Not now** (preselected), **Ship `<unit>`** (ship flavor), **`ws-next`**. On Ship, re-run phase.py. If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide. |
 | `draft-pr` | Offer **Not now** (preselected), **Mark ready** (forge `pr-ready`), **`ws-next`**. On Mark ready, re-run phase.py. |
 | `blocked` | Blocked-awareness guard; stop. |
 | `done` | Chain to `ws-next` (below). |
@@ -53,6 +42,22 @@ python3 <this-skill-dir>/scripts/phase.py [unit-id]
 **Plan convention:** Last execute task owns verification; opening the PR is ship-pause when `code_complete`.
 
 **No auto-ship:** At `code_complete` with no PR, never run the ship flavor until the user picks **Ship** at ship-pause.
+
+## Execute
+
+**Superpowers execute mode** (from `decision execute-mode=…` in `log.md`):
+- `inline` → run `executing-plans` **once** this invocation (batch + checkpoints), then phase.py. Do not re-invoke inside the loop.
+- default / `subagent-driven` → flavor `execute` on the first unchecked task, then the loop below. **The parent session coordinates only** — dispatch a fresh subagent per task; do not implement task steps inline in the parent.
+
+## Execute loop
+
+After execute action, re-run phase derivation:
+
+```
+python3 <this-skill-dir>/scripts/phase.py [unit-id]
+```
+
+Then act on the phase table above (`loop` → repeat execute; pauses → stop for user).
 
 ## Next
 

@@ -64,6 +64,27 @@ class ResumePhaseTests(unittest.TestCase):
         dep = u("dep", done=1, total=4, stacked_on="base")
         self.assertEqual(self.phase([base, dep], "dep"), "blocked")
 
+    def test_no_plan_no_tasks_is_plan(self):
+        a = u("a")
+        self.assertEqual(self.phase([a], "a"), "plan")
+
+    def test_plan_line_no_execute_mode_is_plan_pause(self):
+        a = u("a")
+        a.log = [("2026-01-01T00:00Z", "plan", "/tmp/plan.md")]
+        self.assertEqual(self.phase([a], "a"), "plan-pause")
+
+    def test_execute_mode_partial_tasks_is_loop(self):
+        a = u("a", done=1, total=4)
+        a.log = [
+            ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
+            ("2026-01-01T00:01Z", "decision", "execute-mode=subagent-driven"),
+        ]
+        self.assertEqual(self.phase([a], "a"), "loop")
+
+    def test_none_flavor_tasks_without_plan_or_execute_is_loop(self):
+        a = u("a", done=0, total=3)
+        self.assertEqual(self.phase([a], "a"), "loop")
+
 
 class PhaseCliTests(unittest.TestCase):
     def test_generate_loop_for_partial_unit(self):
