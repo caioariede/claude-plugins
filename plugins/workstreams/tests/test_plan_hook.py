@@ -124,6 +124,17 @@ class PlanWatchTest(unittest.TestCase):
             rc, out = run_hook(script, {"tool_input": {"file_path": plan}})
             self.assertEqual((rc, out), (0, ""))
 
+    def test_designless_workstream_is_silent(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = make_store(td)
+            write_ws(store, "2026-08-10-b")
+            design = f"{td}/specs/2026-08-10-new-design.md"
+            plan = f"{td}/specs/2026-08-10-new-plan.md"
+            write_design(design)
+            script = install(store)
+            rc, out = run_hook(script, {"tool_input": {"file_path": plan}})
+            self.assertEqual((rc, out), (0, ""))
+
     def test_custom_glob_is_honored(self):
         with tempfile.TemporaryDirectory() as td:
             script = install(make_store(td), glob="*plans/*-plan.md")

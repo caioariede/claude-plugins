@@ -32,4 +32,10 @@ store=$(cd "$(dirname "$0")/.." 2>/dev/null && pwd) || exit 0
 base=$(basename "$design")
 grep -qs "design:.*$base" "$store"/*/workstream.md && exit 0
 
+# A container without a design already exists — oneshot would
+# provision a second workstream; stay silent.
+nospec=$(grep -Ls '^design:[[:space:]]*[^[:space:]]' \
+    "$store"/*/workstream.md 2>/dev/null | head -1)
+[ -n "$nospec" ] && exit 0
+
 printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"[workstreams] %s looks like an implementation plan whose design spec (%s) no workstream owns yet. If scope reads single-unit (one PR, no subsystem split, no cross-unit deps), offer ws-oneshot once per session — never auto-run. If a workstream already owns this design, or scope looks multi-unit, say nothing."}}\n' "$path" "$design"
