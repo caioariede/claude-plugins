@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "skills" / "ws-next" / "evals"))
 import ws_store as S  # noqa: E402
 from chain_expectations import (  # noqa: E402
     chain_offers_propose,
+    chain_propose_options,
     chain_runs_unit_picker,
     propose_source_summary,
 )
@@ -100,6 +101,23 @@ class StrategyLaneEvals(unittest.TestCase):
         ws = mkws([live], wfs=wfs, design="~/specs/signing-design.md")
         out = N.render_decision(S.decide_next(ws))
         self.assertIn("ProposeSummary: 28 follow-ups, design", out)
+
+    def test_chain_propose_options_many_lanes(self):
+        live = S.Unit(slug="a", tasks_total=4, tasks_done=1)
+        wfs = [S.Followup(f"WF{i}", "x", checked=False) for i in range(32, 60)]
+        d = S.decide_next(mkws([live], wfs=wfs,
+                               design="~/specs/signing-design.md"))
+        opts = chain_propose_options(d)
+        self.assertEqual(opts, [
+            "Propose from design spec",
+            "Propose from Workstream follow-ups",
+        ])
+
+    def test_chain_propose_option_single_lane(self):
+        live = S.Unit(slug="cert", tasks_total=6, tasks_done=5)
+        d = S.decide_next(mkws([live], design="~/specs/cert-design.md"))
+        self.assertEqual(chain_propose_options(d),
+                         ["Propose from design spec"])
 
 
 if __name__ == "__main__":

@@ -20,8 +20,54 @@ def chain_runs_unit_picker(d: S.Decision) -> bool:
         len(d.moves) == 1 and has_proposal_material(d))
 
 
+def _is_unit_fu(fid: str) -> bool:
+    return ":F" in fid
+
+
+def strategy_lanes(d: S.Decision) -> List[str]:
+    """Return lane labels the skill should offer (excluding Not now)."""
+    lanes: List[str] = []
+    blocking = [p for p in d.proposable if p.blocks]
+    unit_fu = [p for p in d.proposable if not p.blocks and _is_unit_fu(p.fid)]
+    ws_fu = [p for p in d.proposable if not p.blocks and not _is_unit_fu(p.fid)]
+
+    for p in blocking:
+        lanes.append(f"{p.fid} — {p.desc} (blocks {', '.join(p.blocks)})")
+
+    if d.active_focus:
+        lanes.append(f"From focus: {d.active_focus.slug}")
+
+    if d.design and not d.active_focus:
+        lanes.append("From design spec")
+
+    if len(unit_fu) >= 2:
+        lanes.append("Unit follow-ups")
+    elif len(unit_fu) == 1:
+        p = unit_fu[0]
+        lanes.append(f"{p.fid} — {p.desc}")
+
+    if len(ws_fu) >= 2:
+        lanes.append("Workstream follow-ups")
+    elif len(ws_fu) == 1:
+        p = ws_fu[0]
+        lanes.append(f"{p.fid} — {p.desc}")
+
+    return lanes
+
+
+def chain_propose_option(lane: str) -> str:
+    tail = lane[5:] if lane.startswith("From ") else lane
+    return f"Propose from {tail}"
+
+
+def chain_propose_options(d: S.Decision) -> List[str]:
+    if not chain_offers_propose(d):
+        return []
+    return [chain_propose_option(lane) for lane in strategy_lanes(d)]
+
+
 def propose_source_summary(d: S.Decision) -> str:
-    """Tail after 'from ' on the Chain Propose next unit option."""
+    """Informational summary of proposal sources (machine-only)."""
     parts: List[str] = []
     n = len(d.proposable)
     if n == 1:

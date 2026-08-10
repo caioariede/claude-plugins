@@ -16,7 +16,7 @@
     {
       "id": 3,
       "name": "chain-decline-prints-command",
-      "prompt": "User picks Propose next unit then Not now at candidate picker during Chain",
+      "prompt": "User picks Propose from design spec then Not now at candidate picker during Chain",
       "expected_output": "Skill requires printing default move resolved command; store untouched"
     },
     {
@@ -29,7 +29,7 @@
       "id": 5,
       "name": "mid-flight-single-move-chain",
       "prompt": "Run ws-next when one unit is mid-flight (1 of 6 tasks left) and a design spec exists; another agent owns the in-flight work",
-      "expected_output": "Chain picker runs (does not skip to hook): Not now, in-flight move [default], Propose next unit last — not preselected"
+      "expected_output": "Chain picker runs (does not skip to hook): Not now, in-flight move [default], Propose from design spec last — not preselected"
     },
     {
       "id": 6,
@@ -41,7 +41,7 @@
       "id": 8,
       "name": "chain-many-followups-summary",
       "prompt": "Run ws-next when one unit is mid-flight, design exists, and 28+ open WF follow-ups are proposable",
-      "expected_output": "ProposeSummary lists follow-up count plus design; Chain Propose option copies it verbatim"
+      "expected_output": "Chain offers Propose from design spec and Propose from Workstream follow-ups; no generic Propose next unit"
     }
   ]
 }

@@ -9,14 +9,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from chain_summary import (  # noqa: E402
     chain_offers_propose,
+    chain_propose_options,
     chain_runs_unit_picker,
     has_proposal_material,
     propose_source_summary,
+    strategy_lanes,
 )
 
 __all__ = [
     "chain_offers_propose",
+    "chain_propose_options",
     "chain_runs_unit_picker",
     "has_proposal_material",
     "propose_source_summary",
+    "strategy_lanes",
 ]

@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import ws_store as S  # noqa: E402
 from chain_expectations import (  # noqa: E402
     chain_offers_propose,
+    chain_propose_options,
     chain_runs_unit_picker,
     propose_source_summary,
 )
@@ -84,6 +85,7 @@ def grade(name: str, d: S.Decision, rendered: str) -> list[dict]:
     checks: list[tuple[str, bool, str]] = []
 
     if name == "mid-flight-single-move-chain":
+        opts = chain_propose_options(d)
         checks = [
             ("chain picker runs", chain_runs_unit_picker(d),
              f"moves={len(d.moves)} design={d.design!r}"),
@@ -92,11 +94,8 @@ def grade(name: str, d: S.Decision, rendered: str) -> list[dict]:
             ("design attached", bool(d.design),
              f"design={d.design!r}"),
             ("rule is resume", d.rule == "resume", f"rule={d.rule}"),
-            ("propose summary design only",
-             propose_source_summary(d) == "design",
-             f"summary={propose_source_summary(d)!r}"),
-            ("script emits ProposeSummary",
-             "ProposeSummary: design" in rendered, ""),
+            ("single propose option",
+             opts == ["Propose from design spec"], f"opts={opts}"),
         ]
     elif name == "restack-blocks-propose":
         checks = [
@@ -126,15 +125,17 @@ def grade(name: str, d: S.Decision, rendered: str) -> list[dict]:
              f"lanes={lanes}"),
         ]
     elif name == "chain-many-followups-summary":
-        summary = propose_source_summary(d)
+        opts = chain_propose_options(d)
         checks = [
             ("chain picker runs", chain_runs_unit_picker(d), ""),
             ("propose offered", chain_offers_propose(d),
              f"proposable={len(d.proposable)}"),
-            ("summary counts follow-ups",
-             summary.startswith("28 follow-ups, design"), f"summary={summary!r}"),
-            ("script emits ProposeSummary",
-             f"ProposeSummary: {summary}" in rendered, ""),
+            ("two chain propose options", len(opts) == 2,
+             f"opts={opts}"),
+            ("design propose option",
+             "Propose from design spec" in opts, f"opts={opts}"),
+            ("follow-ups propose option",
+             "Propose from Workstream follow-ups" in opts, f"opts={opts}"),
         ]
 
     return [{"text": t, "passed": p, "evidence": e} for t, p, e in checks]
@@ -163,6 +164,8 @@ def main() -> int:
             "runs_unit_picker": chain_runs_unit_picker(d),
             "offers_propose": chain_offers_propose(d),
             "strategy_lanes": strategy_lanes(d) if has_proposal(d) else [],
+            "chain_propose_options": chain_propose_options(d)
+            if chain_offers_propose(d) else [],
         }
         (out_dir / "chain_behavior.json").write_text(
             json.dumps(chain, indent=2))
