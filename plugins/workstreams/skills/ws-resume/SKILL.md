@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.7.0"
+  version: "0.7.2"
   author: Caio Ariede
 ---
 
@@ -32,16 +32,61 @@ python3 <this-skill-dir>/scripts/phase.py [unit-id]
 | Phase | Action |
 |-------|--------|
 | `plan` | **Plan only — no code, no tasks, no execute-mode.** Read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path (SPEC §Plan path). If the plan file already exists and `log.md` lacks a `plan` line → append `plan` only, re-run phase.py, stop at `plan-pause`. Else: fire `hook-ws-resume-unplanned-before` (interactive); run the flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**; plan-pause owns that gate); fire `hook-ws-resume-unplanned-after`. Append `plan <absolute-path>` to `log.md` when absent. Do **not** derive `T1..`, do **not** append `execute-mode`, do **not** touch source files. Re-run phase.py → `plan-pause`. **`none` flavor:** its `plan` op writes `T1..` inline and skips this gate. **Headless** (hooks skip): resolve plan path, run `plan` if no file yet, append `plan`, default `execute-mode=subagent-driven`, derive tasks, enter execute. |
-| `plan-pause` | Summarize the plan path and task headings (read the plan file — do not derive into `progress.md` yet). Offer **Not now** (preselected), **Subagent-driven**, **Inline**. On **Not now**, stop. On **Subagent-driven** / **Inline**: derive `T1..` into `progress.md` (SPEC task derivation), append `decision execute-mode=subagent-driven` or `execute-mode=inline`, re-run phase.py, enter execute (below). Never pick an execute mode or start T1 without the user's choice. |
+| `plan-pause` | Print the **plan-pause** block (§Pause gates). On pick **1**, stop. On **2** / **3**: derive `T1..` into `progress.md` (SPEC task derivation), append `decision execute-mode=subagent-driven` or `execute-mode=inline`, re-run phase.py, enter execute (below). Never pick an execute mode or start T1 without the user's choice. |
 | `loop` | Unless this invocation just cleared `plan-pause`, fire `hook-ws-resume-loop-before` once (superpowers). Run execute for the first unchecked task (below). Enter the execute loop (below). |
-| `ship-pause` | Summarize; offer **Not now** (preselected), **Ship `<unit>`** (ship flavor), **`ws-next`**. On Ship, re-run phase.py. If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide. |
-| `draft-pr` | Offer **Not now** (preselected), **Mark ready** (forge `pr-ready`), **`ws-next`**. On Mark ready, re-run phase.py. |
+| `ship-pause` | Print the **ship-pause** block (§Pause gates). On **2**, run ship flavor, re-run phase.py. If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide. On **3**, chain to `ws-next`. |
+| `draft-pr` | Print the **draft-pr** block (§Pause gates). On **2**, run forge `pr-ready`, re-run phase.py. On **3**, chain to `ws-next`. |
 | `blocked` | Blocked-awareness guard; stop. |
 | `done` | Chain to `ws-next` (below). |
 
 **Plan convention:** Last execute task owns verification; opening the PR is ship-pause when `code_complete`.
 
-**No auto-ship:** At `code_complete` with no PR, never run the ship flavor until the user picks **Ship** at ship-pause.
+**No auto-ship:** At `code_complete` with no PR, never run the ship flavor until the user picks **2** at ship-pause.
+
+## Pause gates
+
+Every number on screen belongs to the live picker — context blocks use
+no ordinals (same rule as ws-next move relay).
+
+**plan-pause** — read the plan file; do not derive into `progress.md`
+yet. Print:
+
+```
+Plan: <absolute-path>
+
+Tasks:
+- <### Task 1 title>
+- <### Task 2 title>
+...
+
+How do you want to execute?
+1. Not now (default)
+2. Subagent-driven — fresh subagent per task
+3. Inline — execute in this session with checkpoints
+```
+
+**ship-pause** — summarize unit state, then print:
+
+```
+How do you want to proceed?
+1. Not now (default)
+2. Ship <unit-slug>
+3. ws-next
+```
+
+**draft-pr** — summarize PR state, then print:
+
+```
+How do you want to proceed?
+1. Not now (default)
+2. Mark ready
+3. ws-next
+```
+
+User picks by number. Option **1** is preselected on dismiss. Colloquial
+proceed words (`go`, `yes`, `lgtm`, `ship it`) are not numbered picks —
+re-show the picker and wait. Never number task previews — plan
+`### Task N:` ordinals stay in the file, not on screen.
 
 ## Execute
 
