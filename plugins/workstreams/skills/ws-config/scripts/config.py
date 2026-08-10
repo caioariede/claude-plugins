@@ -33,6 +33,7 @@ import ws_cli as C     # noqa: E402
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE = PLUGIN_ROOT / "hooks" / "spec-watch.sh"
+PLAN_TEMPLATE = PLUGIN_ROOT / "hooks" / "plan-watch.sh"
 
 MARK = {"ok": "✓", "maybe": "?", "stub": "✗"}
 
@@ -272,45 +273,58 @@ def cmd_set_overrides(store: Path, path: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Spec-watch reconcile (SPEC §Flavors, Spec-watch) — every run
+# Runtime hook reconcile (SPEC §Flavors) — every run
 # ---------------------------------------------------------------------------
 
-def reconcile(store: Path) -> Optional[str]:
+def _reconcile_watch(store: Path, *, glob_key: str, prefix: str,
+                     template: Path, placeholder: str) -> Optional[str]:
     flavor, _ = C.active_flavor(store, "spec-driven-development")
-    # The active flavor's OWN spec-glob only — a flavor without one
-    # gets no script (SPEC §Spec-watch), so no rule-3 fallback here.
+    # The active flavor's OWN glob only — a flavor without one gets no
+    # script, so no rule-3 fallback here.
     ops = C.flavor_ops(store, "spec-driven-development", flavor)
-    glob = (ops.get("spec-glob") or "").strip()
+    glob = (ops.get(glob_key) or "").strip()
     changed: List[str] = []
     if glob and not SPEC_GLOB_RE.fullmatch(glob):
-        # The glob is substituted into a double-quoted sh string in the
-        # hook template; anything outside the safe charset could inject
-        # shell that runs on every Write/Edit. Refuse to install.
-        changed.append(f"invalid spec-glob {glob!r} ignored — script "
+        # Substituted into a double-quoted sh string in the hook template;
+        # anything outside the safe charset could inject shell on every
+        # Write/Edit. Refuse to install.
+        changed.append(f"invalid {glob_key} {glob!r} ignored — script "
                        "not installed")
         glob = ""
     hooks = store / "hooks"
     keep: Optional[Path] = None
     if glob:
-        keep = hooks / f"spec-watch-{flavor}.sh"
-        want = TEMPLATE.read_text("utf-8").replace("@SPEC_GLOB@", glob)
+        keep = hooks / f"{prefix}-{flavor}.sh"
+        want = template.read_text("utf-8").replace(placeholder, glob)
         if not keep.exists() or keep.read_text("utf-8") != want:
             hooks.mkdir(parents=True, exist_ok=True)
             keep.write_text(want, "utf-8")
             changed.append(f"installed {keep.name}")
         keep.chmod(0o755)
     if hooks.is_dir():
-        for p in sorted(hooks.glob("spec-watch-*.sh")):
+        for p in sorted(hooks.glob(f"{prefix}-*.sh")):
             if keep is None or p != keep:
                 p.unlink()
                 changed.append(f"removed {p.name}")
     return "; ".join(changed) if changed else None
 
 
+def reconcile(store: Path) -> Optional[str]:
+    return _reconcile_watch(store, glob_key="spec-glob", prefix="spec-watch",
+                            template=TEMPLATE, placeholder="@SPEC_GLOB@")
+
+
+def reconcile_plan_watch(store: Path) -> Optional[str]:
+    return _reconcile_watch(store, glob_key="plan-glob", prefix="plan-watch",
+                            template=PLAN_TEMPLATE, placeholder="@PLAN_GLOB@")
+
+
 def _emit_reconcile(store: Path) -> None:
-    msg = reconcile(store)
-    if msg:
-        print("spec-watch reconciled: " + msg)
+    for label, fn in (("spec-watch", reconcile),
+                      ("plan-watch", reconcile_plan_watch)):
+        msg = fn(store)
+        if msg:
+            print(f"{label} reconciled: " + msg)
 
 
 # ---------------------------------------------------------------------------

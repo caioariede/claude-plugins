@@ -259,6 +259,32 @@ class ReconcileTest(unittest.TestCase):
             run_config(td, "show", tools=("git", "gh"))
             p = run_config(td, "show", tools=("git", "gh"))
             self.assertNotIn("spec-watch reconciled", p.stdout)
+            self.assertNotIn("plan-watch reconciled", p.stdout)
+
+    def test_show_installs_plan_watch_for_superpowers(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers\n",
+                "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            script = store / "hooks" / "plan-watch-superpowers.sh"
+            self.assertTrue(script.exists())
+            self.assertTrue(os.access(script, os.X_OK))
+            content = script.read_text("utf-8")
+            self.assertNotIn("@PLAN_GLOB@", content)
+            self.assertIn("*specs/*-plan.md", content)
+            self.assertIn("installed plan-watch-superpowers.sh", p.stdout)
+
+    def test_default_none_removes_plan_watch_scripts(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "hooks").mkdir()
+            junk = store / "hooks" / "plan-watch-superpowers.sh"
+            junk.write_text("#!/bin/sh\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertFalse(junk.exists())
+            self.assertIn("removed plan-watch-superpowers.sh", p.stdout)
 
 
 class WriteTest(unittest.TestCase):
