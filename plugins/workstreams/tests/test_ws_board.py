@@ -187,6 +187,21 @@ class BlockedDerivation(unittest.TestCase):
         S.derive_status(ws)
         self.assertEqual(ws.units[-1].status, "building")
 
+    def test_restack_to_branch_drops_stale_stacked_on_need(self):
+        ws = self._ws()
+        ws.units[2].dropped = True  # gone
+        ws.units.append(S.Unit(
+            slug="dependent",
+            stacked_on="gone",
+            log=[("t1", "created", "base=gone"),
+                 ("t2", "restack", "base=master was=gone")],
+            pr=pr(10, "OPEN", is_draft=False, base="master"),
+            tasks_total=1,
+            tasks_done=1,
+        ))
+        S.derive_status(ws)
+        self.assertEqual(ws.units[-1].status, "in-review")
+
     def test_dropped_target_noted(self):
         ws = self._ws()
         d = S.Unit(slug="dependent", needs=[S.Need("N1", "gone")])

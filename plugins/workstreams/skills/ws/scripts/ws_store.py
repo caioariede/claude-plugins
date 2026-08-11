@@ -510,9 +510,10 @@ def _status_for(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> str:
 def unit_needs(u: Unit, ws: Workstream) -> List[Need]:
     """Explicit needs plus the implicit base need when base is a unit."""
     needs = list(u.needs)
-    if u.stacked_on:
-        needs.insert(0, Need(nid="base", target=u.stacked_on,
-                             note="base"))
+    by_slug = {x.slug: x for x in ws.units}
+    base = recorded_base(u) or u.stacked_on
+    if base and _slug_of(base) in by_slug:
+        needs.insert(0, Need(nid="base", target=base, note="base"))
     return needs
 
 
