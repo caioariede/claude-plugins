@@ -204,6 +204,64 @@ def parse_progress(text: str) -> Tuple[int, int, List[Followup], List[Need]]:
     return done, total, fus, needs
 
 
+_TASK_LINE_RE = re.compile(
+    r'^(-\s+\[)( |x|X)(\]\s+(T\d+)\s+(.*))$')
+
+
+def reconcile_tasks_on_merge(text: str) -> Tuple[str, List[str]]:
+    """Check open ## Tasks boxes; leave follow-ups/needs untouched."""
+    headings = {"Tasks": "tasks", "Follow-ups": "followups",
+                "Needs": "needs"}
+    section: Optional[str] = None
+    reconciled: List[str] = []
+    out: List[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        sec = _section_of(line, headings)
+        if sec is not None:
+            section = sec
+            out.append(raw)
+            continue
+        if section == "tasks":
+            m = _TASK_LINE_RE.match(line)
+            if m and m.group(2) == " ":
+                reconciled.append(m.group(4))
+                out.append(f"{m.group(1)}x{m.group(3)}")
+                continue
+        out.append(raw)
+    suffix = "\n" if text.endswith("\n") else ""
+    return "\n".join(out) + suffix, reconciled
+
+
+def _append_log_line(log_path: Path, kind: str, payload: str) -> None:
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = f"- {ts}  {kind}  {payload}\n"
+    if log_path.exists():
+        log_path.write_text(
+            log_path.read_text(encoding="utf-8") + line, encoding="utf-8")
+    else:
+        log_path.write_text(f"# log\n{line}", encoding="utf-8")
+
+
+def maybe_reconcile_merged_unit(ws_dir: Path, slug: str,
+                                pr: Optional[PR]) -> bool:
+    """When the unit PR is merged, check any open task boxes."""
+    if not pr or pr.state != "MERGED":
+        return False
+    udir = ws_dir / "units" / slug
+    prog_path = udir / "progress.md"
+    raw = _read(prog_path)
+    new_text, ids = reconcile_tasks_on_merge(raw)
+    if not ids:
+        return False
+    prog_path.write_text(new_text, encoding="utf-8")
+    _append_log_line(
+        udir / "log.md", "decision",
+        f"reconciled tasks from merged PR #{pr.number}: {', '.join(ids)}")
+    return True
+
+
 def _split_dash(text: str) -> Tuple[str, str]:
     """Split a line on the ` — ` (em dash) field separator; the note is
     whatever follows. A plain ` - ` (hyphen) is accepted as a fallback so

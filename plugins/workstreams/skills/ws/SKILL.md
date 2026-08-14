@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.17.7"
+  version: "0.17.8"
   author: Caio Ariede
 ---
 
@@ -56,6 +56,13 @@ A unit's **needs** = `{ base, when base is a unit-id }` ∪ `{ explicit needs }`
 - a **follow-up** (`<unit-id>:F<n>` or `WF<n>`) — when a live unit **claims** it (§Follow-up units), satisfied through that unit exactly as a unit target; otherwise **satisfied** when the box is checked in its source file.
 
 **code-complete** (derived predicate; never a printed status label): a unit has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. `## Follow-ups` are ignored; zero tasks is *not* code-complete. `merged` implies code-complete.
+
+**Merge task reconcile:** when a unit's PR is `MERGED`, open `## Tasks`
+boxes are invalid bookkeeping — `ws-resume` checks them and appends a
+`decision reconciled tasks from merged PR #<n>: …` line to `log.md`.
+`## Follow-ups` are never auto-checked. `ws-board` / `ws-next` do not
+write; they derive `merged` / code-complete from live PR state.
+`phase.py` gathers PR state for every ledger unit (same as board/next).
 
 **blocked** (derived status): a unit has ≥1 need whose target is not satisfied. A **dropped** target is never code-complete → the dependent is stuck: flag it `(dropped)` and route to triage, never auto-resolve. A follow-up target that is *removed* (deleted, not checked) is likewise unresolvable → same triage.
 

@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.7.2"
+  version: "0.8.0"
   author: Caio Ariede
 ---
 
@@ -21,6 +21,13 @@ metadata:
    - worktree gone but branch exists → recreate it via the active `worktree-management` flavor's `create` for `<branch>` off `<base>`, then work there;
    - branch also gone → fresh start off the repo default branch (per SPEC); the store's progress is your restart baseline.
 3. Reconcile base per SPEC Restack reconciliation — if the active `forge` flavor's `pr-status` base differs from the unit's recorded base, realign and append a `restack` line.
+3b. **Merged terminal:** fetch the current unit's PR (forge `pr-status`). If `MERGED`, run task reconcile and stop — do not recreate a worktree, plan, or execute:
+
+```
+python3 <this-skill-dir>/scripts/reconcile.py [unit-id]
+```
+
+Print the script line (`reconciled …` / `already-consistent` / `not-merged`). Chain to `ws-next` (§Next).
 4. Load state: read `charter.md` (why this unit exists + its `design:`), `progress.md` (Tasks + Follow-ups), and `log.md` (recent notes); run `git log -5` and the repo's verification command to confirm the code state.
 5. **Blocked-awareness guard:** before advancing (plan/execute), derive the unit's needs — implicit base + `## Needs` (SPEC §Dependencies). If any is unmet, the unit is **blocked**: surface it — name the unmet target(s) and warn the unit is blocked — then require explicit confirmation to proceed anyway. `ws-resume` is the intentional override path: it warns, it does not silently proceed, and it does not hard-refuse.
 6. Derive phase — do not infer planning or execute boundaries from `progress.md` alone:
@@ -96,7 +103,8 @@ re-show the picker and wait. Never number task previews — plan
 
 ## Execute loop
 
-After execute action, re-run phase derivation:
+After execute action, check off the completed task in `progress.md`
+(`- [x] T<n>`) before re-running phase derivation:
 
 ```
 python3 <this-skill-dir>/scripts/phase.py [unit-id]

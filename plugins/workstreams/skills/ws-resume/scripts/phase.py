@@ -38,11 +38,6 @@ def _resolve_unit(store: Path, args: List[str]) -> tuple[str, str]:
     return hits[0]
 
 
-def _needs_pr_state(unit: S.Unit) -> bool:
-    # Tasks still open: phase is loop or blocked — PR does not decide.
-    return unit.tasks_total > 0 and unit.tasks_done == unit.tasks_total
-
-
 def phase_for_ws(ws: S.Workstream, slug: str) -> str:
     by = {u.slug: u for u in ws.units}
     unit = by.get(slug)
@@ -68,10 +63,7 @@ def main(argv: List[str]) -> int:
         unit = by.get(slug)
         if unit is None:
             raise C.Pick(f"NO_MATCH no unit {slug!r} in {ws_id}")
-        if _needs_pr_state(unit):
-            pr_state = C.gather_pr_state(ws, store, branches={unit.branch})
-        else:
-            pr_state = {}
+        pr_state = C.gather_pr_state(ws, store)
         S.apply_pr_state(ws, pr_state)
         print(phase_for_ws(ws, slug))
         return 0

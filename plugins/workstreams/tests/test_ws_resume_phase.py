@@ -107,5 +107,79 @@ class PhaseCliTests(unittest.TestCase):
             )
 
 
+class PhaseCliMergedTests(unittest.TestCase):
+    def test_merged_partial_tasks_returns_done(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            pr_state = {
+                "spike": S.PR(number=1, state="MERGED", is_draft=False,
+                              base="main"),
+                "dep": None,
+            }
+            write_ws(
+                store,
+                "2026-01-01-demo",
+                units_md=ledger(
+                    'spike  "S"  repo=o/r  branch=spike',
+                    'dep  "D"  repo=o/r  branch=dep  stacked-on=spike'),
+                units={
+                    "spike": {
+                        "progress": "## Tasks\n- [x] T1\n- [ ] T2\n",
+                    },
+                    "dep": {"progress": "## Tasks\n- [ ] T1\n"},
+                },
+            )
+            self.assertEqual(
+                P.generate(store, "2026-01-01-demo", "spike", pr_state),
+                "done",
+            )
+            self.assertEqual(
+                P.generate(store, "2026-01-01-demo", "dep", pr_state),
+                "loop",
+            )
+
+    def test_merged_base_unblocks_dependent(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            pr_state = {
+                "spike": S.PR(number=1, state="MERGED", is_draft=False,
+                              base="main"),
+                "dep": None,
+            }
+            write_ws(
+                store,
+                "2026-01-01-demo",
+                units_md=ledger(
+                    'spike  "S"  repo=o/r  branch=spike',
+                    'dep  "D"  repo=o/r  branch=dep  stacked-on=spike'),
+                units={
+                    "spike": {
+                        "progress": "## Tasks\n- [x] T1\n- [ ] T2\n",
+                    },
+                    "dep": {
+                        "progress": "## Tasks\n- [ ] T1\n",
+                        "log": (
+                            "# log\n"
+                            "- 2026-01-01T00:00Z  plan  /tmp/plan.md\n"
+                            "- 2026-01-01T00:01Z  decision  "
+                            "execute-mode=subagent-driven\n"
+                        ),
+                    },
+                },
+            )
+            self.assertNotEqual(
+                P.generate(store, "2026-01-01-demo", "dep", pr_state),
+                "blocked",
+            )
+
+    def test_merged_partial_without_pr_state_is_loop(self):
+        a = u("a", done=1, total=2,
+              pr=S.PR(number=1, state="MERGED", is_draft=False, base="main"))
+        w = ws([a])
+        by = {x.slug: x for x in w.units}
+        a.pr = None
+        self.assertEqual(S.resume_phase(a, w, by), "loop")
+
+
 if __name__ == "__main__":
     unittest.main()
