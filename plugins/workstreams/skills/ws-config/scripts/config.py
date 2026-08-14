@@ -33,7 +33,6 @@ import ws_cli as C     # noqa: E402
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE = PLUGIN_ROOT / "hooks" / "spec-watch.sh"
-PLAN_TEMPLATE = PLUGIN_ROOT / "hooks" / "plan-watch.sh"
 
 MARK = {"ok": "✓", "maybe": "?", "stub": "✗"}
 
@@ -314,17 +313,10 @@ def reconcile(store: Path) -> Optional[str]:
                             template=TEMPLATE, placeholder="@SPEC_GLOB@")
 
 
-def reconcile_plan_watch(store: Path) -> Optional[str]:
-    return _reconcile_watch(store, glob_key="plan-glob", prefix="plan-watch",
-                            template=PLAN_TEMPLATE, placeholder="@PLAN_GLOB@")
-
-
 def _emit_reconcile(store: Path) -> None:
-    for label, fn in (("spec-watch", reconcile),
-                      ("plan-watch", reconcile_plan_watch)):
-        msg = fn(store)
-        if msg:
-            print(f"{label} reconciled: " + msg)
+    msg = reconcile(store)
+    if msg:
+        print(f"spec-watch reconciled: " + msg)
 
 
 # ---------------------------------------------------------------------------

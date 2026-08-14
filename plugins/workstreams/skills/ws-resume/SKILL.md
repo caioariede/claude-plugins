@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.8.0"
+  version: "0.9.0"
   author: Caio Ariede
 ---
 
@@ -38,7 +38,7 @@ python3 <this-skill-dir>/scripts/phase.py [unit-id]
 
 | Phase | Action |
 |-------|--------|
-| `plan` | **Plan only — no code, no tasks, no execute-mode.** Read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path (SPEC §Plan path). If the plan file already exists and `log.md` lacks a `plan` line → append `plan` only, re-run phase.py, stop at `plan-pause`. Else: fire `hook-ws-resume-unplanned-before` (interactive); run the flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**; plan-pause owns that gate); fire `hook-ws-resume-unplanned-after`. Append `plan <absolute-path>` to `log.md` when absent. Do **not** derive `T1..`, do **not** append `execute-mode`, do **not** touch source files. Re-run phase.py → `plan-pause`. **`none` flavor:** its `plan` op writes `T1..` inline and skips this gate. **Headless** (hooks skip): resolve plan path, run `plan` if no file yet, append `plan`, default `execute-mode=subagent-driven`, derive tasks, enter execute. |
+| `plan` | **Plan only — no code, no tasks, no execute-mode.** Read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path via SPEC §Plan path (`<design-dir>/<bare-slug>-plan.md` — not the design-basename swap). If **that** path already exists and `log.md` lacks a `plan` line → append `plan` only, re-run phase.py, stop at `plan-pause`. Else: fire `hook-ws-resume-unplanned-before` (interactive); run the flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**; plan-pause owns that gate); fire `hook-ws-resume-unplanned-after`. Append `plan <absolute-path>` to `log.md` when absent. Do **not** derive `T1..`, do **not** append `execute-mode`, do **not** touch source files. Re-run phase.py → `plan-pause`. **`none` flavor:** its `plan` op writes `T1..` inline and skips this gate. **Headless** (hooks skip): resolve plan path, run `plan` if no file yet, append `plan`, default `execute-mode=subagent-driven`, derive tasks, enter execute. |
 | `plan-pause` | Print the **plan-pause** block (§Pause gates). On pick **1**, stop. On **2** / **3**: derive `T1..` into `progress.md` (SPEC task derivation), append `decision execute-mode=subagent-driven` or `execute-mode=inline`, re-run phase.py, enter execute (below). Never pick an execute mode or start T1 without the user's choice. |
 | `loop` | Unless this invocation just cleared `plan-pause`, fire `hook-ws-resume-loop-before` once (superpowers). Run execute for the first unchecked task (below). Enter the execute loop (below). |
 | `ship-pause` | Print the **ship-pause** block (§Pause gates). On **2**, run ship flavor, re-run phase.py. If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide. On **3**, chain to `ws-next`. |

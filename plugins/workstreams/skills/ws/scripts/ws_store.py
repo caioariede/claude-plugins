@@ -31,6 +31,17 @@ def store_root() -> Path:
     return base / "workstreams"
 
 
+def resolve_plan_path(design: str, slug: str) -> Path:
+    """Unit plan path: ``<design-dir>/<bare-slug>-plan.md``."""
+    d = design.strip()
+    if not d or d in ("—", "-"):
+        raise ValueError("design path is empty")
+    s = slug.strip()
+    if not s:
+        raise ValueError("slug is empty")
+    return Path(d).expanduser().parent / f"{s}-plan.md"
+
+
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------

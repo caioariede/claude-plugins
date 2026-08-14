@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.19.0 · August 2026</p>
+    <p class="version">Version 0.27.0 · August 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -456,7 +456,6 @@
       <li class="toc-sub"><a href="#customizing">Customizing</a></li>
       <li class="toc-sub"><a href="#flavor-hooks">Flavor hooks</a></li>
       <li class="toc-sub"><a href="#spec-watch">Spec-watch</a></li>
-      <li class="toc-sub"><a href="#plan-watch">Plan-watch</a></li>
       <li class="toc-sub"><a href="#superpowers-flavor">Using with Superpowers</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
@@ -633,7 +632,7 @@ Reads the ledger and each unit's live status, then lists every unit you could ac
 <div class="cmd-head"><span class="cmd-name">ws-config</span><span class="cmd-sig">[show | set &lt;group&gt; &lt;flavor&gt; | set-overrides &lt;path&gt; | list [group] | add &lt;group&gt; &lt;flavor&gt;]</span></div>
 <p class="cmd-when"><b>Use when</b> viewing or changing workstream flavors — which external tool backs each behavior group.</p>
 <div class="cmd-body">
-Edits only <code>~/.local/share/workstreams/flavors.ini</code> and the <a href="#spec-watch">spec-watch</a> / <a href="#plan-watch">plan-watch</a> scripts under the store's <code>hooks/</code> — never a worktree. <code>show</code> (the bare default) prints the active flavor per group and which layers are in play, annotates which flavors' tools are detected, flags an active flavor whose tool is missing, and offers to activate detected flavors for unset groups; <code>set</code> switches one group's flavor; <code>add</code> scaffolds a custom flavor stub; <code>set-overrides</code> points at an external overrides file. Every run also reconciles the spec-watch and plan-watch scripts to the active flavors. See the <a href="#flavors">Flavors</a> section.
+Edits only <code>~/.local/share/workstreams/flavors.ini</code> and the <a href="#spec-watch">spec-watch</a> script under the store's <code>hooks/</code> — never a worktree. <code>show</code> (the bare default) prints the active flavor per group and which layers are in play, annotates which flavors' tools are detected, flags an active flavor whose tool is missing, and offers to activate detected flavors for unset groups; <code>set</code> switches one group's flavor; <code>add</code> scaffolds a custom flavor stub; <code>set-overrides</code> points at an external overrides file. Every run also reconciles the spec-watch script to the active flavors. See the <a href="#flavors">Flavors</a> section.
 </div>
 <pre class="cmd-ex">$ /ws-config
 $ /ws-config set worktree-management wmx</pre>
@@ -717,20 +716,16 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <p>The mechanism costs nothing when idle: the plugin's file-write hook merely checks whether <code>~/.local/share/workstreams/hooks/spec-watch-&lt;flavor&gt;.sh</code> exists and runs it — the installed script <i>is</i> the on-switch. <code>ws-config</code> keeps it in sync on every run: a flavor that declares <code>spec-glob</code> gets the script installed with its glob baked in; a flavor without one gets it removed. Ownership is matched by the spec's <b>filename</b> against <code>design:</code> lines, so <code>~</code>, absolute, and symlinked spellings all count.</p>
 <aside class="note note-tip"><b>Opt out in one line.</b> Set <code>spec-glob =</code> (empty) on your active flavor in the store <code>flavors.ini</code>, then any <code>/ws-config</code> run removes the watcher — the same empty-key convention that silences flavor hooks.</aside>
 
-<h3 id="plan-watch">Plan-watch: from plan to oneshot</h3>
-<p>When scope will probably ship as one PR, you may skip <code>ws-init</code> at spec time and write the unit plan first. <b>Plan-watch</b> closes the gap after that plan lands: when a written file matches the active flavor's <code>plan-glob</code>, the paired design spec exists, and no workstream's <code>design:</code> claims it, the runtime nudges the session to offer <code>ws-oneshot</code> — but only when scope reads single-unit. It never auto-runs.</p>
-<p>Mechanics mirror spec-watch: <code>ws-config</code> installs <code>plan-watch-&lt;flavor&gt;.sh</code> when the flavor declares <code>plan-glob</code>; the file-write hook runs spec-watch then plan-watch and emits the first non-empty result. Post-plan with no workstream yet → offer <code>ws-oneshot</code> only, not <code>ws-init</code> + <code>ws-start</code>.</p>
-
 <h3 id="superpowers-flavor">Using with Superpowers</h3>
-<p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out for multi-unit work: a feature is many units, and each unit plans itself. Single-unit work can take a shorter oneshot path.</p>
+<p>The <code>superpowers</code> flavor of <code>spec-driven-development</code> wires the ws commands into the Superpowers loop — but it moves where planning happens. On its own, Superpowers runs <b>brainstorm → write-plan → execute</b> in one branch. With workstreams the top-level plan step drops out for multi-unit work: a feature is many units, and each unit plans itself. Single-unit work can use <code>ws-oneshot</code> after spec-watch.</p>
 <ol class="steps">
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
-<li><b>Pick an entry path at spec time.</b> Multi-unit: accept the <a href="#spec-watch">spec-watch</a> nudge and run <code>ws-init</code> before any plan — then <code>ws-focus</code> and split with <code>ws-start</code>. Single-unit: dismiss <code>ws-init</code>, run <code>writing-plans</code>, approve the plan — then accept the <a href="#plan-watch">plan-watch</a> nudge and run <code>ws-oneshot</code> (init + start + resume in one confirmed step).</li>
+<li><b>Pick an entry path at spec time.</b> Accept the <a href="#spec-watch">spec-watch</a> nudge and run <code>ws-init</code> — then <code>ws-focus</code> and split with <code>ws-start</code>. Single-unit scope may use <code>ws-oneshot</code> (init + start + resume in one confirmed chain) instead of focus + manual start.</li>
 <li><b>Multi-unit: split the spec into units</b> with <code>ws-start</code>, one slice at a time — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
-<li><b>Let each unit plan itself (multi-unit)</b> or land at execute (oneshot). First <code>ws-resume</code> on an unplanned unit runs <code>writing-plans</code> (plan saved alongside the design spec as <code>-plan.md</code>), records tasks as <code>T1..</code> in <code>progress.md</code>, and honors the Superpowers execution handoff. <code>ws-oneshot</code> skips straight to <code>plan-pause</code> when the plan already exists. Later <code>ws-resume</code> runs print a short orientation (goal, progress, plan path) then continue executing.</li>
+<li><b>Let each unit plan itself.</b> First <code>ws-resume</code> on an unplanned unit runs <code>writing-plans</code> (plan saved as <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code>), records tasks as <code>T1..</code> in <code>progress.md</code> at plan-pause, and honors the Superpowers execution handoff. Later <code>ws-resume</code> runs print a short orientation (goal, progress, plan path) then continue executing.</li>
 </ol>
-<aside class="note note-rule"><b>Multi-unit: planning lives in units.</b> After the spec, go <code>ws-init</code> → <code>ws-focus</code> → <code>ws-start</code>. <code>writing-plans</code> is deferred into each unit's <code>ws-resume</code>. <b>Oneshot:</b> spec → plan → <code>ws-oneshot</code> — one workstream, one unit, one confirmed chain.</aside>
-<aside class="note note-tip"><b>Plan path.</b> Unit plans live next to the workstream design spec — not in <code>docs/superpowers/plans/</code>. The store records the path in <code>log.md</code> as <code>plan &lt;absolute-path&gt;</code>.</aside>
+<aside class="note note-rule"><b>Planning lives in units.</b> After the spec, go <code>ws-init</code> → <code>ws-focus</code> → <code>ws-start</code>. <code>writing-plans</code> is deferred into each unit's <code>ws-resume</code>. <b>Oneshot:</b> <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> — one workstream, one unit, one confirmed chain.</aside>
+<aside class="note note-tip"><b>Plan path.</b> Unit plans live at <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code> next to the workstream design spec — not in <code>docs/superpowers/plans/</code>. The store records the path in <code>log.md</code> as <code>plan &lt;absolute-path&gt;</code>.</aside>
 </section>
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>
@@ -743,7 +738,7 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 </thead>
 <tbody>
 <tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger + empty backlog + empty focus). Run before any unit exists. Creates no unit. Expected next: <code>ws-focus</code>.</td></tr>
-<tr><td><code>ws-oneshot</code></td><td>Single-unit entry: <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> in one user-confirmed chain. Offered by plan-watch when scope reads one PR; never auto-run.</td></tr>
+<tr><td><code>ws-oneshot</code></td><td>Single-unit entry: <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> in one user-confirmed chain. Offer when scope reads one PR; never auto-run.</td></tr>
 <tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit.</td></tr>
 <tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, loop through execute tasks in-session, pause before ship/mark-ready, then route — reopening a gone worktree and reconciling base drift as needed.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>
@@ -753,7 +748,7 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <tr><td><code>ws-next</code></td><td>List every unit that can move right now, ranked, then ask which unit moves and where it runs. When nothing can move — or alongside in-flight work (restack still blocks) — walk through proposing the next unit by lane (follow-ups, design, focus). Read-only — decides, doesn't do.</td></tr>
 <tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
 <tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record. Releases any follow-ups the unit claimed, so they re-open on their own.</td></tr>
-<tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only, and reconciles the spec-watch and plan-watch scripts.</td></tr>
+<tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only, and reconciles the spec-watch script.</td></tr>
 </tbody>
 </table>
 

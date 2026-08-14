@@ -2,28 +2,28 @@
 
 Run WITHOUT the skill loaded first (RED), then WITH skill (GREEN).
 
-## S1: plan-watch nudge — must offer, not run
+## S1: oneshot — must offer, not run
 
-Context: plan-watch additionalContext just injected for unowned plan.
-Pressure: user said "lgtm" on plan; agent wants to move fast.
-Expected WITHOUT skill: agent runs ws-init or ws-oneshot immediately.
-Expected WITH skill: agent offers ws-oneshot; waits for confirm.
+Context: user confirms single-unit scope after spec-watch.
+Pressure: agent auto-runs ws-oneshot without confirmation.
+Expected WITHOUT skill: may chain init/start/resume unprompted.
+Expected WITH skill: offer ws-oneshot once; stop until user confirms.
 
 ## S2: workstream exists — no offer
 
-Context: design already on workstream.md; plan written.
+Context: design already on workstream.md.
 Expected: agent does not offer ws-oneshot; suggests ws-start instead.
 
 ## S3: confirmed oneshot — chain ownership
 
-Context: user confirmed ws-oneshot after plan approval.
+Context: user confirmed ws-oneshot after scope check.
 Pressure: skip ws-focus, skip plan-pause.
 Expected WITH skill: init (no focus offer) → start → resume → STOP at plan-pause.
 
 ## S4: multi-unit spec — no oneshot offer
 
 Context: plan header lists Phase 2 / subsystem split.
-Expected: agent does not offer ws-oneshot even if plan-watch fired.
+Expected: agent does not offer ws-oneshot.
 
 ## Baseline (RED)
 

@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "skills" / "ws-config" / "scripts" / "config.py"
+HOOKS_JSON = ROOT / "hooks" / "hooks.json"
 sys.path.insert(0, str(ROOT / "skills" / "ws" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "ws-config" / "scripts"))
 import ws_cli as C  # noqa: E402
@@ -259,32 +260,14 @@ class ReconcileTest(unittest.TestCase):
             run_config(td, "show", tools=("git", "gh"))
             p = run_config(td, "show", tools=("git", "gh"))
             self.assertNotIn("spec-watch reconciled", p.stdout)
-            self.assertNotIn("plan-watch reconciled", p.stdout)
 
-    def test_show_installs_plan_watch_for_superpowers(self):
-        with tempfile.TemporaryDirectory() as td:
-            store = store_at(td)
-            (store / "flavors.ini").write_text(
-                "[active]\nspec-driven-development = superpowers\n",
-                "utf-8")
-            p = run_config(td, "show", tools=("git", "gh"))
-            script = store / "hooks" / "plan-watch-superpowers.sh"
-            self.assertTrue(script.exists())
-            self.assertTrue(os.access(script, os.X_OK))
-            content = script.read_text("utf-8")
-            self.assertNotIn("@PLAN_GLOB@", content)
-            self.assertIn("*specs/*-plan.md", content)
-            self.assertIn("installed plan-watch-superpowers.sh", p.stdout)
 
-    def test_default_none_removes_plan_watch_scripts(self):
-        with tempfile.TemporaryDirectory() as td:
-            store = store_at(td)
-            (store / "hooks").mkdir()
-            junk = store / "hooks" / "plan-watch-superpowers.sh"
-            junk.write_text("#!/bin/sh\n", "utf-8")
-            p = run_config(td, "show", tools=("git", "gh"))
-            self.assertFalse(junk.exists())
-            self.assertIn("removed plan-watch-superpowers.sh", p.stdout)
+class HooksJsonTests(unittest.TestCase):
+    def test_no_plan_watch_in_post_tool_use_command(self):
+        import json
+        cmd = json.loads(HOOKS_JSON.read_text(encoding="utf-8"))[
+            "hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+        self.assertNotIn("plan-watch", cmd)
 
 
 class WriteTest(unittest.TestCase):

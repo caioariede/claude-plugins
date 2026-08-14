@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "tmp=$(mktemp); cat > \"$tmp\"; store=\"${XDG_DATA_HOME:-$HOME/.local/share}/workstreams/hooks\"; for s in \"$store\"/spec-watch-*.sh \"$store\"/plan-watch-*.sh; do [ -x \"$s\" ] || continue; out=$(\"$s\" < \"$tmp\"); [ -n \"$out\" ] && printf '%s' \"$out\" && rm -f \"$tmp\" && exit 0; done; rm -f \"$tmp\"; exit 0",
+            "command": "tmp=$(mktemp); cat > \"$tmp\"; store=\"${XDG_DATA_HOME:-$HOME/.local/share}/workstreams/hooks\"; for s in \"$store\"/spec-watch-*.sh; do [ -x \"$s\" ] || continue; out=$(\"$s\" < \"$tmp\"); [ -n \"$out\" ] && printf '%s' \"$out\" && rm -f \"$tmp\" && exit 0; done; rm -f \"$tmp\"; exit 0",
             "timeout": 10
           }
         ]

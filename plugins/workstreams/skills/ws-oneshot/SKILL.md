@@ -3,7 +3,7 @@ name: ws-oneshot
 description: Use when approved spec/plan scope looks like a single unit, no workstream exists yet, and the user confirmed the oneshot offer — not for multi-unit workstreams or when a workstream already owns the design.
 argument-hint: '"<workstream name>" ["<unit purpose>"] [--design <spec-path>]'
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   author: Caio Ariede
 ---
 
@@ -13,7 +13,7 @@ metadata:
 
 Shorthand for confirmed single-unit entry: `ws-init` → `ws-start` →
 `ws-resume` in one chain. Never invoke without user confirmation —
-plan-watch and agent judgment only **offer** this skill.
+agent judgment only **offer** this skill.
 
 **Input:** `$ARGUMENTS` = `"<workstream name>" ["<unit purpose>"]` with
 optional `--design <absolute-spec-path>` when the design path is not
@@ -36,6 +36,9 @@ Dismissal or multi-unit signals → use `ws-init` at spec time instead.
    the chain.
 2. **ws-start** — `<ws-id> "<unit purpose>"`; omit purpose → use plan
    goal line or spec one-liner.
+   Do not assume a plan file exists before this chain. First `ws-resume`
+   runs `writing-plans` and saves to `<design-dir>/<slug>-plan.md` unless
+   that slug path already exists from a prior partial run.
 3. **ws-resume** — run immediately; suppress intermediate opt-in
    handoffs from steps 1–2. **Stop at `plan-pause`** (superpowers) or
    the execute entry (`none` flavor). Do not skip execute-mode choice.
