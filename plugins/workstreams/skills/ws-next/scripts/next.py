@@ -75,6 +75,13 @@ def render_decision(d: S.Decision) -> str:
         lines.append("FocusQueue:")
         for f in d.focus_queue:
             lines.append(f"- {S.focus_item_text(f)}")
+    if d.stackable is not None:
+        lines.append("Stackable:")
+        for sb in d.stackable:
+            line = f"- {sb.slug}  repo={sb.repo}  branch={sb.branch}"
+            if sb.readiness:
+                line += f"  readiness={sb.readiness}"
+            lines.append(line)
     if chain_offers_propose(d):
         summary = propose_source_summary(d)
         if summary:
@@ -82,12 +89,19 @@ def render_decision(d: S.Decision) -> str:
     return "\n".join(lines)
 
 
+def _render(ws: S.Workstream, proposal_repo: Optional[str] = None) -> str:
+    if proposal_repo is None:
+        proposal_repo = C.current_repo()
+    return render_decision(S.decide_next(ws, proposal_repo=proposal_repo))
+
+
 def generate(store: Path, ws_id: str,
-             pr_state: Dict[str, Optional[S.PR]]) -> str:
+             pr_state: Dict[str, Optional[S.PR]],
+             proposal_repo: Optional[str] = None) -> str:
     """Pure path used by both main() and the tests."""
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, pr_state)
-    return render_decision(S.decide_next(ws))
+    return _render(ws, proposal_repo)
 
 
 def main(argv: List[str]) -> int:
@@ -99,7 +113,7 @@ def main(argv: List[str]) -> int:
         return 2
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, C.gather_pr_state(ws, store))
-    print(render_decision(S.decide_next(ws)))
+    print(_render(ws))
     return 0
 
 

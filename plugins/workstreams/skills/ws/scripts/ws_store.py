@@ -874,6 +874,16 @@ def _drifted(u: Unit) -> bool:
     return rb is not None and u.pr.base != rb
 
 
+def unit_readiness(u: Unit) -> Optional[str]:
+    """Stack-base display suffix; None when implicit base need satisfied."""
+    if u.code_complete:
+        return None
+    if u.tasks_total:
+        left = u.tasks_total - u.tasks_done
+        return f"{left} of {u.tasks_total} tasks left"
+    return "no tasks planned yet"
+
+
 def _dependents(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> int:
     """How many other units are blocked with an unmet need on `u` — i.e.
     finishing `u` would unblock them. Ranks in-flight work by critical
@@ -962,6 +972,33 @@ class Proposable:
 
 
 @dataclass
+class StackBase:
+    slug: str
+    repo: str
+    branch: str
+    readiness: Optional[str] = None
+
+
+def stackable_bases(ws: Workstream,
+                    proposal_repo: Optional[str] = None) -> List[StackBase]:
+    if not proposal_repo:
+        return []
+    want = proposal_repo.lower()
+    out: List[StackBase] = []
+    for u in ws.units:
+        if u.dropped or not u.branch or not u.repo:
+            continue
+        if u.status not in ("building", "in-review"):
+            continue
+        if _drifted(u):
+            continue
+        if u.repo.lower() != want:
+            continue
+        out.append(StackBase(u.slug, u.repo, u.branch, unit_readiness(u)))
+    return out
+
+
+@dataclass
 class Decision:
     rule: str  # restack|ship|resume|triage-*|suggest|waiting|empty|done
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
@@ -979,6 +1016,7 @@ class Decision:
     design: str = ""
     active_focus: Optional[FocusItem] = None
     focus_queue: List[FocusItem] = field(default_factory=list)
+    stackable: Optional[List[StackBase]] = None
 
 
 def _followup_blockers(ws: Workstream,
@@ -1071,11 +1109,17 @@ def _proposal_attachable(moves: List[Move]) -> bool:
     return not any(m.rule == "restack" for m in moves)
 
 
-def decide_next(ws: Workstream) -> Decision:
+def decide_next(ws: Workstream,
+                proposal_repo: Optional[str] = None) -> Decision:
     """Every move runnable now, ranked, with moves[0] as the default.
     Blocked units are never resumed — the router advances their blocker."""
     derive_status(ws)
     by_slug = {u.slug: u for u in ws.units}
+
+    def _stackable_for(attach: bool, design: str) -> Optional[List[StackBase]]:
+        if not attach or not (design or ws.active_focus):
+            return None
+        return stackable_bases(ws, proposal_repo)
 
     blocked_lines = []
     for u in ws.units:
@@ -1104,7 +1148,7 @@ def decide_next(ws: Workstream) -> Decision:
 
     def out(rule, command=None, unit=None, branch=None, moves=None,
             open_items=None, headline="", proposable=None, covered=None,
-            design="", active_focus=None, focus_queue=None):
+            design="", active_focus=None, focus_queue=None, stackable=None):
         return Decision(rule=rule, command=command, unit=unit,
                         branch=branch or None, moves=moves or [],
                         blocked=blocked_lines, waiting=waiting_lines,
@@ -1112,7 +1156,8 @@ def decide_next(ws: Workstream) -> Decision:
                         headline=headline, proposable=proposable or [],
                         covered=covered or [], design=design,
                         active_focus=active_focus,
-                        focus_queue=focus_queue or [])
+                        focus_queue=focus_queue or [],
+                        stackable=stackable)
 
     # Everything runnable now, ranked; the leader is the default.
     moves = enumerate_moves(ws, by_slug)
@@ -1127,7 +1172,8 @@ def decide_next(ws: Workstream) -> Decision:
                    covered=covered if attach else [],
                    design=design if attach else "",
                    active_focus=ws.active_focus,
-                   focus_queue=ws.focus_queued)
+                   focus_queue=ws.focus_queued,
+                   stackable=_stackable_for(attach, design if attach else ""))
 
     # triage — a unit blocked ONLY by dropped/removed targets can't clear on
     # its own; route to ws-block ahead of backlog triage (it stays active).
@@ -1171,7 +1217,8 @@ def decide_next(ws: Workstream) -> Decision:
                    headline=headline,
                    proposable=proposable, covered=covered, design=design,
                    active_focus=ws.active_focus,
-                   focus_queue=ws.focus_queued)
+                   focus_queue=ws.focus_queued,
+                   stackable=_stackable_for(True, design))
     # Open work the proposal path can't take: a planned unit stuck behind
     # an unresolvable need, an F<n> in a live blocked unit, a hand-broken
     # need cycle.

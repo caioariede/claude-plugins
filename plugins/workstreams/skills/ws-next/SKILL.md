@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.15.1"
+  version: "0.16.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -26,7 +26,7 @@ python3 <this-skill-dir>/scripts/next.py [ws-id]
 
 ## Relay the output
 
-Print the script's stdout, minus each move line's machine tail — everything from `   run=` onward is for you, not the user — and minus machine blocks the script marks for you only (`Proposable:`, `Covered:`, `Design:`, `ActiveFocus:`, `FocusQueue:` and their lines). Its shape:
+Print the script's stdout, minus each move line's machine tail — everything from `   run=` onward is for you, not the user — and minus machine blocks the script marks for you only (`Proposable:`, `Covered:`, `Design:`, `ActiveFocus:`, `FocusQueue:`, `Stackable:` and their lines). Its shape:
 
 - a one-line headline (why the default move leads),
 - `<unit> — <verb>: <why>` per runnable move, indented, ranked by line order, `[default]` on the first — no ordinals, so every number on screen belongs to the live picker. The verb is `restack`, `ship it`, `advance` or `start`. The stripped tail carries `run=<command>` (already fully resolved — every argument literal, no `<placeholder>` left in) and, when the unit has a worktree, `branch=<branch>`,
@@ -34,7 +34,7 @@ Print the script's stdout, minus each move line's machine tail — everything fr
 - `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
 - `Waiting: <unit> — PR #<n>` — one line per code-complete ready-PR unit with no move, omitted when none,
 - `Open backlog:` + a list — no-move states only,
-- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` / `ProposeSummary:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside non-restack moves (see Chain). `ProposeSummary:` summarizes available proposal sources for you — consume it, don't relay it. `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
+- `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` / `Stackable:` / `ProposeSummary:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside non-restack moves (see Chain). `Stackable:` lists valid `--base` unit-ids for design/focus proposals (tagged `repo=`, `branch=`, optional `readiness=`); empty when gated but none eligible, omitted when not in design/focus proposal mode. `ProposeSummary:` summarizes available proposal sources for you — consume it, don't relay it. `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
 
 Keep `ws-*` commands out of the list — the choice on offer is which unit to move, and a wall of commands buries it. The one command for the unit that gets picked comes later, from Chain. Don't re-derive or re-rank — the rules ran in code. Keep the `[default]` move as the default unless the session gives you a concrete reason to prefer another (the user just said they want a particular unit finished); if you override it, say why.
 
@@ -84,7 +84,15 @@ After a lane, compose up to 3 candidates:
 1. **Never re-propose `Covered:` scope.** Dropped units and superseded lines stay covered; redo via `ws-start`'s `restart-of` path.
 2. **Candidate text is intent** — it becomes slug and `charter.md` purpose.
 
-Present with `Not now` first (opt-in, §Next-step chaining). Pick → `ws-start <ws-id> "<what>"`, plus `--claims` when closing follow-ups, plus `--base` when stacking. Nothing is written until that runs.
+**Design/focus lanes only** — consume `Stackable:` when composing (not follow-up lanes; those use `(blocks {units})` instead):
+
+- Stack only when design/focus scope clearly depends on unfinished work in a `Stackable:` entry; otherwise propose unstacked off the default branch. One candidate per intent, not stacked and unstacked variants.
+- Pick `--base <slug>` only from `Stackable:` lines matching the proposal repo. Never `--base` a unit not listed. Non-unit `--base <branch>` is out of scope here.
+- Any candidate with `--base` must append `(stacks on <slug> - <readiness>)` to the picker label. Omit ` - <readiness>` when the line has no `readiness=` field. Unstacked candidates: no stack annotation. Annotation iff `--base` (biconditional).
+- When `Stackable:` is present but empty: propose unstacked only; if design implies stacking, say no same-repo in-flight base is available.
+- If design implies stacking on another repo's unit: say so; offer unstacked or same-repo alternative — never cross-repo `--base`.
+
+Present with `Not now` first (opt-in, §Next-step chaining). Pick → `ws-start <ws-id> "<what>"`, plus `--claims` when closing follow-ups, plus `--base <slug>` when stacking per the rules above. Nothing is written until that runs.
 
 Declining at any proposal step leaves the store untouched. During Chain, also print the default move's resolved command — same as dismissing the unit question.
 

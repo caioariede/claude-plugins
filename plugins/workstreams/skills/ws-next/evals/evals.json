@@ -42,6 +42,12 @@
       "name": "chain-many-followups-summary",
       "prompt": "Run ws-next when one unit is mid-flight, design exists, and 28+ open WF follow-ups are proposable",
       "expected_output": "Chain offers Propose from design spec and Propose from Workstream follow-ups; no generic Propose next unit"
+    },
+    {
+      "id": 9,
+      "name": "design-suggest-stackable",
+      "prompt": "Run ws-next in suggest mode with design spec and one in-flight same-repo unit",
+      "expected_output": "Stackable block lists unit with readiness=; design/focus candidates show (stacks on slug - readiness) when stacked"
     }
   ]
 }

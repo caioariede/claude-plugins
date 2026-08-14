@@ -269,6 +269,39 @@ def current_branch(cwd: Optional[Path] = None) -> Optional[str]:
     return br
 
 
+_REPO_SCP = re.compile(r"^[^@]+@[^:]+:(.+?)(?:\.git)?$")
+_REPO_HTTPS = re.compile(r"(?:https?|ssh)://[^/]+/(.+?)(?:\.git)?/?$")
+
+
+def _normalize_repo_url(url: str) -> Optional[str]:
+    url = (url or "").strip()
+    if not url:
+        return None
+    m = _REPO_SCP.match(url)
+    if m:
+        return m.group(1).lower()
+    m = _REPO_HTTPS.match(url)
+    if m:
+        return m.group(1).lower()
+    if "/" in url and "://" not in url and "@" not in url:
+        return url.removesuffix(".git").lower()
+    return None
+
+
+def current_repo(cwd: Optional[Path] = None) -> Optional[str]:
+    """Normalized org/repo from origin, or None."""
+    try:
+        out = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(cwd) if cwd else None,
+            capture_output=True, text=True, timeout=5)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if out.returncode != 0:
+        return None
+    return _normalize_repo_url((out.stdout or "").strip())
+
+
 def resolve_branch(store: Path, branch: str) -> List[Tuple[str, str]]:
     """Ledger units whose branch= matches — (ws_id, slug) pairs."""
     hits = []
