@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.9.0"
+  version: "0.10.0"
   author: Caio Ariede
 ---
 
@@ -29,6 +29,12 @@ python3 <this-skill-dir>/scripts/reconcile.py [unit-id]
 
 Print the script line (`reconciled …` / `already-consistent` / `not-merged`). Chain to `ws-next` (§Next).
 4. Load state: read `charter.md` (why this unit exists + its `design:`), `progress.md` (Tasks + Follow-ups), and `log.md` (recent notes); run `git log -5` and the repo's verification command to confirm the code state.
+
+```
+python3 <this-skill-dir>/scripts/detect_split.py [unit-id]
+```
+
+If the line starts with `split` (open PR and commits ahead of recorded base while the store lags), remember the drift evidence for the **drift gate** (§Pause gates) at `plan-pause`. If `unknown-pr`, note forge was unavailable and skip the drift gate. If `no-split`, continue normally.
 5. **Blocked-awareness guard:** before advancing (plan/execute), derive the unit's needs — implicit base + `## Needs` (SPEC §Dependencies). If any is unmet, the unit is **blocked**: surface it — name the unmet target(s) and warn the unit is blocked — then require explicit confirmation to proceed anyway. `ws-resume` is the intentional override path: it warns, it does not silently proceed, and it does not hard-refuse.
 6. Derive phase — do not infer planning or execute boundaries from `progress.md` alone:
 
@@ -39,7 +45,7 @@ python3 <this-skill-dir>/scripts/phase.py [unit-id]
 | Phase | Action |
 |-------|--------|
 | `plan` | **Plan only — no code, no tasks, no execute-mode.** Read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path via SPEC §Plan path (`<design-dir>/<bare-slug>-plan.md` — not the design-basename swap). If **that** path already exists and `log.md` lacks a `plan` line → append `plan` only, re-run phase.py, stop at `plan-pause`. Else: fire `hook-ws-resume-unplanned-before` (interactive); run the flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**; plan-pause owns that gate); fire `hook-ws-resume-unplanned-after`. Append `plan <absolute-path>` to `log.md` when absent. Do **not** derive `T1..`, do **not** append `execute-mode`, do **not** touch source files. Re-run phase.py → `plan-pause`. **`none` flavor:** its `plan` op writes `T1..` inline and skips this gate. **Headless** (hooks skip): resolve plan path, run `plan` if no file yet, append `plan`, default `execute-mode=subagent-driven`, derive tasks, enter execute. |
-| `plan-pause` | Print the **plan-pause** block (§Pause gates). On pick **1**, stop. On **2** / **3**: derive `T1..` into `progress.md` (SPEC task derivation), append `decision execute-mode=subagent-driven` or `execute-mode=inline`, re-run phase.py, enter execute (below). Never pick an execute mode or start T1 without the user's choice. |
+| `plan-pause` | When step 4 reported `split …`, print the **drift gate** (§Pause gates) first — before the execute picker. On drift pick **2**: run `backfill_external.py`, re-run phase.py, continue (may leave `plan-pause` or advance). On drift pick **3**: fall through to the execute picker. Then print the **plan-pause** block. On pick **1**, stop. On **2** / **3**: derive unchecked `T1..` into `progress.md`, append `decision execute-mode=subagent-driven` or `execute-mode=inline`, re-run phase.py, enter execute (below). On **4**: run `prepare_external.py`, stop — no flavor execute. Never pick an execute mode or start T1 without the user's choice. Colloquial proceed or named implement skills (`/go`, etc.) at plan-pause: re-show the picker; leaving to implement elsewhere requires pick **4** first or backfill on return. |
 | `loop` | Unless this invocation just cleared `plan-pause`, fire `hook-ws-resume-loop-before` once (superpowers). Run execute for the first unchecked task (below). Enter the execute loop (below). |
 | `ship-pause` | Print the **ship-pause** block (§Pause gates). On **2**, run ship flavor, re-run phase.py. If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide. On **3**, chain to `ws-next`. |
 | `draft-pr` | Print the **draft-pr** block (§Pause gates). On **2**, run forge `pr-ready`, re-run phase.py. On **3**, chain to `ws-next`. |
@@ -55,8 +61,20 @@ python3 <this-skill-dir>/scripts/phase.py [unit-id]
 Every number on screen belongs to the live picker — context blocks use
 no ordinals (same rule as ws-next move relay).
 
+**drift gate** — only when step 4 printed `split pr=#N commits=M`. Context block has no ordinals:
+
+```
+Store is behind the branch (PR #N / M commits). Backfill marks plan tasks complete in the store.
+
+1. Not now (default)
+2. Mark external work complete and backfill tasks
+3. Ignore — show execute picker
+```
+
+Pick **2** → `python3 <this-skill-dir>/scripts/backfill_external.py [unit-id]`; print its line; re-run phase.py; continue. Pick **3** → execute picker below. Never auto-backfill without pick **2**.
+
 **plan-pause** — read the plan file; do not derive into `progress.md`
-yet. Print:
+yet unless the user already picked drift **2** or execute **4**. Print:
 
 ```
 Plan: <absolute-path>
@@ -70,7 +88,10 @@ How do you want to execute?
 1. Not now (default)
 2. Subagent-driven — fresh subagent per task
 3. Inline — execute in this session with checkpoints
+4. Execute outside ws-resume — derive unchecked T1.., execute-mode=external; you will backfill or check off tasks yourself before dependents unblock
 ```
+
+Pick **4** → `python3 <this-skill-dir>/scripts/prepare_external.py [unit-id]`; print its line; stop.
 
 **ship-pause** — summarize unit state, then print:
 
@@ -100,6 +121,7 @@ re-show the picker and wait. Never number task previews — plan
 **Superpowers execute mode** (from `decision execute-mode=…` in `log.md`):
 - `inline` → run `executing-plans` **once** this invocation (batch + checkpoints), then phase.py. Do not re-invoke inside the loop.
 - default / `subagent-driven` → flavor `execute` on the first unchecked task, then the loop below. **The parent session coordinates only** — dispatch a fresh subagent per task; do not implement task steps inline in the parent.
+- `external` → do **not** run flavor execute. Unchecked tasks after external work re-enter the normal loop or drift gate on return; backfill via drift pick **2** when store lags git.
 
 ## Execute loop
 

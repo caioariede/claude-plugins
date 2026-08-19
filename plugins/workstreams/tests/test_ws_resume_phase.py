@@ -85,6 +85,22 @@ class ResumePhaseTests(unittest.TestCase):
         a = u("a", done=0, total=3)
         self.assertEqual(self.phase([a], "a"), "loop")
 
+    def test_external_mode_all_checked_ship_pause(self):
+        a = u("a", done=2, total=2)
+        a.log = [
+            ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
+            ("2026-01-01T00:01Z", "decision", "execute-mode=external"),
+        ]
+        self.assertEqual(self.phase([a], "a"), "ship-pause")
+
+    def test_external_mode_partial_tasks_is_loop(self):
+        a = u("a", done=1, total=3)
+        a.log = [
+            ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
+            ("2026-01-01T00:01Z", "decision", "execute-mode=external"),
+        ]
+        self.assertEqual(self.phase([a], "a"), "loop")
+
 
 class PhaseCliTests(unittest.TestCase):
     def test_generate_loop_for_partial_unit(self):

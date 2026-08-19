@@ -366,3 +366,68 @@ def resolve_args(store: Path, args: List[str]) -> Tuple[str, Optional[str]]:
     if inferred:
         return inferred, None
     raise Pick("MANY_WORKSTREAMS " + ", ".join(all_ws))
+
+
+# ---------------------------------------------------------------------------
+# Worktree locate + git drift helpers (ws-resume detect_split)
+# ---------------------------------------------------------------------------
+
+def _parse_git_worktree_porcelain(text: str, branch: str) -> Optional[Path]:
+    want = f"refs/heads/{branch}"
+    path: Optional[str] = None
+    for line in text.splitlines():
+        if line.startswith("worktree "):
+            path = line.split(" ", 1)[1].strip()
+        elif line.startswith("branch ") and line.strip().endswith(want):
+            if path:
+                return Path(path)
+        elif line == "":
+            path = None
+    return None
+
+
+def locate_worktree(store: Path, branch: str, repo: str) -> Optional[Path]:
+    """Resolved worktree path for *branch*, or None when missing."""
+    template = resolve_operation(store, "worktree-management", "locate")
+    if not template:
+        return None
+    cmd = _fill(template, branch, repo)
+    try:
+        out = subprocess.run(cmd, shell=True, capture_output=True,
+                             text=True, timeout=15)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    stdout = out.stdout.strip()
+    if stdout.startswith("worktree ") or "\nworktree " in stdout:
+        return _parse_git_worktree_porcelain(stdout, branch)
+    p = Path(stdout.splitlines()[0].strip())
+    return p if p.is_dir() else None
+
+
+def _git_in(worktree: Path, *args: str, timeout: int = 15) -> Optional[str]:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(worktree), *args],
+            capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if out.returncode != 0:
+        return None
+    return (out.stdout or "").strip()
+
+
+def commits_ahead(worktree: Path, base: str) -> Optional[int]:
+    """Commits on HEAD not in ``origin/<base>``; None when git fails."""
+    raw = _git_in(worktree, "rev-list", "--count", f"origin/{base}..HEAD")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def head_sha(worktree: Path) -> str:
+    return _git_in(worktree, "rev-parse", "HEAD", timeout=10) or ""

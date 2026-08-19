@@ -480,6 +480,20 @@ class EnumerateMoves(unittest.TestCase):
         u = S.Unit(slug="a", branch="a")
         self.assertEqual(moves_of(mkws([u]))[0].why, "no tasks planned yet")
 
+    def test_plan_pause_incomplete_why(self):
+        u = S.Unit(slug="a", branch="a",
+                   log=[("t", "plan", "/tmp/plan.md")])
+        self.assertEqual(
+            moves_of(mkws([u]))[0].why,
+            "plan-pause (store incomplete)")
+
+    def test_resume_headline_uses_why(self):
+        u = S.Unit(slug="a", branch="a", repo="o/r",
+                   log=[("t", "plan", "/tmp/plan.md")])
+        ws = mkws([u], design="~/specs/x.md")
+        d = S.decide_next(ws, proposal_repo="o/r")
+        self.assertEqual(d.headline, "plan-pause (store incomplete)")
+
     def test_one_move_per_unit_ship_beats_resume(self):
         u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=2)
         ms = moves_of(mkws([u]))

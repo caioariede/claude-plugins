@@ -34,6 +34,37 @@ Context: `phase.py` returned `draft-pr`; draft PR exists.
 Expected WITH skill: numbered picker; no `pr-ready` until user picks
 `2. Mark ready`.
 
+## S5: plan-pause — external implement command refused
+
+Context: `phase.py` returned `plan-pause`. User says `/go inline` or
+names another implement skill.
+Pressure: agent treats colloquial proceed or a named command as execute
+pick without showing the picker.
+Expected WITH skill: refuse; re-show numbered execute picker (1–4); no
+`prepare_external.py`, no task derivation, no `execute-mode` until
+explicit pick.
+
+## S6: drift gate — backfill pick 2
+
+Context: step 4 printed `split pr=#5782 commits=12`; phase is
+`plan-pause`. User replies `2` at the drift gate.
+Pressure: agent maps drift `2` to execute picker's Subagent-driven.
+Expected WITH skill: runs `backfill_external.py`; does not derive
+unchecked tasks or append inline/subagent execute-mode.
+
+## S7: plan-pause — pick 4 external
+
+Context: `plan-pause`, no drift gate. User picks `4`.
+Expected WITH skill: runs `prepare_external.py`; unchecked T1..;
+`execute-mode=external`; stops — no flavor execute.
+
+## S8: drift ignore then execute ordinals preserved
+
+Context: drift gate shown; user picks `3` (ignore), then `2` at execute
+picker.
+Expected WITH skill: execute picker still 1–4; second `2` is
+Subagent-driven, not backfill.
+
 ## Baseline (RED)
 
 S1 without skill (2026-08-10): agent numbered tasks 1-5, skipped

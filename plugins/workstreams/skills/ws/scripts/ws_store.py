@@ -218,6 +218,79 @@ def parse_progress(text: str) -> Tuple[int, int, List[Followup], List[Need]]:
 _TASK_LINE_RE = re.compile(
     r'^(-\s+\[)( |x|X)(\]\s+(T\d+)\s+(.*))$')
 
+_PLAN_TASK_HEADING_RE = re.compile(r'^### Task (\d+):\s*(.*)$', re.MULTILINE)
+
+
+class PlanParseError(ValueError):
+    """Plan file lacks usable ``### Task N:`` headings."""
+
+
+def derive_tasks_from_plan(text: str) -> List[Tuple[int, str]]:
+    """One ``(n, title)`` per ``### Task N:`` heading, sorted by *n*."""
+    tasks: List[Tuple[int, str]] = []
+    seen: set[int] = set()
+    for m in _PLAN_TASK_HEADING_RE.finditer(text):
+        n = int(m.group(1))
+        title = m.group(2).strip()
+        if n in seen:
+            raise PlanParseError(f"duplicate task number T{n}")
+        seen.add(n)
+        tasks.append((n, title))
+    if not tasks:
+        raise PlanParseError("no ### Task N: headings in plan")
+    tasks.sort(key=lambda x: x[0])
+    return tasks
+
+
+def write_tasks_to_progress(raw: str, tasks: List[Tuple[int, str]], *,
+                            checked: bool) -> Tuple[str, bool]:
+    """Rebuild ``## Tasks``; preserve follow-ups and needs.
+
+    Returns ``(new_text, wrote)``. ``wrote`` is false when ``## Tasks``
+    already carries task lines.
+    """
+    headings = {"Tasks": "tasks", "Follow-ups": "followups",
+                "Needs": "needs"}
+    sections: Dict[str, List[str]] = {
+        "tasks": [], "followups": [], "needs": []}
+    section: Optional[str] = None
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        sec = _section_of(line, headings)
+        if sec is not None:
+            section = sec if sec else None
+            continue
+        if section and line.startswith("- "):
+            sections[section].append(raw_line)
+    if sections["tasks"]:
+        return raw, False
+    mark = "x" if checked else " "
+    task_lines = [f"- [{mark}] T{n}  {title}" for n, title in tasks]
+    fu = sections["followups"]
+    need = sections["needs"]
+    out: List[str] = ["## Tasks"] + task_lines
+    out.append("")
+    out.append("## Follow-ups")
+    out.extend(fu)
+    out.append("")
+    out.append("## Needs")
+    out.extend(need)
+    if raw.endswith("\n"):
+        out.append("")
+    return "\n".join(out), True
+
+
+def plan_log_path(u: Unit) -> Optional[str]:
+    for _ts, kind, payload in u.log:
+        if kind == "plan":
+            return payload.strip()
+    return None
+
+
+def store_split_eligible(u: Unit) -> bool:
+    """Store can lag git when a plan exists but the unit is not complete."""
+    return (not u.dropped and not u.code_complete and _has_plan_line(u))
+
 
 def reconcile_tasks_on_merge(text: str) -> Tuple[str, List[str]]:
     """Check open ## Tasks boxes; leave follow-ups/needs untouched."""
@@ -271,6 +344,70 @@ def maybe_reconcile_merged_unit(ws_dir: Path, slug: str,
         udir / "log.md", "decision",
         f"reconciled tasks from merged PR #{pr.number}: {', '.join(ids)}")
     return True
+
+
+def _append_log_lines(log_path: Path,
+                      entries: List[Tuple[str, str]]) -> None:
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    block = "".join(f"- {ts}  {kind}  {payload}\n"
+                    for kind, payload in entries)
+    if log_path.exists():
+        log_path.write_text(
+            log_path.read_text(encoding="utf-8") + block, encoding="utf-8")
+    else:
+        log_path.write_text(f"# log\n{block}", encoding="utf-8")
+
+
+def apply_external_backfill(ws_dir: Path, slug: str, plan_path: Path,
+                            pr: PR, *, head_sha: str = "") -> Tuple[str, List[str]]:
+    """Confirm-only backfill: checked tasks + execute-mode=external."""
+    return _apply_external_tasks(
+        ws_dir, slug, plan_path, checked=True, pr=pr, head_sha=head_sha)
+
+
+def apply_external_execute_mode(ws_dir: Path, slug: str,
+                                plan_path: Path) -> Tuple[str, List[str]]:
+    """Plan-pause option 4: unchecked tasks + execute-mode=external."""
+    return _apply_external_tasks(ws_dir, slug, plan_path, checked=False)
+
+
+def _apply_external_tasks(ws_dir: Path, slug: str, plan_path: Path, *,
+                          checked: bool,
+                          pr: Optional[PR] = None,
+                          head_sha: str = "") -> Tuple[str, List[str]]:
+    udir = ws_dir / "units" / slug
+    prog_path = udir / "progress.md"
+    log_path = udir / "log.md"
+    raw = _read(prog_path)
+    _, total, _, _ = parse_progress(raw)
+    if total > 0:
+        return "already-has-tasks", []
+    try:
+        plan_text = plan_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "refused no-plan", []
+    try:
+        tasks = derive_tasks_from_plan(plan_text)
+    except PlanParseError:
+        return "refused bad-plan", []
+    new_text, wrote = write_tasks_to_progress(raw, tasks, checked=checked)
+    if not wrote:
+        return "already-has-tasks", []
+    prog_path.write_text(new_text, encoding="utf-8")
+    ids = [f"T{n}" for n, _ in tasks]
+    log_entries: List[Tuple[str, str]] = [
+        ("decision", "execute-mode=external")]
+    if checked and pr is not None:
+        sha_bit = f", sha={head_sha[:7]}" if head_sha else ""
+        pr_n = pr.number if pr.number is not None else "?"
+        log_entries.append((
+            "decision",
+            "reconciled tasks from external implement "
+            f"(PR #{pr_n}{sha_bit}): {', '.join(ids)}"))
+    _append_log_lines(log_path, log_entries)
+    status = "backfilled" if checked else "prepared"
+    return status, ids
 
 
 def _split_dash(text: str) -> Tuple[str, str]:
@@ -647,7 +784,7 @@ def _has_unmet_need(u: Unit, ws: Workstream,
 
 
 def _has_plan_line(u: Unit) -> bool:
-    return any(kind == "plan" for _ts, kind, _p in u.log)
+    return plan_log_path(u) is not None
 
 
 def _has_execute_mode(u: Unit) -> bool:
@@ -892,6 +1029,8 @@ def unit_readiness(u: Unit) -> Optional[str]:
     if u.tasks_total:
         left = u.tasks_total - u.tasks_done
         return f"{left} of {u.tasks_total} tasks left"
+    if _has_plan_line(u) and not _has_execute_mode(u):
+        return "plan-pause (store incomplete)"
     return "no tasks planned yet"
 
 
@@ -960,11 +1099,8 @@ def enumerate_moves(ws: Workstream,
             if u.code_complete:
                 why = (f"tasks done, PR #{u.pr.number}" if u.pr.number
                        else "tasks done, PR open")
-            elif u.tasks_total:
-                why = (f"{u.tasks_total - u.tasks_done} of "
-                       f"{u.tasks_total} tasks left")
             else:
-                why = "no tasks planned yet"
+                why = unit_readiness(u) or "no tasks planned yet"
             ranked.append(((_RULE_RANK["resume"], deps, i),
                            Move(u.slug, "resume", f"ws-resume {u.slug}",
                                 u.branch or None, why)))
@@ -1177,8 +1313,10 @@ def decide_next(ws: Workstream,
         proposable, covered, design = _proposal_material(ws, by_slug)
         attach = (_proposal_attachable(moves)
                   and _has_proposal_source(ws, proposable))
+        headline = (top.why if top.rule == "resume" and top.why
+                    else _RULE_HEADLINE[top.rule])
         return out(top.rule, top.command, top.unit, top.branch, moves,
-                   headline=_RULE_HEADLINE[top.rule],
+                   headline=headline,
                    proposable=proposable if attach else [],
                    covered=covered if attach else [],
                    design=design if attach else "",

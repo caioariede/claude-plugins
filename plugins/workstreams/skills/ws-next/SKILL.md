@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.16.0"
+  version: "0.17.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -37,6 +37,11 @@ Print the script's stdout, minus each move line's machine tail — everything fr
 - `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` / `Stackable:` / `ProposeSummary:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside non-restack moves (see Chain). `Stackable:` lists valid `--base` unit-ids for design/focus proposals (tagged `repo=`, `branch=`, optional `readiness=`); empty when gated but none eligible, omitted when not in design/focus proposal mode. `ProposeSummary:` summarizes available proposal sources for you — consume it, don't relay it. `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.
 
 Keep `ws-*` commands out of the list — the choice on offer is which unit to move, and a wall of commands buries it. The one command for the unit that gets picked comes later, from Chain. Don't re-derive or re-rank — the rules ran in code. Keep the `[default]` move as the default unless the session gives you a concrete reason to prefer another (the user just said they want a particular unit finished); if you override it, say why.
+
+**Store/git guardrails** — when a move's `<why>` or a `Stackable:` line's `readiness=` contains `plan-pause`, `store incomplete`, or `no tasks planned yet`:
+- Never describe that unit as "in flight", "covered", or "implementation underway."
+- When proposing `--base` on such a unit, state explicitly that **dependents stay blocked until the base store is backfilled** (tasks checked in `progress.md`).
+- Do not change `Covered:` semantics — ledger dedup still applies.
 
 When there is **no** move at all the script emitted one of these states, named in its headline:
 

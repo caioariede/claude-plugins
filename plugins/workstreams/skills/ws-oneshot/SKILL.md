@@ -44,7 +44,9 @@ Dismissal or multi-unit signals → use `ws-init` at spec time instead.
    the execute entry (`none` flavor). Do not skip execute-mode choice.
 
 After `plan-pause`: normal `ws-resume` behavior — no special oneshot
-rules. Scope growth → `ws-backlog` during work, `ws-next` after ship.
+rules. Option **4** (execute outside ws-resume) or drift backfill on
+return apply the same as any session. Scope growth → `ws-backlog`
+during work, `ws-next` after ship.
 
 ## Chain
 

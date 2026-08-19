@@ -178,7 +178,12 @@ kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>
 append once at first save. `decision execute-mode=subagent-driven` or
 `execute-mode=inline` records which execute path ws-resume uses — append
 only at **plan-pause** when the user picks Subagent-driven or Inline,
-never when the plan file is first saved.
+never when the plan file is first saved. `execute-mode=external` records
+that implementation will happen (or did happen) outside the ws-resume
+loop — append at plan-pause when the user picks Execute outside
+ws-resume, or after confirmed backfill from drift detection. External
+mode does not dispatch the flavor execute op; unchecked tasks after
+external re-enter the normal execute picker on return.
 
 **Task derivation (superpowers):** one `## Tasks` line per `### Task N:`
 heading in the unit plan file — `- [ ] T<n>  <Task N title>`,

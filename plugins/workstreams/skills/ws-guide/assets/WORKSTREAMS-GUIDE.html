@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.27.0 · August 2026</p>
+    <p class="version">Version 0.28.0 · August 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -722,7 +722,7 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
 <li><b>Pick an entry path at spec time.</b> Accept the <a href="#spec-watch">spec-watch</a> nudge and run <code>ws-init</code> — then <code>ws-focus</code> and split with <code>ws-start</code>. Single-unit scope may use <code>ws-oneshot</code> (init + start + resume in one confirmed chain) instead of focus + manual start.</li>
 <li><b>Multi-unit: split the spec into units</b> with <code>ws-start</code>, one slice at a time — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
-<li><b>Let each unit plan itself.</b> First <code>ws-resume</code> on an unplanned unit runs <code>writing-plans</code> (plan saved as <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code>), records tasks as <code>T1..</code> in <code>progress.md</code> at plan-pause, and honors the Superpowers execution handoff. Later <code>ws-resume</code> runs print a short orientation (goal, progress, plan path) then continue executing.</li>
+<li><b>Let each unit plan itself.</b> First <code>ws-resume</code> on an unplanned unit runs <code>writing-plans</code> (plan saved as <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code>). At <b>plan-pause</b> pick Subagent-driven, Inline, or <b>Execute outside ws-resume</b> (option 4) before tasks land in <code>progress.md</code>. If you implement elsewhere without that pick, return to <code>ws-resume</code> — drift detection offers confirm-only backfill when an open PR is ahead of the store. Later runs print orientation (goal, progress, plan path) then continue executing.</li>
 </ol>
 <aside class="note note-rule"><b>Planning lives in units.</b> After the spec, go <code>ws-init</code> → <code>ws-focus</code> → <code>ws-start</code>. <code>writing-plans</code> is deferred into each unit's <code>ws-resume</code>. <b>Oneshot:</b> <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> — one workstream, one unit, one confirmed chain.</aside>
 <aside class="note note-tip"><b>Plan path.</b> Unit plans live at <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code> next to the workstream design spec — not in <code>docs/superpowers/plans/</code>. The store records the path in <code>log.md</code> as <code>plan &lt;absolute-path&gt;</code>.</aside>

@@ -48,6 +48,12 @@
       "name": "design-suggest-stackable",
       "prompt": "Run ws-next in suggest mode with design spec and one in-flight same-repo unit",
       "expected_output": "Stackable block lists unit with readiness=; design/focus candidates show (stacks on slug - readiness) when stacked"
+    },
+    {
+      "id": 10,
+      "name": "store-incomplete-not-in-flight",
+      "prompt": "Run ws-next when script output has readiness=plan-pause (store incomplete) on a stackable base and design exists",
+      "expected_output": "Agent must not call the base in flight or covered when proposing stack; must note dependent stays blocked until base store backfilled"
     }
   ]
 }

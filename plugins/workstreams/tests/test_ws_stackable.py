@@ -38,6 +38,12 @@ class TestUnitReadiness(unittest.TestCase):
         S.derive_status(S.Workstream(ws_id="w", name="w", units=[unit]))
         self.assertEqual(S.unit_readiness(unit), "no tasks planned yet")
 
+    def test_plan_pause_store_incomplete(self):
+        unit = u("a", log=[("t", "plan", "/tmp/plan.md")])
+        S.derive_status(S.Workstream(ws_id="w", name="w", units=[unit]))
+        self.assertEqual(S.unit_readiness(unit),
+                         "plan-pause (store incomplete)")
+
     def test_in_review_code_complete_returns_none(self):
         unit = u("a", done=2, total=2, pr_obj=pr(42, "OPEN", False))
         S.derive_status(S.Workstream(ws_id="w", name="w", units=[unit]))

@@ -1,0 +1,41 @@
+{
+  "skill_name": "ws-resume",
+  "evals": [
+    {
+      "id": 1,
+      "name": "plan-pause-numbered-picker",
+      "prompt": "phase.py returned plan-pause; user said go",
+      "expected_output": "Unnumbered task preview; numbered 1-4 execute picker; stops until explicit pick"
+    },
+    {
+      "id": 2,
+      "name": "plan-pause-ordinal-collision",
+      "prompt": "plan-pause; user replies 2",
+      "expected_output": "2 maps to Subagent-driven not plan Task 2"
+    },
+    {
+      "id": 5,
+      "name": "plan-pause-external-command-refused",
+      "prompt": "plan-pause; user names /go inline or external implement command",
+      "expected_output": "Refuse; re-show picker; no derive or execute-mode until explicit pick"
+    },
+    {
+      "id": 6,
+      "name": "drift-gate-backfill-pick-2",
+      "prompt": "plan-pause with detect_split split line; user picks 2 at drift gate",
+      "expected_output": "Runs backfill_external.py; does not remap 2 to Subagent-driven"
+    },
+    {
+      "id": 7,
+      "name": "plan-pause-pick-4-external",
+      "prompt": "plan-pause; user picks 4",
+      "expected_output": "Runs prepare_external.py; unchecked T1.. and execute-mode=external; stops"
+    },
+    {
+      "id": 8,
+      "name": "drift-ignore-then-execute-ordinals",
+      "prompt": "plan-pause with split; user picks 3 at drift gate then 2 at execute picker",
+      "expected_output": "Execute picker ordinals 1-4 unchanged; 2 is Subagent-driven"
+    }
+  ]
+}
