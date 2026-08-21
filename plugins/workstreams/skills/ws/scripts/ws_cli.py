@@ -209,6 +209,150 @@ def gather_pr_state(ws: S.Workstream, store: Path,
 
 
 # ---------------------------------------------------------------------------
+# Shipped-elsewhere detection (ws-resume reconcile)
+# ---------------------------------------------------------------------------
+
+def _run_shell(cmd: str, timeout: int = 25) -> Optional[str]:
+    try:
+        out = subprocess.run(cmd, shell=True, capture_output=True,
+                             text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if out.returncode != 0:
+        return None
+    return (out.stdout or "").strip() or None
+
+
+def _run_forge_simple(store: Path, op: str, repo: str,
+                      branch: str = "") -> Optional[str]:
+    template = resolve_operation(store, "forge", op)
+    if not template or ":" in template.split()[0]:
+        return None
+    cmd = template.replace("<repo>", repo).replace("<branch>", branch)
+    return _run_shell(cmd)
+
+
+def _resolve_tip_sha(unit: S.Unit, wt: Optional[Path]) -> Optional[str]:
+    if unit.branch and unit.repo:
+        ref = f"refs/heads/{unit.branch}"
+        raw = _run_shell(
+            f"git ls-remote origin {ref}", timeout=15)
+        if raw:
+            sha = raw.split()[0].strip()
+            if sha:
+                return sha
+    if wt is not None:
+        sha = head_sha(wt)
+        return sha or None
+    return None
+
+
+def _git_tip_pair(unit: S.Unit, wt: Optional[Path],
+                  default_branch: str
+                  ) -> Tuple[Optional[str], Optional[str], bool]:
+    tip = _resolve_tip_sha(unit, wt)
+    if not tip:
+        return None, None, False
+    if wt is None:
+        contained = _compare_commits(
+            unit.repo, default_branch, tip)
+        return tip, None, contained
+    default_tip = _git_in(wt, "rev-parse", f"origin/{default_branch}",
+                          timeout=10) or None
+    if not default_tip:
+        return tip, None, False
+    return tip, default_tip, _is_ancestor(wt, tip, default_tip)
+
+
+def _is_ancestor(wt: Path, tip: str, target: str) -> bool:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(wt), "merge-base", "--is-ancestor",
+             tip, target],
+            capture_output=True, text=True, timeout=10)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    return out.returncode == 0
+
+
+def _compare_commits(repo: str, base: str, tip: str) -> bool:
+    """True when tip is reachable from base (tip is ancestor of base)."""
+    cmd = f"gh api repos/{repo}/compare/{base}...{tip} -q .status"
+    status = _run_shell(cmd, timeout=25)
+    return status in ("behind", "identical")
+
+
+def _scan_tier_a(store: Path, unit: S.Unit, tip: str,
+                 default_branch: str,
+                 wt: Optional[Path]) -> Optional[S.MergedVia]:
+    template = resolve_operation(store, "forge", "pr-list-merged")
+    if not template:
+        return None
+    cmd = (template.replace("<repo>", unit.repo)
+           .replace("<branch>", default_branch))
+    raw = _run_shell(cmd, timeout=30)
+    if not raw:
+        return None
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        mc = item.get("mergeCommit") or {}
+        merge_sha = mc.get("oid") if isinstance(mc, dict) else None
+        head = item.get("headRefName") or default_branch
+        num = item.get("number")
+        if not merge_sha:
+            continue
+        if wt is not None:
+            contained = _is_ancestor(wt, tip, merge_sha)
+        else:
+            contained = _compare_commits(
+                unit.repo, merge_sha, tip)
+        if contained:
+            return S.MergedVia(head, tip, num)
+    return None
+
+
+def detect_shipped_elsewhere(
+        unit: S.Unit, ws: S.Workstream, store: Path, *,
+        pr_state: Optional[Dict[str, Optional[S.PR]]] = None
+        ) -> S.MergeDetectResult:
+    if S.is_merged(unit):
+        return S.MergeDetectResult("already-merged")
+    status_tpl = resolve_operation(store, "forge", "pr-status")
+    if not status_tpl or ":" in status_tpl.split()[0]:
+        return S.MergeDetectResult("unknown-forge")
+    if pr_state is None:
+        pr_state = gather_pr_state(ws, store, branches={unit.branch})
+    ledger_pr = pr_state.get(unit.branch)
+    ledger_state = (ledger_pr.state if ledger_pr else None)
+    had_ledger_pr = ledger_pr is not None
+    default_branch = _run_forge_simple(store, "default-branch", unit.repo)
+    if not default_branch:
+        return S.MergeDetectResult("unknown-forge")
+    wt = locate_worktree(store, unit.branch, unit.repo)
+    tip, default_tip, is_ancestor = _git_tip_pair(
+        unit, wt, default_branch)
+    if not tip:
+        return S.MergeDetectResult("unknown-git")
+    tier_a = _scan_tier_a(store, unit, tip, default_branch, wt)
+    inp = S.MergeDetectInput(
+        tip_sha=tip,
+        default_tip_sha=default_tip or "",
+        ledger_pr_state=ledger_state,
+        tasks_total=unit.tasks_total,
+        had_ledger_pr=had_ledger_pr,
+        tier_a_match=tier_a,
+        is_ancestor=is_ancestor,
+        default_branch=default_branch,
+    )
+    return S.decide_merged_via(inp)
+
+
+# ---------------------------------------------------------------------------
 # Target resolution
 # ---------------------------------------------------------------------------
 

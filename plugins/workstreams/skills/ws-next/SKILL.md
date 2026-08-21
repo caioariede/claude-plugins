@@ -42,6 +42,10 @@ Keep `ws-*` commands out of the list — the choice on offer is which unit to mo
 - Never describe that unit as "in flight", "covered", or "implementation underway."
 - When proposing `--base` on such a unit, state explicitly that **dependents stay blocked until the base store is backfilled** (tasks checked in `progress.md`).
 - Do not change `Covered:` semantics — ledger dedup still applies.
+- When the default move targets a unit whose work likely shipped on
+  another branch, say so and suggest `ws-resume <slug>` once (or a
+  hand `merged-via` line in `log.md`) — ws-next honors persisted
+  `merged-via` on the next run but does not write it.
 
 When there is **no** move at all the script emitted one of these states, named in its headline:
 

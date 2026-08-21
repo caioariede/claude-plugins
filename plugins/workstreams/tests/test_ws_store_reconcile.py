@@ -52,7 +52,7 @@ class MaybeReconcileTests(unittest.TestCase):
             (udir / "log.md").write_text("# log\n", encoding="utf-8")
             pr = S.PR(number=42, state="MERGED", is_draft=False, base="main")
             changed = S.maybe_reconcile_merged_unit(root, "feat", pr)
-            self.assertTrue(changed)
+            self.assertEqual(changed, ["T2"])
             prog = (udir / "progress.md").read_text(encoding="utf-8")
             self.assertIn("- [x] T2  b", prog)
             log = (udir / "log.md").read_text(encoding="utf-8")
@@ -67,7 +67,7 @@ class MaybeReconcileTests(unittest.TestCase):
                 "## Tasks\n- [x] T1  a\n", encoding="utf-8")
             (udir / "log.md").write_text("# log\n", encoding="utf-8")
             pr = S.PR(number=1, state="MERGED", is_draft=False, base="main")
-            self.assertFalse(S.maybe_reconcile_merged_unit(root, "feat", pr))
+            self.assertEqual(S.maybe_reconcile_merged_unit(root, "feat", pr), [])
 
     def test_skips_non_merged(self):
         with tempfile.TemporaryDirectory() as td:
@@ -77,7 +77,29 @@ class MaybeReconcileTests(unittest.TestCase):
             (udir / "progress.md").write_text(
                 "## Tasks\n- [ ] T1  a\n", encoding="utf-8")
             pr = S.PR(number=1, state="OPEN", is_draft=False, base="main")
-            self.assertFalse(S.maybe_reconcile_merged_unit(root, "feat", pr))
+            self.assertEqual(S.maybe_reconcile_merged_unit(root, "feat", pr), [])
+
+    def test_reconcile_on_merged_via_log(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            udir = root / "units" / "feat"
+            udir.mkdir(parents=True)
+            (udir / "progress.md").write_text(
+                "## Tasks\n- [ ] T1  a\n", encoding="utf-8")
+            (udir / "log.md").write_text(
+                "- 2026-01-01T00:00Z  merged-via  "
+                "branch=master sha=abc pr=7\n",
+                encoding="utf-8")
+            u = S.Unit(slug="feat", log=S.parse_log(
+                (udir / "log.md").read_text(encoding="utf-8")))
+            mv = S.merged_via_record(u)
+            changed = S.maybe_reconcile_merged_unit(
+                root, "feat", None, merged_via=mv)
+            self.assertEqual(changed, ["T1"])
+            self.assertIn("- [x] T1  a",
+                          (udir / "progress.md").read_text(encoding="utf-8"))
+            self.assertIn("merged-via branch=master", (
+                udir / "log.md").read_text(encoding="utf-8"))
 
 
 class ReconcileCliTests(unittest.TestCase):

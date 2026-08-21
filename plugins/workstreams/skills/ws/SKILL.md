@@ -21,7 +21,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
   units/<unit-id>/
     charter.md           # static: why this unit exists (unit-level workstream.md); set at ws-start, read by ws-resume
     progress.md          # MUTABLE current-state: Tasks + Follow-ups checklists (work-state SoT)
-    log.md               # APPEND-ONLY: created, dropped, restack, decision, note
+    log.md               # APPEND-ONLY: created, dropped, restack, decision, note, merged-via
 ```
 
 ## Source of truth — never store what git/GitHub owns
@@ -30,7 +30,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | current branch | git (the worktree) | `git rev-parse --abbrev-ref HEAD` |
 | base / did GitHub retarget | GitHub | active `forge` flavor `pr-status` (SPEC §Flavors) |
 | PR number + draft/ready/merged | GitHub | active `forge` flavor `pr-status` |
-| status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. PR merged → `merged` · 3. has an unmet need (§Dependencies) → `blocked` · 4. PR ready → `in-review` · 5. PR draft or no PR → `building` |
+| status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. `merged-via` log or PR merged → `merged` · 3. has an unmet need (§Dependencies) → `blocked` · 4. PR ready → `in-review` · 5. PR draft or no PR → `building` |
 | unit ↔ repo/branch | `units.md` ledger | set once at `ws-start` |
 | unit purpose / scope (why it exists) | unit `charter.md` | set once at `ws-start`; read by `ws-resume` |
 | tasks + in-flight follow-ups | unit `progress.md` | resolved before this unit's PR merges |
@@ -57,11 +57,13 @@ A unit's **needs** = `{ base, when base is a unit-id }` ∪ `{ explicit needs }`
 
 **code-complete** (derived predicate; never a printed status label): a unit has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. `## Follow-ups` are ignored; zero tasks is *not* code-complete. `merged` implies code-complete.
 
-**Merge task reconcile:** when a unit's PR is `MERGED`, open `## Tasks`
-boxes are invalid bookkeeping — `ws-resume` checks them and appends a
-`decision reconciled tasks from merged PR #<n>: …` line to `log.md`.
-`## Follow-ups` are never auto-checked. `ws-board` / `ws-next` do not
-write; they derive `merged` / code-complete from live PR state.
+**Merge task reconcile:** when a unit is terminal-merged (`merged-via`
+log or forge `MERGED` on the ledger branch), open `## Tasks` boxes are
+invalid bookkeeping — `ws-resume` checks them and appends a `decision
+reconciled tasks from merged-via branch=<b> pr=<n>: …` or `reconciled
+tasks from merged PR #<n>: …` line to `log.md`. `## Follow-ups` are
+never auto-checked. `ws-board` / `ws-next` do not write; they derive
+`merged` / code-complete from the log and live PR state.
 `phase.py` gathers PR state for every ledger unit (same as board/next).
 
 **blocked** (derived status): a unit has ≥1 need whose target is not satisfied. A **dropped** target is never code-complete → the dependent is stuck: flag it `(dropped)` and route to triage, never auto-resolve. A follow-up target that is *removed* (deleted, not checked) is likewise unresolvable → same triage.
@@ -172,7 +174,11 @@ Re-scope is a deliberate human edit here (rare) — like editing `workstream.md`
 `T<n>`/`F<n>`/`N<n>` ids are monotonic per unit and never reused, even after check-off or removal. `## Needs` lines have **no checkbox** — a need's satisfied/open state is *derived* from its target (§Dependencies), never hand-marked; remove a line only on a genuine scope change (append a `decision` to `log.md`). `<target>` = a unit-id/bare-slug or a follow-up id (`<unit-id>:F<n>` / `WF<n>`); the note is optional free text.
 
 **`units/<unit-id>/log.md`** (append-only): `- <ts>  <kind>  <payload>`
-kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>` · `plan <absolute-path>`
+kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>` · `plan <absolute-path>` · `merged-via branch=<b> sha=<full> [pr=<n>]`
+
+`merged-via` records where the unit's work shipped when the ledger
+`branch=` is not forge-MERGED (another branch, replaced PR, or manual
+squash-gap fix). Latest line wins; append-only.
 
 `plan` records the unit implementation plan path (superpowers flavor);
 append once at first save. `decision execute-mode=subagent-driven` or

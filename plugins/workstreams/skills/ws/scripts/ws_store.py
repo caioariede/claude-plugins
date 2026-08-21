@@ -55,6 +55,97 @@ class PR:
 
 
 @dataclass
+class MergedVia:
+    branch: str
+    sha: str
+    pr: Optional[int] = None
+
+
+_MERGED_VIA_RE = re.compile(
+    r'branch=(\S+)\s+sha=(\S+)(?:\s+pr=(\d+))?')
+
+
+def parse_merged_via_payload(text: str) -> Optional[MergedVia]:
+    m = _MERGED_VIA_RE.search(text)
+    if not m:
+        return None
+    pr = int(m.group(3)) if m.group(3) else None
+    return MergedVia(branch=m.group(1), sha=m.group(2), pr=pr)
+
+
+def format_merged_via_payload(rec: MergedVia) -> str:
+    payload = f"branch={rec.branch} sha={rec.sha}"
+    if rec.pr is not None:
+        payload += f" pr={rec.pr}"
+    return payload
+
+
+def merged_via_record(u: Unit) -> Optional[MergedVia]:
+    for _ts, kind, payload in reversed(u.log):
+        if kind != "merged-via":
+            continue
+        rec = parse_merged_via_payload(payload)
+        if rec is not None:
+            return rec
+    return None
+
+
+def is_merged(u: Unit) -> bool:
+    if merged_via_record(u) is not None:
+        return True
+    return u.pr is not None and u.pr.state == "MERGED"
+
+
+@dataclass
+class MergeDetectInput:
+    tip_sha: str
+    default_tip_sha: str
+    ledger_pr_state: Optional[str]
+    tasks_total: int
+    had_ledger_pr: bool
+    tier_a_match: Optional[MergedVia] = None
+    is_ancestor: bool = False
+    default_branch: str = ""
+
+
+@dataclass
+class MergeDetectResult:
+    outcome: str
+    record: Optional[MergedVia] = None
+
+
+def decide_merged_via(inp: MergeDetectInput) -> MergeDetectResult:
+    if inp.tier_a_match is not None:
+        return MergeDetectResult("tier-a", inp.tier_a_match)
+    if inp.ledger_pr_state == "MERGED":
+        return MergeDetectResult("already-merged")
+    if not inp.is_ancestor:
+        return MergeDetectResult("not-shipped")
+    if inp.tip_sha == inp.default_tip_sha:
+        return MergeDetectResult("not-shipped")
+    if inp.tasks_total <= 0 and not inp.had_ledger_pr:
+        return MergeDetectResult("not-shipped")
+    branch = inp.default_branch or "default"
+    return MergeDetectResult(
+        "tier-b",
+        MergedVia(branch=branch, sha=inp.tip_sha),
+    )
+
+
+def append_merged_via(ws_dir: Path, slug: str, rec: MergedVia) -> bool:
+    """Append merged-via when absent for this sha; return True if written."""
+    udir = ws_dir / "units" / slug
+    log_path = udir / "log.md"
+    existing = parse_log(_read(log_path))
+    prior_u = Unit(slug=slug, log=existing)
+    prior = merged_via_record(prior_u)
+    if prior and prior.sha == rec.sha:
+        return False
+    _append_log_line(log_path, "merged-via", format_merged_via_payload(rec))
+    return True
+
+
+@dataclass
 class Need:
     nid: str            # N<n> for explicit needs, "base" for the implicit one
     target: str         # raw target text (slug / unit-id / F-id / WF-id)
@@ -91,7 +182,7 @@ class Unit:
     def code_complete(self) -> bool:
         # SPEC: >=1 task and every task checked. Zero tasks is NOT
         # code-complete. merged implies code-complete.
-        if self.pr and self.pr.state == "MERGED":
+        if is_merged(self):
             return True
         return self.tasks_total > 0 and self.tasks_done == self.tasks_total
 
@@ -322,28 +413,44 @@ def _append_log_line(log_path: Path, kind: str, payload: str) -> None:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     line = f"- {ts}  {kind}  {payload}\n"
     if log_path.exists():
-        log_path.write_text(
-            log_path.read_text(encoding="utf-8") + line, encoding="utf-8")
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(line)
     else:
         log_path.write_text(f"# log\n{line}", encoding="utf-8")
 
 
+def _reconcile_source_label(pr: Optional[PR],
+                            merged_via: Optional[MergedVia]) -> str:
+    if merged_via is not None:
+        return f"merged-via {format_merged_via_payload(merged_via)}"
+    if pr and pr.number is not None:
+        return f"merged PR #{pr.number}"
+    return "merged"
+
+
 def maybe_reconcile_merged_unit(ws_dir: Path, slug: str,
-                                pr: Optional[PR]) -> bool:
-    """When the unit PR is merged, check any open task boxes."""
-    if not pr or pr.state != "MERGED":
-        return False
+                                pr: Optional[PR], *,
+                                merged_via: Optional[MergedVia] = None
+                                ) -> List[str]:
+    """Check open task boxes when terminal-merged; return reconciled ids."""
     udir = ws_dir / "units" / slug
+    log_path = udir / "log.md"
+    if merged_via is None:
+        u = Unit(slug=slug, log=parse_log(_read(log_path)))
+        merged_via = merged_via_record(u)
+    if merged_via is None and not (pr and pr.state == "MERGED"):
+        return []
     prog_path = udir / "progress.md"
     raw = _read(prog_path)
     new_text, ids = reconcile_tasks_on_merge(raw)
     if not ids:
-        return False
+        return []
     prog_path.write_text(new_text, encoding="utf-8")
     _append_log_line(
-        udir / "log.md", "decision",
-        f"reconciled tasks from merged PR #{pr.number}: {', '.join(ids)}")
-    return True
+        log_path, "decision",
+        f"reconciled tasks from {_reconcile_source_label(pr, merged_via)}: "
+        f"{', '.join(ids)}")
+    return ids
 
 
 def _append_log_lines(log_path: Path,
@@ -704,7 +811,7 @@ def derive_status(ws: Workstream) -> None:
 def _status_for(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> str:
     if u.dropped:
         return "dropped"
-    if u.pr and u.pr.state == "MERGED":
+    if is_merged(u):
         return "merged"
     if unit_needs(u, ws) and _has_unmet_need(u, ws, by_slug):
         return "blocked"
@@ -804,7 +911,7 @@ def resume_phase(u: Unit, ws: Workstream,
     flavor may derive tasks without either; those units skip straight
     to ``loop``.
     """
-    if u.dropped or (u.pr and u.pr.state == "MERGED"):
+    if u.dropped or is_merged(u):
         return "done"
     if _has_unmet_need(u, ws, by_slug):
         return "blocked"
@@ -872,6 +979,9 @@ def focus_line_for(ws: Workstream) -> str:
 
 
 def _pr_seg(u: Unit) -> str:
+    mv = merged_via_record(u)
+    if mv and mv.pr:
+        return f" · #{mv.pr} via {mv.branch}"
     return f" · #{u.pr.number}" if u.pr and u.pr.number else ""
 
 
@@ -1213,7 +1323,7 @@ def _pick_successors(slug: str, units: List[Unit],
         return []
     live = [s for s in all_s
             if not by[s].dropped
-            and not (by[s].pr and by[s].pr.state == "MERGED")]
+            and not is_merged(by[s])]
     return live if live else [all_s[-1]]
 
 
