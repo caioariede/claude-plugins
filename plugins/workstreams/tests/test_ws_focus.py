@@ -10,23 +10,21 @@ import ws_store as S  # noqa: E402
 
 
 class ParseFocus(unittest.TestCase):
-    def test_active_queued_done(self):
+    def test_active_queued_done_preserves_file_order(self):
         md = """## Focus
-- [>] mvp-demo  — I can log in and see the dashboard shell
 - [ ] polish-auth  — OAuth errors surface in the UI
+- [>] mvp-demo  — I can log in and see the dashboard shell
 - [x] spike-layout  — Confirmed sidebar works
 """
-        active, queued, done = S.parse_focus(md)
-        self.assertEqual(active.slug, "mvp-demo")
-        self.assertEqual(active.outcome, "I can log in and see the dashboard shell")
-        self.assertEqual(active.state, "active")
-        self.assertEqual([f.slug for f in queued], ["polish-auth"])
+        open_items, done = S.parse_focus(md)
+        self.assertEqual([f.slug for f in open_items], ["polish-auth", "mvp-demo"])
+        self.assertEqual(open_items[1].state, "active")
+        self.assertEqual(open_items[0].state, "queued")
         self.assertEqual([f.slug for f in done], ["spike-layout"])
 
     def test_missing_file_is_empty(self):
-        active, queued, done = S.parse_focus("")
-        self.assertIsNone(active)
-        self.assertEqual(queued, [])
+        open_items, done = S.parse_focus("")
+        self.assertEqual(open_items, [])
         self.assertEqual(done, [])
 
     def test_make_slug(self):
@@ -51,12 +49,25 @@ class ParseFocus(unittest.TestCase):
         self.assertEqual(S.make_slug("!!!"), "focus")
 
     def test_parse_focus_caps_done_history(self):
-        lines = ["## Focus"]
+        lines = ["## Focus", "- [ ] only-open  — still here"]
         for i in range(5):
             lines.append(f"- [x] d{i}  — out {i}")
-        active, queued, done = S.parse_focus("\n".join(lines) + "\n")
-        self.assertIsNone(active)
+        open_items, done = S.parse_focus("\n".join(lines) + "\n")
+        self.assertEqual([f.slug for f in open_items], ["only-open"])
         self.assertEqual([f.slug for f in done], ["d2", "d3", "d4"])
+
+    def test_render_preserves_open_order(self):
+        open_items = [
+            S.FocusItem("a", "Focus A", "queued"),
+            S.FocusItem("b", "Focus B", "active"),
+            S.FocusItem("c", "Focus C", "queued"),
+        ]
+        text = S.render_focus(open_items, [])
+        lines = [ln for ln in text.splitlines() if ln.startswith("- [")]
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[0], "- [ ] a  — Focus A")
+        self.assertEqual(lines[1], "- [>] b  — Focus B")
+        self.assertEqual(lines[2], "- [ ] c  — Focus C")
 
 
 class PlannedDemoted(unittest.TestCase):
@@ -135,7 +146,7 @@ class FocusScript(unittest.TestCase):
         import focus as F
         return importlib.reload(F)
 
-    def test_add_promotes_when_no_active(self):
+    def test_add_never_auto_activates(self):
         from test_ws_board import write_ws
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
@@ -145,8 +156,8 @@ class FocusScript(unittest.TestCase):
             F.cmd_add(store, "2026-01-01-demo",
                       "I can log in and see the dashboard shell")
             text = (store / "2026-01-01-demo" / "focus.md").read_text()
-            self.assertIn("- [>] log-see-dashboard-shell", text)
-            self.assertNotIn("- [ ]", text)
+            self.assertIn("- [ ] log-see-dashboard-shell", text)
+            self.assertNotIn("- [>]", text)
             del os.environ["WS_STORE"]
 
     def test_add_queues_when_active(self):
@@ -165,7 +176,24 @@ class FocusScript(unittest.TestCase):
                           text)
             del os.environ["WS_STORE"]
 
-    def test_activate_flips_marks(self):
+    def test_activate_flips_marks_in_place(self):
+        from test_ws_board import write_ws
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            os.environ["WS_STORE"] = str(store)
+            F = self._import_focus()
+            write_ws(store, "2026-01-01-demo",
+                     focus_md=("## Focus\n"
+                               "- [>] mvp  — see shell\n"
+                               "- [ ] polish  — OAuth errors\n"))
+            F.cmd_activate(store, "2026-01-01-demo", "2")
+            text = (store / "2026-01-01-demo" / "focus.md").read_text()
+            lines = [ln for ln in text.splitlines() if ln.startswith("- [")]
+            self.assertEqual(lines[0], "- [ ] mvp  — see shell")
+            self.assertEqual(lines[1], "- [>] polish  — OAuth errors")
+            del os.environ["WS_STORE"]
+
+    def test_activate_by_slug_in_place(self):
         from test_ws_board import write_ws
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
@@ -177,9 +205,9 @@ class FocusScript(unittest.TestCase):
                                "- [ ] polish  — OAuth errors\n"))
             F.cmd_activate(store, "2026-01-01-demo", "polish")
             text = (store / "2026-01-01-demo" / "focus.md").read_text()
-            self.assertIn("- [>] polish  — OAuth errors", text)
-            self.assertIn("- [ ] mvp  — see shell", text)
-            self.assertNotRegex(text, r"- \[>\].*mvp")
+            lines = [ln for ln in text.splitlines() if ln.startswith("- [")]
+            self.assertEqual(lines[0], "- [ ] mvp  — see shell")
+            self.assertEqual(lines[1], "- [>] polish  — OAuth errors")
             del os.environ["WS_STORE"]
 
     def test_done_active_without_slug(self):
@@ -196,7 +224,7 @@ class FocusScript(unittest.TestCase):
             self.assertNotIn("- [>]", text)
             del os.environ["WS_STORE"]
 
-    def test_done_by_slug(self):
+    def test_done_by_number(self):
         from test_ws_board import write_ws
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
@@ -206,7 +234,7 @@ class FocusScript(unittest.TestCase):
                      focus_md=("## Focus\n"
                                "- [>] mvp  — see shell\n"
                                "- [ ] polish  — OAuth errors\n"))
-            F.cmd_done(store, "2026-01-01-demo", "polish")
+            F.cmd_done(store, "2026-01-01-demo", "2")
             text = (store / "2026-01-01-demo" / "focus.md").read_text()
             self.assertIn("- [>] mvp  — see shell", text)
             self.assertIn("- [x] polish  — OAuth errors", text)
@@ -214,7 +242,7 @@ class FocusScript(unittest.TestCase):
 
     def test_render_keeps_last_three_done(self):
         done = [S.FocusItem(f"d{i}", f"out {i}", "done") for i in range(5)]
-        text = S.render_focus(None, [], done)
+        text = S.render_focus([], done)
         self.assertIn("d2", text)
         self.assertIn("d4", text)
         self.assertNotIn("d0", text)
@@ -234,16 +262,22 @@ class FocusScript(unittest.TestCase):
             self.assertIn("DUPLICATE_SLUG", str(ctx.exception))
             del os.environ["WS_STORE"]
 
-    def test_show_renders_focus(self):
+    def test_list_numbers_open_items(self):
         from test_ws_board import write_ws
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
             F = self._import_focus()
             write_ws(store, "2026-01-01-demo",
-                     focus_md="## Focus\n- [>] mvp  — see shell\n")
-            out = F.cmd_show(store, "2026-01-01-demo")
-            self.assertIn("## Focus", out)
-            self.assertIn("- [>] mvp  — see shell", out)
+                     focus_md=("## Focus\n"
+                               "- [ ] first  — First\n"
+                               "- [>] mvp  — see shell\n"
+                               "- [x] old  — done item\n"))
+            out = F.cmd_list(store, "2026-01-01-demo")
+            self.assertIn("1. [ ] first  — First", out)
+            self.assertIn("2. [>] mvp  — see shell", out)
+            self.assertIn("Done", out)
+            self.assertIn("- [x] old  — done item", out)
+            self.assertNotIn("3.", out)
 
     def test_at_most_one_active_after_writes(self):
         from test_ws_board import write_ws
@@ -254,13 +288,13 @@ class FocusScript(unittest.TestCase):
             write_ws(store, "2026-01-01-demo", focus_md="## Focus\n")
             F.cmd_add(store, "2026-01-01-demo", "first outcome")
             F.cmd_add(store, "2026-01-01-demo", "second outcome")
-            F.cmd_activate(store, "2026-01-01-demo",
-                           "second-outcome")
-            active, queued, done = S.parse_focus(
+            F.cmd_activate(store, "2026-01-01-demo", "2")
+            open_items, done = S.parse_focus(
                 (store / "2026-01-01-demo" / "focus.md").read_text())
+            active = next((f for f in open_items if f.state == "active"), None)
             self.assertIsNotNone(active)
             self.assertEqual(active.slug, "second-outcome")
-            self.assertEqual(sum(1 for f in queued if f.state == "active"), 0)
+            self.assertEqual(sum(1 for f in open_items if f.state == "active"), 1)
             del os.environ["WS_STORE"]
 
     def test_add_cli_sole_workstream_quoted_outcome(self):
@@ -273,7 +307,43 @@ class FocusScript(unittest.TestCase):
             rc = F.main(["add", "ship oauth flow"])
             self.assertEqual(rc, 0)
             text = (store / "2026-01-01-demo" / "focus.md").read_text()
-            self.assertIn("- [>] ship-oauth-flow  — ship oauth flow", text)
+            self.assertIn("- [ ] ship-oauth-flow  — ship oauth flow", text)
+            del os.environ["WS_STORE"]
+
+    def test_move_reorders_open_list(self):
+        from test_ws_board import write_ws
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            os.environ["WS_STORE"] = str(store)
+            F = self._import_focus()
+            write_ws(store, "2026-01-01-demo",
+                     focus_md=("## Focus\n"
+                               "- [ ] focus-a  — Focus A\n"
+                               "- [ ] focus-b  — Focus B\n"
+                               "- [ ] focus-c  — Focus C\n"))
+            F.cmd_move(store, "2026-01-01-demo", 2, 1)
+            open_items, _ = S.parse_focus(
+                (store / "2026-01-01-demo" / "focus.md").read_text())
+            self.assertEqual([f.slug for f in open_items],
+                             ["focus-b", "focus-a", "focus-c"])
+            F.cmd_move(store, "2026-01-01-demo", 3, 2)
+            open_items, _ = S.parse_focus(
+                (store / "2026-01-01-demo" / "focus.md").read_text())
+            self.assertEqual([f.slug for f in open_items],
+                             ["focus-b", "focus-c", "focus-a"])
+            del os.environ["WS_STORE"]
+
+    def test_move_out_of_range(self):
+        from test_ws_board import write_ws
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            os.environ["WS_STORE"] = str(store)
+            F = self._import_focus()
+            write_ws(store, "2026-01-01-demo",
+                     focus_md="## Focus\n- [ ] only  — One\n")
+            with self.assertRaises(F.Fail) as ctx:
+                F.cmd_move(store, "2026-01-01-demo", 9, 1)
+            self.assertIn("OUT_OF_RANGE", str(ctx.exception))
             del os.environ["WS_STORE"]
 
 

@@ -6,9 +6,9 @@ description: >-
   "set focus", "what are we aiming for", "capture the outcome", "switch
   focus", "done with this focus". NOT for unit tasks (ws-resume / T<n>),
   backlog capture (ws-backlog), or routing which unit moves (ws-next).
-argument-hint: 'show | add "<outcome>" | activate <slug> | done [slug] [--ws <ws-id>]'
+argument-hint: 'list | add "<outcome>" | activate <n|slug> | done [n|slug] | move <from> <to> [--ws <ws-id>]'
 metadata:
-  version: "0.1.2"
+  version: "0.2.0"
   author: Caio Ariede
 compatibility: requires python3 on PATH
 ---
@@ -17,43 +17,45 @@ compatibility: requires python3 on PATH
 
 **Required first:** load the `ws` skill — the shared contract (SPEC) this skill references throughout.
 
-`ws-focus` maintains `<store>/<ws-id>/focus.md` — a **manual** queue of user-visible outcomes that steer `ws-next`'s `suggest` proposals. One line is **active** (`[>]`) at a time; the rest are queued (`[ ]`) or recently done (`[x]`, last three kept). Nothing auto-advances — the user activates the next outcome explicitly. Workstream-scoped, store-only, runs from any session (SPEC "Command scope").
+`ws-focus` maintains `<store>/<ws-id>/focus.md` — a **manual** queue of user-visible outcomes that steer `ws-next`'s `suggest` proposals. Open focuses preserve insertion order; one line is **active** (`[>]`) at a time; recently done lines (`[x]`, last three kept) trail the open list. Nothing auto-advances — the user activates explicitly. Workstream-scoped, store-only, runs from any session (SPEC "Command scope").
 
 **Input:** a subcommand plus optional `[ws-id]` (bare slug works):
-- `show` — print the focus queue.
-- `add "<outcome>"` — append; promotes to `[>]` when no active line exists.
-- `activate <slug>` — flip marks: target becomes active, prior active returns to queued.
-- `done [slug]` — mark done; omit slug to complete the active line.
+- `list` — numbered view of open focuses; active marked; done tail below.
+- `add "<outcome>"` — append as `[ ]` at end; never auto-activates.
+- `activate <n|slug>` — flip marks in place; number from `list`.
+- `done [n|slug]` — mark done; omit to complete the active line.
+- `move <from> <to>` — reorder open list (1-based positions from `list`).
 
 ## Run it
 
 Bundled at `scripts/focus.py` relative to this skill's directory (`${CLAUDE_PLUGIN_ROOT}/skills/ws-focus/scripts/focus.py` when set):
 
 ```
-python3 <this-skill-dir>/scripts/focus.py show [ws-id]
+python3 <this-skill-dir>/scripts/focus.py list [ws-id]
 python3 <this-skill-dir>/scripts/focus.py add [ws-id] "<outcome>"
-python3 <this-skill-dir>/scripts/focus.py activate [ws-id] <slug>
-python3 <this-skill-dir>/scripts/focus.py done [ws-id] [slug]
+python3 <this-skill-dir>/scripts/focus.py activate [ws-id] <n|slug>
+python3 <this-skill-dir>/scripts/focus.py done [ws-id] [n|slug]
+python3 <this-skill-dir>/scripts/focus.py move [ws-id] <from> <to>
 ```
 
-Pass `$ARGUMENTS` through. Relay `show` stdout as bare markdown. Write subcommands print nothing on success.
+Pass `$ARGUMENTS` through. Relay `list` stdout as bare markdown. Write subcommands print nothing on success.
 
 ## File shape
 
-`focus.md` holds one section:
+`focus.md` holds one section; **line order is authoritative**:
 
 ```
 ## Focus
-- [>] <slug>  — <outcome>
 - [ ] <slug>  — <outcome>
+- [>] <slug>  — <outcome>
 - [x] <slug>  — <outcome>
 ```
 
-`<slug>` = `slug(<outcome>)` per SPEC ids. The em-dash separator matches other store files.
+`<slug>` = `slug(<outcome>)` per SPEC ids. The em-dash separator matches other store files. Active is not hoisted to the top on write.
 
 ## Exit 2 — you pick
 
-Same tokens as ws-board: `MANY_WORKSTREAMS` (no cwd-branch match), `AMBIGUOUS`, `NO_MATCH`, `NO_STORE`. Focus-specific: `NO_ACTIVE` (done with no active line), `DUPLICATE_SLUG`, `BAD_ARGS`. Zero-arg workstream locate matches ws-board (SPEC Command scope).
+Same tokens as ws-board: `MANY_WORKSTREAMS` (no cwd-branch match), `AMBIGUOUS`, `NO_MATCH`, `NO_STORE`. Focus-specific: `NO_ACTIVE` (done with no active line), `DUPLICATE_SLUG`, `OUT_OF_RANGE` (bad number for activate, done, or move), `BAD_ARGS`. Zero-arg workstream locate matches ws-board (SPEC Command scope).
 
 ## Scope
 
@@ -61,6 +63,6 @@ Workstream-scoped — writes only `focus.md` in the store, never a worktree.
 
 ## Chain
 
-When chained from `ws-init` on an empty queue, prompt for the first outcome (may suggest wording from `workstream.goal`; do not auto-write), then run `add`.
+When chained from `ws-init` on an empty queue, prompt for the first outcome (may suggest wording from `workstream.goal`; do not auto-write), run `add`, then suggest `activate`.
 
-Fire `hook-ws-focus-after` (SPEC §Flavor hooks). No active flavor defines it → default chaining (§Next-step chaining): after a **write** (`add`, `activate`, `done`) → offer **`ws-next`** (focus changed what `suggest` proposes); after **`show`** → offer **`ws-board`** to see unit status alongside the outcome queue. Name the workstream so a parallel-session user knows which.
+Fire `hook-ws-focus-after` (SPEC §Flavor hooks). No active flavor defines it → default chaining (§Next-step chaining): after **`add`** → suggest **`activate`** (not `ws-next` until something is active); after **`activate`** → offer **`ws-next`**; after **`done`** with open items remaining → list numbered **`activate`** choices; after **`list`** → offer **`ws-board`**. Name the workstream so a parallel-session user knows which.

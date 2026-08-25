@@ -589,13 +589,14 @@ Routes the item to its one correct home so nothing orphans: a unit's <code>progr
 </div>
 
 <div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-focus</span><span class="cmd-sig">show | add "&lt;outcome&gt;" | activate &lt;slug&gt; | done [slug] [ws-id]</span></div>
+<div class="cmd-head"><span class="cmd-name">ws-focus</span><span class="cmd-sig">list | add "&lt;outcome&gt;" | activate &lt;n|slug&gt; | done [n|slug] | move &lt;from&gt; &lt;to&gt; [ws-id]</span></div>
 <p class="cmd-when"><b>Use when</b> you want to name what the workstream is aiming for next — a demo milestone, a user-visible outcome, or a north-star slice — and steer what <code>ws-next</code> proposes.</p>
 <div class="cmd-body">
-Maintains <code>focus.md</code> — a manual outcome queue, separate from units and backlog. One line is <b>active</b> (<code>[&gt;]</code>) at a time; the rest are queued (<code>[ ]</code>) or recently done (<code>[x]</code>, last three kept). Nothing auto-advances — you activate the next outcome explicitly. <code>add</code> appends and promotes to active when none is set; <code>activate</code> switches which outcome is active; <code>done</code> marks one complete. Workstream-scoped, store-only.
+Maintains <code>focus.md</code> — a manual outcome queue, separate from units and backlog. Open focuses keep insertion order; one line is <b>active</b> (<code>[&gt;]</code>) at a time; the rest are queued (<code>[ ]</code>) or recently done (<code>[x]</code>, last three kept). Nothing auto-advances — you activate explicitly. <code>add</code> appends as queued; <code>list</code> shows numbered open items; <code>activate</code> switches which outcome is active (by number or slug); <code>done</code> marks one complete; <code>move</code> reorders the open list. Workstream-scoped, store-only.
 </div>
 <pre class="cmd-ex">$ /ws-focus add "user can see a live board"
-$ /ws-focus show
+$ /ws-focus list
+$ /ws-focus activate 1
 $ /ws-focus done</pre>
 </div>
 
@@ -650,7 +651,7 @@ $ /ws-config set worktree-management wmx</pre>
 </tbody>
 </table>
 
-<p><b>Focus</b> is steering, not execution. One outcome is active (<code>[&gt;]</code>) at a time; others queue (<code>[ ]</code>) or sit in recent history (<code>[x]</code>, last three kept). When set, <code>ws-next</code> prefers design-sourced candidates that advance the active focus over non-blocking follow-ups, and <code>ws-board</code> prints a <code>Focus:</code> line above the status table. Nothing promotes or completes a focus line on its own — use <code>ws-focus activate</code> and <code>ws-focus done</code>.</p>
+<p><b>Focus</b> is steering, not execution. One outcome is active (<code>[&gt;]</code>) at a time; others queue (<code>[ ]</code>) in insertion order or sit in recent history (<code>[x]</code>, last three kept). When set, <code>ws-next</code> prefers design-sourced candidates that advance the active focus over non-blocking follow-ups, and <code>ws-board</code> prints a <code>Focus:</code> line above the status table. Nothing promotes or completes a focus line on its own — use <code>ws-focus activate</code> and <code>ws-focus done</code>.</p>
 
 <p><b>Planned units</b> are not a roadmap queue. They record stack and dependency fields so a later <code>ws-start</code> can pick them up with the right <code>base=</code> and <code>needs=</code>. A line disappears from "not started" once a ledger slug matches — no manual check-off.</p>
 

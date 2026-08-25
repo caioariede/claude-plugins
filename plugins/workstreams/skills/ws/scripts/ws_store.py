@@ -630,12 +630,10 @@ _FOCUS_STATE = {" ": "queued", ">": "active", "x": "done", "X": "done"}
 _FOCUS_MARK = {"active": ">", "queued": " ", "done": "x"}
 
 
-def parse_focus(text: str) -> Tuple[Optional[FocusItem], List[FocusItem],
-                                    List[FocusItem]]:
+def parse_focus(text: str) -> Tuple[List[FocusItem], List[FocusItem]]:
     headings = {"Focus": "focus"}
     section: Optional[str] = None
-    active: Optional[FocusItem] = None
-    queued: List[FocusItem] = []
+    open_items: List[FocusItem] = []
     done: List[FocusItem] = []
     for raw in text.splitlines():
         line = raw.strip()
@@ -655,13 +653,11 @@ def parse_focus(text: str) -> Tuple[Optional[FocusItem], List[FocusItem],
             slug = make_slug(outcome)
         item = FocusItem(slug=slug, outcome=outcome.strip(),
                          state=_FOCUS_STATE[mark])
-        if item.state == "active":
-            active = item
-        elif item.state == "done":
+        if item.state == "done":
             done.append(item)
         else:
-            queued.append(item)
-    return active, queued, done[-3:]
+            open_items.append(item)
+    return open_items, done[-3:]
 
 
 def focus_item_text(item: FocusItem) -> str:
@@ -673,12 +669,11 @@ def format_focus_line(item: FocusItem) -> str:
     return f"- [{mark}] {focus_item_text(item)}"
 
 
-def render_focus(active: Optional[FocusItem],
-                 queued: List[FocusItem],
+def render_focus(open_items: List[FocusItem],
                  done: List[FocusItem]) -> str:
     lines = ["## Focus"]
-    items = ([active] if active else []) + queued + done[-3:]
-    lines.extend(format_focus_line(item) for item in items)
+    lines.extend(format_focus_line(item) for item in open_items)
+    lines.extend(format_focus_line(item) for item in done[-3:])
     return "\n".join(lines) + "\n"
 
 
@@ -731,8 +726,10 @@ def load_workstream(ws_dir: Path) -> Workstream:
     ws = Workstream(ws_id=ws_id, name=name, design=design)
     ws.units = parse_units(_read(ws_dir / "units.md"))
     ws.planned, ws.wf_followups = parse_backlog(_read(ws_dir / "backlog.md"))
-    ws.active_focus, ws.focus_queued, _done = parse_focus(
-        _read(ws_dir / "focus.md"))
+    open_items, _done = parse_focus(_read(ws_dir / "focus.md"))
+    ws.active_focus = next((f for f in open_items if f.state == "active"),
+                           None)
+    ws.focus_queued = [f for f in open_items if f.state != "active"]
 
     for u in ws.units:
         udir = ws_dir / "units" / u.slug

@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.19.0"
+  version: "0.20.0"
   author: Caio Ariede
 ---
 
@@ -36,7 +36,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | tasks + in-flight follow-ups | unit `progress.md` | resolved before this unit's PR merges |
 | explicit needs (dependencies) | unit `progress.md` `## Needs` (+ base from ledger) | current set is mutable state; base is the implicit need (§Dependencies) |
 | deferred follow-ups + planned units | `backlog.md` | written via `ws-backlog`; outlive the unit (see Follow-up placement) |
-| focus queue + active outcome | `focus.md` | written via `ws-focus`; active = sole `[>]` line among non-done items |
+| focus queue + active outcome | `focus.md` | written via `ws-focus`; open items in insertion order; active = sole `[>]` line among non-done items |
 | is a follow-up claimed (being closed by a unit) | **derived** | a non-dropped ledger unit's `claims=` names it (§Follow-up units) |
 | decisions / notes / drop / restack history | `log.md` | append-only |
 
@@ -147,7 +147,7 @@ Planned units are **dependency reservations** — they record `base=`/`needs=` f
 - [ ] <slug>  — <outcome>
 - [x] <slug>  — <outcome>
 ```
-`[ ]` queued · `[>]` active (at most one among non-done lines) · `[x]` done (history, last three kept). `<slug>` = `slug(<outcome>)` per SPEC ids; text after ` — ` is opaque intent — no structured fields. Focus is steering, not execution — no ledger slug, no branch, no PR. **Workstream done** (above) is unchanged.
+`[ ]` queued · `[>]` active (at most one among non-done lines) · `[x]` done (history, last three kept). Line order under `## Focus` is authoritative — open items keep insertion order unless `ws-focus move` changes it; active is not hoisted on write. `<slug>` = `slug(<outcome>)` per SPEC ids; text after ` — ` is opaque intent — no structured fields. Focus is steering, not execution — no ledger slug, no branch, no PR. **Workstream done** (above) is unchanged.
 
 **Parse contract (machine-read).** `ws-board` and `ws-next` parse the store deterministically via `scripts/ws_store.py`, bundled with this skill, and `ws-config` drives the flavors INI through the same bundled engine (`scripts/ws_cli.py` plus its own `config.py`), so these formats are a machine contract — keep fields structured. Parsing is deliberately tolerant. In `backlog.md` only `## Planned units` and `## Follow-ups` are read, by exact heading; any other `##` section (e.g. a stray `## Not tracked here`) is ignored wholesale. In `focus.md` only `## Focus` is read, by exact heading; items use `- [ ]`/`- [>]`/`- [x]` with the same comment/blank-line tolerance as `backlog.md`. Within a read section an item is a single-line `- [ ]`/`- [x]` bullet; comments, single-`#` sub-headers, and blank lines are skipped, so humans keep them freely. A planned line keeps its structured fields (`base=`, `needs=`) **before** the ` — ` separator; everything after is opaque display text and never carries them. A follow-up's origin is the `(from <origin>, <ts>)` parenthetical, found by the `(from ` marker — the description itself may contain parens — and any resolution text trailing it (`→ done in X`) is ignored. In `log.md`, `dropped` is the line **kind** (the token after the timestamp), distinct from the word appearing inside a `decision`/`note` payload. A ledger line's `key=value` tokens are read by name and unknown keys are ignored, so a new field is additive. `workstream.md`'s `design:` is parsed (an em-dash placeholder reads as absent); `charter.md` is not — it is prose for `ws-resume`, never a machine input.
 
