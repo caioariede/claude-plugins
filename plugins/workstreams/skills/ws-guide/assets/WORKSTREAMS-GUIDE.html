@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.30.0 · August 2026</p>
+    <p class="version">Version 0.31.0 · August 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -462,15 +462,21 @@
     </ol>
   </nav>
 
-<section id="idea"><h2>The idea</h2><p class="lead">A workstream is one feature split into many small units of work, each living in its own throwaway git worktree.</p><p>When a feature is too big for a single branch, you break it into <b>units</b> — a slice, a follow-up, a stacked layer. Each unit gets an isolated git worktree and branch of its own, so units never step on each other and can be built, reviewed, and merged independently. The worktree is a pure code checkout: a scratch space you can create, abandon, and recreate at will.</p><p>The catch is that a checkout can vanish — dropped, garbage-collected, or replaced — so nothing you care about keeping can live inside it. Every durable datum — a unit's charter of intent, its progress and follow-ups, its history of decisions and restacks, and its identity map from unit to repo and branch — lives in a single <b>global store</b> under <code>~/.local/share/workstreams/</code>, one directory per workstream, shared across repos. Volatile facts that git and GitHub already own (current branch, base, PR number, status) are never copied in; they are derived live.</p><pre class="diagram">~/.local/share/workstreams/&lt;ws-id&gt;/
+<section id="idea"><h2>The idea</h2><p class="lead">A workstream is one feature split into many small units of work, each living in its own throwaway git worktree — plus optional <b>spikes</b> for store-only research when you need to investigate before you build.</p><p>When a feature is too big for a single branch, you break it into <b>units</b> — a slice, a follow-up, a stacked layer. Each unit gets an isolated git worktree and branch of its own, so units never step on each other and can be built, reviewed, and merged independently. The worktree is a pure code checkout: a scratch space you can create, abandon, and recreate at will.</p><p>Some phases don't fit that model — an audit, an exploration, resolving open questions before a unit starts. Those are <b>spikes</b>: durable store entries with tasks and artifacts, no worktree and no PR. They block units (and other spikes) via the same <code>needs=</code> graph, and they always end by amending the umbrella design spec.</p><p>The catch is that a checkout can vanish — dropped, garbage-collected, or replaced — so nothing you care about keeping can live inside it. Every durable datum — a unit's charter of intent, its progress and follow-ups, its history of decisions and restacks, and its identity map from unit to repo and branch — lives in a single <b>global store</b> under <code>~/.local/share/workstreams/</code>, one directory per workstream, shared across repos. Spike research lives there too (<code>spikes/</code>, <code>artifacts/</code>). Volatile facts that git and GitHub already own (current branch, base, PR number, status) are never copied in; they are derived live.</p><pre class="diagram">~/.local/share/workstreams/&lt;ws-id&gt;/
   workstream.md          # metadata only
   units.md               # append-only ledger (unit ↔ repo/branch identity map)
+  spikes.md              # append-only ledger (spike identity — no branch=)
   backlog.md             # planned units + deferred follow-ups
   focus.md               # outcome queue (steers ws-next proposals)
   units/&lt;unit-id&gt;/
     charter.md           # STATIC: why this unit exists — the north star
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
-    log.md               # APPEND-ONLY: created, dropped, restack, decision, note</pre><aside class="note note-rule"><b>Golden rule.</b> The worktree holds only code. Drop and recreate it freely — all progress, history, and identity survive in the store.</aside>
+    log.md               # APPEND-ONLY: created, dropped, restack, decision, note
+  spikes/&lt;slug&gt;/
+    charter.md           # STATIC: what to investigate
+    progress.md          # MUTABLE: Tasks + Needs only (no Follow-ups)
+    log.md               # APPEND-ONLY: created, dropped, decision, plan
+    artifacts/           # working drafts, spec-before snapshots</pre><aside class="note note-rule"><b>Golden rule.</b> The worktree holds only code. Drop and recreate it freely — all progress, history, and identity survive in the store.</aside>
 <div class="flow-wrap">
 <h3>The workflow at a glance</h3>
 <div class="flow">
@@ -490,7 +496,8 @@
     <span class="flow-arrow">↻</span>
   </span>
 </div>
-<p class="flow-aside"><code>ws-board</code> — glance at status anytime, from any session; read-only.</p>
+<p class="flow-aside"><code>ws-board</code> — glance at status anytime, from any session; read-only. Spikes appear inline with a <code>[spike]</code> tag on the same kanban columns.</p>
+<p class="flow-aside"><b>Research before build?</b> Run <code>ws-spike</code> when an audit or investigation must finish (and amend the design spec) before a unit starts — then <code>ws-block</code> the unit on the spike if needed.</p>
 <p class="flow-aside"><b>You never decide the whole split up front.</b> <code>ws-init</code> creates an empty container — it never reads the design to invent units. Start the next unit with <code>ws-start</code> whenever you know what it is, and when you don't, <code>ws-next</code> proposes one: it reads the design (and any accumulated follow-ups) once nothing else can move, and you pick. Recording a deliberate deviation from the design is <code>ws-backlog --plan</code>.</p>
 </div></section>
 <section id="installation">
@@ -534,7 +541,7 @@ $ /ws-config set spec-driven-development superpowers</pre>
 <div class="cmd-head"><span class="cmd-name">ws-init</span><span class="cmd-sig">&lt;workstream name&gt;</span></div>
 <p class="cmd-when"><b>Use when</b> you need a new workstream and none exists yet — before starting any unit with <code>ws-start</code>.</p>
 <div class="cmd-body">
-Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, the <code>units/</code> directory, an empty <code>backlog.md</code>, and an empty <code>focus.md</code>. Sets up the container only — it creates no unit, no planned unit, and no worktree, and it never reads <code>design:</code> to invent a unit breakdown. The expected next step is <code>ws-focus</code> to name what you're aiming for; later, <code>ws-next</code> consults focus, the design, and follow-ups when routing.
+Computes the <code>ws-id</code> (<code>&lt;YYYY-MM-DD&gt;-&lt;slug&gt;</code>) and creates the store container: <code>workstream.md</code> metadata, an empty append-only <code>units.md</code> ledger, the <code>units/</code> directory, empty <code>spikes.md</code> and <code>spikes/</code>, an empty <code>backlog.md</code>, and an empty <code>focus.md</code>. Sets up the container only — it creates no unit, no spike, no planned unit, and no worktree, and it never reads <code>design:</code> to invent a unit breakdown. The expected next step is <code>ws-focus</code> to name what you're aiming for; later, <code>ws-next</code> consults focus, the design, and follow-ups when routing.
 </div>
 <pre class="cmd-ex">$ /ws-init task templates</pre>
 </div>
@@ -549,32 +556,42 @@ Mints <code>unit-id = &lt;ws-id&gt;:&lt;slug&gt;</code>, resolves the repo (<cod
 </div>
 
 <div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id]</span></div>
-<p class="cmd-when"><b>Use when</b> resuming or continuing an existing unit, or picking work back up from inside its worktree.</p>
+<div class="cmd-head"><span class="cmd-name">ws-spike</span><span class="cmd-sig">&lt;ws-id&gt; "&lt;what to investigate&gt;" [--slug &lt;slug&gt;] [--spawned-from &lt;unit-id&gt;] [--needs &lt;target&gt;]</span></div>
+<p class="cmd-when"><b>Use when</b> starting research or an audit inside a workstream before building a unit — store-only, no worktree or PR. Requires <code>design:</code> on the workstream.</p>
 <div class="cmd-body">
-With no argument, infers the unit from the current worktree's branch. Ensures the worktree exists (reopening or recreating it if gone), reconciles the base against the recorded one and realigns on drift, then reads <code>charter.md</code> to reconstruct the unit's intent and loads <code>progress.md</code> and <code>log.md</code> to continue at the first unchecked task. After execute tasks, loops in the same session until code-complete, pauses before opening or marking ready a PR, then routes via <code>ws-next</code>.
+Creates a spike sibling to units: appends <code>spikes.md</code>, seeds <code>spikes/&lt;slug&gt;/</code> (<code>charter.md</code>, <code>progress.md</code>, <code>log.md</code>, <code>artifacts/</code>), and optionally seeds <code>## Needs</code> from <code>--needs</code>. Refuses slug collisions with units, spikes, or planned backlog lines — promotion to a build unit later uses a <em>distinct</em> slug via <code>ws-start</code>. No branch, no forge state. Expected next step: <code>ws-resume &lt;spike-id&gt;</code> (explicit id required — zero-arg resume cannot reach a spike).
 </div>
-<pre class="cmd-ex">$ /ws-resume add-is-template-flag</pre>
+<pre class="cmd-ex">$ /ws-spike 2026-07-03-task-templates "audit auth flows before implement-auth" --needs perf-baseline</pre>
 </div>
 
 <div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-board</span><span class="cmd-sig">[ws-id] [unit-id]</span></div>
+<div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id|spike-id]</span></div>
+<p class="cmd-when"><b>Use when</b> resuming or continuing an existing unit or spike, or picking work back up from inside its worktree (units only).</p>
+<div class="cmd-body">
+Dispatches by kind after resolving the bare slug against both ledgers. <b>Units:</b> with no argument, infers from the current worktree's branch; ensures the worktree exists, reconciles base drift, then plans/executes/ships via flavor ops. <b>Spikes:</b> always need an explicit id; store-scoped research loop — no worktree, no ship phase — plan tasks, work in <code>artifacts/</code>, amend the umbrella design spec on the final task, then route via <code>ws-next</code> when spike-complete.
+</div>
+<pre class="cmd-ex">$ /ws-resume add-is-template-flag
+$ /ws-resume audit-auth-flows</pre>
+</div>
+
+<div class="cmd">
+<div class="cmd-head"><span class="cmd-name">ws-board</span><span class="cmd-sig">[ws-id] [unit-id|spike-id]</span></div>
 <p class="cmd-when"><b>Use when</b> you want to see or share where a workstream stands — "show the board", "what's done", "workstream status".</p>
 <div class="cmd-body">
-Reads the ledger, derives each unit's status and task counts, and renders copy-paste-ready markdown grouped by state (Done, In progress, Blocked, Not started, Dropped) with open follow-ups listed across units. When an outcome is active in <code>focus.md</code>, a <code>Focus:</code> line appears above the table. Given a <code>unit-id</code>, prints that unit's full checklist and recent notes.
+Reads both ledgers, derives each unit's and spike's status and task counts, and renders copy-paste-ready markdown grouped by state (Done, In progress, Blocked, Not started, Dropped) with open follow-ups listed across units. Spikes share the same kanban columns with an inline <code>[spike]</code> tag; the header reads <code>items done</code> when spikes exist. When an outcome is active in <code>focus.md</code>, a <code>Focus:</code> line appears above the table. Given a bare slug, prints that unit's or spike's full checklist and recent notes.
 </div>
 <pre class="cmd-ex">$ /ws-board 2026-07-03-task-templates</pre>
 </div>
 
 <aside class="note note-tip"><b>Tip.</b> <code>ws-board</code> is strictly read-only — it derives everything and reconciles nothing. Reach for it freely to snapshot progress without touching git or GitHub.</aside>
 
-<aside class="note note-tip"><b>Blocked units.</b> A unit is <code>blocked</code> whenever it has an unmet need — its base or a dependency added with <code>ws-block</code> — and shows in the board's ⛔ Blocked column until that need clears.</aside>
+<aside class="note note-tip"><b>Blocked units and spikes.</b> A unit or spike is <code>blocked</code> whenever it has an unmet need — its base (units only), a spike, another unit, or a dependency added with <code>ws-block</code> — and shows in the board's ⛔ Blocked column until that need clears. Spike needs are satisfied at spike-complete (all tasks checked).</aside>
 
 <div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-block</span><span class="cmd-sig">&lt;unit&gt; needs &lt;target&gt; ["note"] | &lt;unit&gt; clear N&lt;n&gt;</span></div>
-<p class="cmd-when"><b>Use when</b> a unit must wait on another before it can proceed — record, view, or remove a dependency: "B needs A", "B is blocked by A".</p>
+<div class="cmd-head"><span class="cmd-name">ws-block</span><span class="cmd-sig">&lt;unit|spike&gt; needs &lt;target&gt; ["note"] | &lt;unit|spike&gt; clear N&lt;n&gt;</span></div>
+<p class="cmd-when"><b>Use when</b> a unit or spike must wait on another before it can proceed — record, view, or remove a dependency: "B needs A", "B is blocked by A".</p>
 <div class="cmd-body">
-Adds or removes a unit's <b>needs</b> in its <code>progress.md</code> <code>## Needs</code> section. A <code>&lt;target&gt;</code> is a unit or a follow-up (<code>&lt;unit-id&gt;:F&lt;n&gt;</code> / <code>WF&lt;n&gt;</code>); it's satisfied once that unit is code-complete (every task checked) or that follow-up is checked. Any unmet need derives the <code>blocked</code> status and routes the unit into the board's ⛔ Blocked column. <code>clear N&lt;n&gt;</code> removes a need on a genuine scope change — it never marks one satisfied, since satisfaction is always derived.
+Adds or removes <b>needs</b> on the dependent's <code>progress.md</code> <code>## Needs</code> section (under <code>units/&lt;slug&gt;/</code> or <code>spikes/&lt;slug&gt;/</code>). A <code>&lt;target&gt;</code> is a unit, a spike, or a follow-up (<code>&lt;unit-id&gt;:F&lt;n&gt;</code> / <code>WF&lt;n&gt;</code>); units satisfy at code-complete, spikes at spike-complete, follow-ups when checked or claimed. Any unmet need derives <code>blocked</code>. <code>clear N&lt;n&gt;</code> removes a need on a genuine scope change — it never marks one satisfied, since satisfaction is always derived.
 </div>
 <pre class="cmd-ex">$ /ws-block add-is-template-flag needs schema-migration</pre>
 </div>
@@ -610,10 +627,10 @@ Resolves <code>&lt;new-base&gt;</code> (a branch, or another unit-id → that un
 </div>
 
 <div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-drop</span><span class="cmd-sig">&lt;unit-id&gt;</span></div>
-<p class="cmd-when"><b>Use when</b> you want to drop, tear down, abandon, or clean up a unit's worktree and branch.</p>
+<div class="cmd-head"><span class="cmd-name">ws-drop</span><span class="cmd-sig">&lt;unit-id|spike-id&gt;</span></div>
+<p class="cmd-when"><b>Use when</b> you want to abandon a unit's worktree and branch, or abandon a spike's research — not when work already shipped or the spike is complete.</p>
 <div class="cmd-body">
-Shows exactly what will be removed and requires explicit confirmation, then removes the worktree and window and deletes the <em>local</em> branch. Appends a <code>dropped</code> log line but keeps <code>progress.md</code> and the ledger line as the reconciliation record.
+<b>Units:</b> shows exactly what will be removed and requires explicit confirmation, then removes the worktree and deletes the <em>local</em> branch. Appends a <code>dropped</code> log line but keeps <code>progress.md</code> and the ledger line as the reconciliation record. <b>Spikes:</b> store-only — no worktree teardown; refuses drop when the spike is already complete (mirror merged-unit guard). Dropping never releases blocked dependents — they show <code>(dropped)</code> until re-pointed.
 </div>
 <pre class="cmd-ex">$ /ws-drop add-is-template-flag</pre>
 </div>
@@ -624,7 +641,7 @@ Shows exactly what will be removed and requires explicit confirmation, then remo
 <div class="cmd-head"><span class="cmd-name">ws-next</span><span class="cmd-sig">[ws-id]</span></div>
 <p class="cmd-when"><b>Use when</b> you're unsure which <code>ws-*</code> command or which unit to act on next — after finishing a unit, when a PR merges, or any "what now?" moment.</p>
 <div class="cmd-body">
-Reads the ledger and each unit's live status, then lists every unit you could act on right now — ranked, with one marked as the default — and what each needs. When nothing can move, it walks you through proposing the next unit: pick a lane (follow-ups, design spec, or active focus), then pick from up to three composed candidates. When in-flight work shares the screen with proposal material, each composable lane appears as its own <b>Propose from …</b> option in the unit picker — no second lane question. It decides, it doesn't do the work (<code>ws-resume</code> does). Read-only, like <code>ws-board</code>. The list carries no numbers: with more than one move it first asks which unit should move — "not now" leading — and only then where that work should run, a question an active flavor can take over with a <a href="#flavor-hooks">flavor hook</a> and its own choices. Nothing starts on its own.
+Reads both ledgers and each unit's and spike's live status, then lists every unit or spike you could act on right now — ranked, with one marked as the default — and what each needs. Spike moves use <code>ws-resume &lt;spike-id&gt;</code> with no <code>branch=</code> tail. When nothing can move, it walks you through proposing the next unit: pick a lane (follow-ups, design spec, or active focus), then pick from up to three composed candidates. Terminal spikes appear in <code>Covered:</code> so proposals skip colliding slugs. It decides, it doesn't do the work (<code>ws-resume</code> does). Read-only, like <code>ws-board</code>.
 </div>
 <pre class="cmd-ex">$ /ws-next 2026-07-03-task-templates</pre>
 </div>
@@ -738,17 +755,18 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <tr><th>Command</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty ledger + empty backlog + empty focus). Run before any unit exists. Creates no unit. Expected next: <code>ws-focus</code>.</td></tr>
+<tr><td><code>ws-init</code></td><td>Create a new workstream container (metadata + empty unit and spike ledgers + empty backlog + empty focus). Run before any unit or spike exists. Expected next: <code>ws-focus</code>.</td></tr>
 <tr><td><code>ws-oneshot</code></td><td>Single-unit entry: <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> in one user-confirmed chain. Offer when scope reads one PR; never auto-run.</td></tr>
-<tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit.</td></tr>
-<tr><td><code>ws-resume</code></td><td>Advance a unit at any stage: plan it, loop through execute tasks in-session, pause before ship/mark-ready, then route — reopening a gone worktree and reconciling base drift as needed.</td></tr>
-<tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Read-only — derives everything, writes nothing.</td></tr>
-<tr><td><code>ws-block</code></td><td>Add or remove a unit's needs (dependencies). An unmet need derives the <code>blocked</code> status.</td></tr>
+<tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit. Refuses spike-reserved slugs.</td></tr>
+<tr><td><code>ws-spike</code></td><td>Start store-only research: spike ledger line, <code>spikes/&lt;slug&gt;/</code>, no worktree. Requires <code>design:</code>. Ends by amending the umbrella spec. Chain: <code>ws-resume &lt;spike-id&gt;</code>.</td></tr>
+<tr><td><code>ws-resume</code></td><td>Advance a unit or spike at any stage: plan, execute loop, ship (units) or spec amend (spikes) — reopening a gone worktree and reconciling base drift as needed for units.</td></tr>
+<tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Units and spikes on one kanban; spikes tagged <code>[spike]</code>. Read-only.</td></tr>
+<tr><td><code>ws-block</code></td><td>Add or remove needs on a unit or spike. Targets may be units, spikes, or follow-ups. An unmet need derives <code>blocked</code>.</td></tr>
 <tr><td><code>ws-backlog</code></td><td>Capture future work — routes a follow-up (<code>F&lt;n&gt;</code>/<code>WF&lt;n&gt;</code>) or a planned unit (dependency reservation) to its right home so nothing orphans.</td></tr>
 <tr><td><code>ws-focus</code></td><td>Maintain the outcome queue in <code>focus.md</code> — set, switch, or complete what the workstream is aiming for; steers <code>ws-next</code> proposals.</td></tr>
-<tr><td><code>ws-next</code></td><td>List every unit that can move right now, ranked, then ask which unit moves and where it runs. When nothing can move — or alongside in-flight work (restack still blocks) — walk through proposing the next unit by lane (follow-ups, design, focus). Read-only — decides, doesn't do.</td></tr>
+<tr><td><code>ws-next</code></td><td>List every unit or spike that can move right now, ranked, then ask which one moves and where it runs (units only). When nothing can move — or alongside in-flight work — propose the next unit by lane. Read-only.</td></tr>
 <tr><td><code>ws-restack</code></td><td>Move a unit's branch onto a new base after the base PR merged or GitHub auto-retargeted.</td></tr>
-<tr><td><code>ws-drop</code></td><td>Tear down a unit's worktree and local branch; keep the reconciliation record. Releases any follow-ups the unit claimed, so they re-open on their own.</td></tr>
+<tr><td><code>ws-drop</code></td><td>Abandon a unit (worktree + local branch) or a spike (store log only). Refuses complete spikes and merged units. Keeps the reconciliation record.</td></tr>
 <tr><td><code>ws-config</code></td><td>View or switch flavors — the external tool backing each behavior group. Edits <code>flavors.ini</code> only, and reconciles the spec-watch script.</td></tr>
 </tbody>
 </table>
@@ -756,15 +774,22 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <pre class="diagram">~/.local/share/workstreams/&lt;ws-id&gt;/
 ├── workstream.md          # metadata only (id, name, goal, design)
 ├── units.md               # append-only ledger: unit ↔ repo/branch identity
+├── spikes.md              # append-only ledger: spike identity (no branch=)
 ├── backlog.md             # planned units + deferred follow-ups
 ├── focus.md               # outcome queue (steers ws-next)
-└── units/
-    └── &lt;unit-id&gt;/
-        ├── charter.md      # STATIC: why this unit exists (the north star)
-        ├── progress.md     # MUTABLE work-state: Tasks + Follow-ups checklists
-        └── log.md          # APPEND-ONLY: created · dropped · restack · decision · note</pre>
+├── units/
+│   └── &lt;unit-id&gt;/
+│       ├── charter.md      # STATIC: why this unit exists (the north star)
+│       ├── progress.md     # MUTABLE work-state: Tasks + Follow-ups checklists
+│       └── log.md          # APPEND-ONLY: created · dropped · restack · decision · note
+└── spikes/
+    └── &lt;slug&gt;/
+        ├── charter.md      # STATIC: what to investigate
+        ├── progress.md     # MUTABLE: Tasks + Needs only
+        ├── log.md          # APPEND-ONLY: created · dropped · decision · plan
+        └── artifacts/      # working drafts, spec-before snapshots</pre>
 
-<p><code>ws-id</code> = <code>&lt;YYYY-MM-DD&gt;-&lt;slug(name)&gt;</code> · <code>unit-id</code> = <code>&lt;ws-id&gt;:&lt;slug(what)&gt;</code> (bare <code>&lt;slug&gt;</code> shorthand; <code>-N</code> = restart) · <code>branch</code> = <code>&lt;slug&gt;</code>. The store is global, not per repo.</p>
+<p><code>ws-id</code> = <code>&lt;YYYY-MM-DD&gt;-&lt;slug(name)&gt;</code> · <code>unit-id</code> / <code>spike-id</code> = <code>&lt;ws-id&gt;:&lt;slug&gt;</code> (bare <code>&lt;slug&gt;</code> resolves against both ledgers; <code>-N</code> = restart) · <code>branch</code> = <code>&lt;slug&gt;</code> (units only). The store is global, not per repo.</p>
 
 <aside class="note note-rule">
 <b>Worktree = code only.</b> Never write store files into a worktree. Find a unit's worktree via its ledger branch; drop and recreate worktrees freely — progress survives in the store.
@@ -790,6 +815,14 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <table class="grid">
 <thead><tr><th>Question</th><th>Answer</th></tr></thead>
 <tbody>
+<tr>
+<td><b>Q:</b> When do I use a spike instead of a unit?</td>
+<td><b>A:</b> When the work is research or an audit that should amend the design spec but may never ship as a PR — audit before build, investigate an open question, resolve unknowns mid-flight. Run <code>/ws-spike</code>, then <code>/ws-resume &lt;spike-id&gt;</code>. When findings need product code, start a separate unit with a <em>new</em> slug via <code>ws-start</code>.</td>
+</tr>
+<tr>
+<td><b>Q:</b> Can I resume a spike with no argument?</td>
+<td><b>A:</b> No. Zero-arg <code>ws-resume</code> infers from the cwd branch and only scans unit ledgers. Spikes have no branch — always pass the spike id explicitly.</td>
+</tr>
 <tr>
 <td><b>Q:</b> I deleted the worktree — is my work lost?</td>
 <td><b>A:</b> No. Worktrees are disposable; all durable state lives in <code>~/.local/share/workstreams/&lt;ws-id&gt;/</code>. Run <code>/ws-resume &lt;unit-id&gt;</code>: if the branch still exists it reopens the worktree; if the branch is also gone it starts fresh off the repo default, using the store's <code>progress.md</code> as the restart baseline.</td>
