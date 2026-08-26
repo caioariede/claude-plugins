@@ -63,12 +63,22 @@ class DecideMergedViaTests(unittest.TestCase):
         r = S.decide_merged_via(inp(is_ancestor=False, tasks_total=2))
         self.assertEqual(r.outcome, "not-shipped")
 
-    def test_tier_b_requires_tasks_or_had_pr(self):
+    def test_not_shipped_without_tasks_or_pr(self):
         r = S.decide_merged_via(inp(
             tip_sha="old", default_tip_sha="new",
             is_ancestor=True, tasks_total=0, had_ledger_pr=False,
         ))
         self.assertEqual(r.outcome, "not-shipped")
+
+    def test_tier_a_rejected_for_fresh_unit_on_merged_base(self):
+        rec = S.MergedVia("complete-rls-machinery-gaps", "base-tip", 6037)
+        r = S.decide_merged_via(inp(
+            tip_sha="base-tip", default_tip_sha="main-head",
+            tier_a_match=rec, is_ancestor=True,
+            tasks_total=0, had_ledger_pr=False,
+        ))
+        self.assertEqual(r.outcome, "not-shipped")
+        self.assertIsNone(r.record)
 
 
 class DetectShippedElsewhereTests(unittest.TestCase):

@@ -119,11 +119,11 @@ def decide_merged_via(inp: MergeDetectInput) -> MergeDetectResult:
         return MergeDetectResult("already-merged")
     if inp.tip_sha == inp.default_tip_sha:
         return MergeDetectResult("not-shipped")
+    if inp.tasks_total <= 0 and not inp.had_ledger_pr:
+        return MergeDetectResult("not-shipped")
     if inp.tier_a_match is not None:
         return MergeDetectResult("tier-a", inp.tier_a_match)
     if not inp.is_ancestor:
-        return MergeDetectResult("not-shipped")
-    if inp.tasks_total <= 0 and not inp.had_ledger_pr:
         return MergeDetectResult("not-shipped")
     branch = inp.default_branch or "default"
     return MergeDetectResult(
