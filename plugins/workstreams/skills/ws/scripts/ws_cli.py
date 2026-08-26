@@ -13,6 +13,7 @@ import configparser
 import json
 import os
 import re
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass
@@ -22,6 +23,52 @@ from typing import Dict, List, Optional, Tuple
 import ws_store as S
 
 BUILTIN_FLAVORS = Path(__file__).resolve().parent.parent / "references" / "flavors.ini"
+
+# Placeholder values are interpolated into flavor shell lines; reject
+# metacharacters so a poisoned ledger cannot inject through _fill.
+_SAFE_BRANCH = re.compile(r"^[a-zA-Z0-9._/-]+$")
+_SAFE_REPO = re.compile(r"^[a-zA-Z0-9._/-]+$")
+_SAFE_REF = re.compile(r"^[a-zA-Z0-9._/-]+$")
+_SHELL_META = re.compile(r"[|;&<>$`\\]|&&|\|\|")
+
+
+def _validate_branch(branch: str) -> None:
+    if not branch or not _SAFE_BRANCH.fullmatch(branch):
+        raise ValueError(f"unsafe branch: {branch!r}")
+
+
+def _validate_repo(repo: str) -> None:
+    if not repo or not _SAFE_REPO.fullmatch(repo):
+        raise ValueError(f"unsafe repo: {repo!r}")
+
+
+def _validate_ref(ref: str) -> None:
+    if not ref or not _SAFE_REF.fullmatch(ref):
+        raise ValueError(f"unsafe ref: {ref!r}")
+
+
+def _run_argv(argv: List[str], timeout: int = 25) -> Optional[str]:
+    if not argv:
+        return None
+    try:
+        out = subprocess.run(argv, capture_output=True, text=True,
+                             timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if out.returncode != 0:
+        return None
+    return (out.stdout or "").strip() or None
+
+
+def _run_text_cmd(cmd: str, timeout: int = 25) -> Optional[str]:
+    """Run a single argv vector — no shell. Pipes/redirects are rejected."""
+    if _SHELL_META.search(cmd):
+        return None
+    try:
+        argv = shlex.split(cmd)
+    except ValueError:
+        return None
+    return _run_argv(argv, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -169,20 +216,23 @@ def overrides_path(store: Path) -> Optional[Path]:
 # PR state gathering — run the resolved pr-status per branch, in parallel
 # ---------------------------------------------------------------------------
 
-def _fill(template: str, branch: str, repo: str) -> str:
+def _fill(template: str, branch: str, repo: str) -> Optional[str]:
+    try:
+        if "<branch>" in template:
+            _validate_branch(branch)
+        if "<repo>" in template:
+            _validate_repo(repo)
+    except ValueError:
+        return None
     return template.replace("<branch>", branch).replace("<repo>", repo)
 
 
 def _run_pr_status(cmd: str) -> Optional[S.PR]:
-    try:
-        out = subprocess.run(cmd, shell=True, capture_output=True,
-                             text=True, timeout=25)
-    except subprocess.TimeoutExpired:
-        return None
-    if out.returncode != 0 or not out.stdout.strip():
+    raw = _run_text_cmd(cmd, timeout=25)
+    if not raw:
         return None  # no PR for this branch (or forge unreachable)
     try:
-        data = json.loads(out.stdout)
+        data = json.loads(raw)
     except json.JSONDecodeError:
         return None
     return S.PR(number=data.get("number"),
@@ -199,9 +249,9 @@ def gather_pr_state(ws: S.Workstream, store: Path,
         # A skill:id-style forge can't be driven from here; render without
         # PR state (every unit falls back to `building`).
         return result
-    jobs = {u.branch: _fill(template, u.branch, u.repo)
-            for u in ws.units
-            if u.branch and (branches is None or u.branch in branches)}
+    jobs = {u.branch: cmd for u in ws.units
+            if u.branch and (branches is None or u.branch in branches)
+            if (cmd := _fill(template, u.branch, u.repo))}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(_run_pr_status, cmd): br
                    for br, cmd in jobs.items()}
@@ -214,31 +264,25 @@ def gather_pr_state(ws: S.Workstream, store: Path,
 # Shipped-elsewhere detection (ws-resume reconcile)
 # ---------------------------------------------------------------------------
 
-def _run_shell(cmd: str, timeout: int = 25) -> Optional[str]:
-    try:
-        out = subprocess.run(cmd, shell=True, capture_output=True,
-                             text=True, timeout=timeout)
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return None
-    if out.returncode != 0:
-        return None
-    return (out.stdout or "").strip() or None
-
-
 def _run_forge_simple(store: Path, op: str, repo: str,
                       branch: str = "") -> Optional[str]:
     template = resolve_operation(store, "forge", op)
     if not template or ":" in template.split()[0]:
         return None
-    cmd = template.replace("<repo>", repo).replace("<branch>", branch)
-    return _run_shell(cmd)
+    cmd = _fill(template, branch, repo)
+    if cmd is None:
+        return None
+    return _run_text_cmd(cmd)
 
 
 def _resolve_tip_sha(unit: S.Unit, wt: Optional[Path]) -> Optional[str]:
     if unit.branch and unit.repo:
+        try:
+            _validate_branch(unit.branch)
+        except ValueError:
+            return None
         ref = f"refs/heads/{unit.branch}"
-        raw = _run_shell(
-            f"git ls-remote origin {ref}", timeout=15)
+        raw = _run_argv(["git", "ls-remote", "origin", ref], timeout=15)
         if raw:
             sha = raw.split()[0].strip()
             if sha:
@@ -279,8 +323,16 @@ def _is_ancestor(wt: Path, tip: str, target: str) -> bool:
 
 def _compare_commits(repo: str, base: str, tip: str) -> bool:
     """True when tip is reachable from base (tip is ancestor of base)."""
-    cmd = f"gh api repos/{repo}/compare/{base}...{tip} -q .status"
-    status = _run_shell(cmd, timeout=25)
+    try:
+        _validate_repo(repo)
+        _validate_ref(base)
+        _validate_ref(tip)
+    except ValueError:
+        return False
+    status = _run_argv(
+        ["gh", "api", f"repos/{repo}/compare/{base}...{tip}",
+         "-q", ".status"],
+        timeout=25)
     return status in ("behind", "identical")
 
 
@@ -290,9 +342,10 @@ def _scan_tier_a(store: Path, unit: S.Unit, tip: str,
     template = resolve_operation(store, "forge", "pr-list-merged")
     if not template:
         return None
-    cmd = (template.replace("<repo>", unit.repo)
-           .replace("<branch>", default_branch))
-    raw = _run_shell(cmd, timeout=30)
+    cmd = _fill(template, default_branch, unit.repo)
+    if cmd is None:
+        return None
+    raw = _run_text_cmd(cmd, timeout=30)
     if not raw:
         return None
     try:
@@ -606,20 +659,45 @@ def _parse_git_worktree_porcelain(text: str, branch: str) -> Optional[Path]:
     return None
 
 
+def _locate_from_wmx_json(branch: str) -> Optional[Path]:
+    raw = _run_argv(["wmx", "worktree", "list", "--json"], timeout=15)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    items = data if isinstance(data, list) else data.get("worktrees", [])
+    want = branch if branch.startswith("refs/heads/") else f"refs/heads/{branch}"
+    for wt in items:
+        if not isinstance(wt, dict):
+            continue
+        b = wt.get("branch") or ""
+        if b in (branch, want) or b.endswith(f"/{branch}"):
+            path = wt.get("path")
+            if path:
+                p = Path(path)
+                return p if p.is_dir() else None
+    return None
+
+
 def locate_worktree(store: Path, branch: str, repo: str) -> Optional[Path]:
     """Resolved worktree path for *branch*, or None when missing."""
+    try:
+        _validate_branch(branch)
+    except ValueError:
+        return None
     template = resolve_operation(store, "worktree-management", "locate")
     if not template:
         return None
+    if template.strip().startswith("wmx worktree list --json"):
+        return _locate_from_wmx_json(branch)
     cmd = _fill(template, branch, repo)
-    try:
-        out = subprocess.run(cmd, shell=True, capture_output=True,
-                             text=True, timeout=15)
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    if cmd is None:
         return None
-    if out.returncode != 0 or not out.stdout.strip():
+    stdout = _run_text_cmd(cmd, timeout=15)
+    if not stdout:
         return None
-    stdout = out.stdout.strip()
     if stdout.startswith("worktree ") or "\nworktree " in stdout:
         return _parse_git_worktree_porcelain(stdout, branch)
     p = Path(stdout.splitlines()[0].strip())

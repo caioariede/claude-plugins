@@ -117,7 +117,7 @@ class DetectShippedElsewhereTests(unittest.TestCase):
             {"number": 10, "headRefName": "feat-old",
              "mergeCommit": {"oid": "older_sha"}},
         ]
-        with mock.patch("ws_cli._run_shell") as shell:
+        with mock.patch("ws_cli._run_text_cmd") as shell:
             shell.return_value = json.dumps(items)
             with mock.patch("ws_cli._is_ancestor", return_value=True):
                 rec = C._scan_tier_a(Path("/tmp/store"), u,

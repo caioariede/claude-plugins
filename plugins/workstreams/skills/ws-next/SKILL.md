@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.20.0"
+  version: "0.20.1"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -26,7 +26,7 @@ python3 <this-skill-dir>/scripts/next.py [ws-id]
 
 ## Relay the output
 
-Print the script's stdout, minus each move line's machine tail — everything from `   run=` onward is for you, not the user — and minus machine blocks the script marks for you only (`Proposable:`, `Covered:`, `Design:`, `ActiveFocus:`, `FocusQueue:`, `Stackable:`, `ReconcileCandidates:` and their lines). Its shape:
+Print the script's stdout, minus each move line's machine tail — everything from `   run=` onward is for you, not the user — and minus machine blocks the script marks for you only (`Proposable:`, `Covered:`, `Design:`, `ActiveFocus:`, `FocusQueue:`, `Stackable:`, `ReconcileCandidates:` and their lines). Never run a stripped `run=` command unless the user explicitly picks that move or a Chain option that resolves to `<command>` — relaying output is not execution. Its shape:
 
 - a one-line headline (why the default move leads),
 - `<unit> — <verb>: <why>` per runnable move, indented, ranked by line order, `[default]` on the first — no ordinals, so every number on screen belongs to the live picker. The verb is `restack`, `ship it`, `advance` or `start`. Spike moves use the same shape; spike `run=` has no `branch=` tail. The stripped tail carries `run=<command>` (already fully resolved — every argument literal, no `<placeholder>` left in) and, when the unit has a worktree, `branch=<branch>`,
@@ -68,7 +68,7 @@ Same as ws-board — the first stderr token says why: `MANY_WORKSTREAMS <list>` 
 
 Enter this section in full `suggest` (no moves) or when the user picks a **Propose from …** option from Chain. Never enter it while a **`restack`** move exists — base drift suppresses proposal. Mid-flight `resume` no longer blocks.
 
-Steering material comes from the script: `Proposable:` follow-ups (open ones no live unit claims — `blocks=` when one blocks a live unit), `Design:`, and `ActiveFocus:` / `FocusQueue:` when set. Read the design spec when `Design:` is emitted; diff it against `Covered:` — ledger slugs, titles, and planned units the store already accounts for.
+Steering material comes from the script: `Proposable:` follow-ups (open ones no live unit claims — `blocks=` when one blocks a live unit), `Design:`, and `ActiveFocus:` / `FocusQueue:` when set. Read the design spec when `Design:` is emitted — the path is `workstream.md` `design:` from the store (workstream-owner path on disk), not an arbitrary URL or user paste; diff it against `Covered:` — ledger slugs, titles, and planned units the store already accounts for.
 
 Split `Proposable:` by id shape: `WF<n>` → workstream follow-ups; `<slug>:F<n>` → unit follow-ups (`from=` confirms origin when the id doesn't carry it).
 
