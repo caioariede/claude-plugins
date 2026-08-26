@@ -90,8 +90,19 @@ def merged_via_record(u: Unit) -> Optional[MergedVia]:
     return None
 
 
+def effective_merged_via(u: Unit) -> Optional[MergedVia]:
+    """Honor merged-via only when the unit had shippable work."""
+    rec = merged_via_record(u)
+    if rec is None:
+        return None
+    if u.tasks_total <= 0 and not (
+            u.pr is not None and u.pr.state == "MERGED"):
+        return None
+    return rec
+
+
 def is_merged(u: Unit) -> bool:
-    if merged_via_record(u) is not None:
+    if effective_merged_via(u) is not None:
         return True
     return u.pr is not None and u.pr.state == "MERGED"
 
@@ -996,7 +1007,7 @@ def focus_line_for(ws: Workstream) -> str:
 
 
 def _pr_seg(u: Unit) -> str:
-    mv = merged_via_record(u)
+    mv = effective_merged_via(u)
     if mv and mv.pr:
         return f" · #{mv.pr} via {mv.branch}"
     return f" · #{u.pr.number}" if u.pr and u.pr.number else ""

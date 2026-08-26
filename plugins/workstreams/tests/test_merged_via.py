@@ -31,6 +31,14 @@ class MergedViaParseTests(unittest.TestCase):
         self.assertEqual(rec.sha, "abc123")
         self.assertEqual(rec.pr, 42)
 
+    def test_not_merged_from_log_without_tasks_or_pr(self):
+        u = unit(log=[
+            ("2026-01-01T00:00Z", "created", "base=main"),
+            ("2026-01-02T00:00Z", "merged-via",
+             "branch=other sha=abc123 pr=6037"),
+        ], tasks_total=0, tasks_done=0)
+        self.assertFalse(S.is_merged(u))
+
     def test_is_merged_from_log_without_pr(self):
         u = unit(log=[
             ("2026-01-01T00:00Z", "merged-via",
@@ -55,7 +63,7 @@ class IsMergedDerivationTests(unittest.TestCase):
             ("2026-01-01T00:00Z", "merged-via",
              "branch=master sha=abc"),
         ], tasks_total=0, tasks_done=0)
-        self.assertTrue(u.code_complete)
+        self.assertFalse(u.code_complete)
 
     def test_status_merged_from_log_only(self):
         u = unit(log=[
