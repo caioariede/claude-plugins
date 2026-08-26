@@ -63,6 +63,9 @@ def main(argv: List[str]) -> int:
     if result.outcome in ("unknown-forge", "unknown-git"):
         print(result.outcome)
         return 0
+    if result.outcome == "dismissed":
+        print("dismissed")
+        return 0
     if result.outcome == "tier-a" and result.record:
         S.append_merged_via(ws_dir, slug, result.record)
         print(_reconcile_line(ws_dir, slug, pr, merged_via=result.record))

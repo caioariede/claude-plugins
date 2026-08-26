@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.20.0"
+  version: "0.21.0"
   author: Caio Ariede
 ---
 
@@ -62,8 +62,12 @@ log or forge `MERGED` on the ledger branch), open `## Tasks` boxes are
 invalid bookkeeping — `ws-resume` checks them and appends a `decision
 reconciled tasks from merged-via branch=<b> pr=<n>: …` or `reconciled
 tasks from merged PR #<n>: …` line to `log.md`. `## Follow-ups` are
-never auto-checked. `ws-board` / `ws-next` do not write; they derive
-`merged` / code-complete from the log and live PR state.
+never auto-checked. `ws-board` does not write; `ws-next` scans live
+units read-only for shipped-elsewhere evidence and classifies an
+in-memory overlay but never appends log lines or mutates
+`progress.md`. `ws-resume` writes `merged-via`, task reconcile, and
+`ship-detect-dismissed`. Both derive `merged` / code-complete from the
+log and live PR state.
 `phase.py` gathers PR state for every ledger unit (same as board/next).
 
 **blocked** (derived status): a unit has ≥1 need whose target is not satisfied. A **dropped** target is never code-complete → the dependent is stuck: flag it `(dropped)` and route to triage, never auto-resolve. A follow-up target that is *removed* (deleted, not checked) is likewise unresolvable → same triage.
@@ -174,7 +178,7 @@ Re-scope is a deliberate human edit here (rare) — like editing `workstream.md`
 `T<n>`/`F<n>`/`N<n>` ids are monotonic per unit and never reused, even after check-off or removal. `## Needs` lines have **no checkbox** — a need's satisfied/open state is *derived* from its target (§Dependencies), never hand-marked; remove a line only on a genuine scope change (append a `decision` to `log.md`). `<target>` = a unit-id/bare-slug or a follow-up id (`<unit-id>:F<n>` / `WF<n>`); the note is optional free text.
 
 **`units/<unit-id>/log.md`** (append-only): `- <ts>  <kind>  <payload>`
-kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>` · `plan <absolute-path>` · `merged-via branch=<b> sha=<full> [pr=<n>]`
+kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>` · `plan <absolute-path>` · `merged-via branch=<b> sha=<full> [pr=<n>]` · `ship-detect-dismissed sha=<full>`
 
 `merged-via` records where the unit's work shipped when the ledger
 `branch=` is not forge-MERGED (another branch, replaced PR, or manual

@@ -115,13 +115,13 @@ class MergeDetectResult:
 
 
 def decide_merged_via(inp: MergeDetectInput) -> MergeDetectResult:
-    if inp.tier_a_match is not None:
-        return MergeDetectResult("tier-a", inp.tier_a_match)
     if inp.ledger_pr_state == "MERGED":
         return MergeDetectResult("already-merged")
-    if not inp.is_ancestor:
-        return MergeDetectResult("not-shipped")
     if inp.tip_sha == inp.default_tip_sha:
+        return MergeDetectResult("not-shipped")
+    if inp.tier_a_match is not None:
+        return MergeDetectResult("tier-a", inp.tier_a_match)
+    if not inp.is_ancestor:
         return MergeDetectResult("not-shipped")
     if inp.tasks_total <= 0 and not inp.had_ledger_pr:
         return MergeDetectResult("not-shipped")
@@ -134,14 +134,34 @@ def decide_merged_via(inp: MergeDetectInput) -> MergeDetectResult:
 
 def append_merged_via(ws_dir: Path, slug: str, rec: MergedVia) -> bool:
     """Append merged-via when absent for this sha; return True if written."""
-    udir = ws_dir / "units" / slug
-    log_path = udir / "log.md"
-    existing = parse_log(_read(log_path))
-    prior_u = Unit(slug=slug, log=existing)
-    prior = merged_via_record(prior_u)
+    prior = merged_via_record(_unit_from_log(ws_dir, slug))
     if prior and prior.sha == rec.sha:
         return False
+    log_path = ws_dir / "units" / slug / "log.md"
     _append_log_line(log_path, "merged-via", format_merged_via_payload(rec))
+    return True
+
+
+def _unit_from_log(ws_dir: Path, slug: str) -> Unit:
+    log_path = ws_dir / "units" / slug / "log.md"
+    return Unit(slug=slug, log=parse_log(_read(log_path)))
+
+
+def ship_detect_dismissed_sha(u: Unit) -> Optional[str]:
+    for _ts, kind, payload in reversed(u.log):
+        if kind != "ship-detect-dismissed":
+            continue
+        m = re.search(r"\bsha=([0-9a-f]+)\b", payload)
+        if m:
+            return m.group(1)
+    return None
+
+
+def append_ship_detect_dismissed(ws_dir: Path, slug: str, sha: str) -> bool:
+    if ship_detect_dismissed_sha(_unit_from_log(ws_dir, slug)) == sha:
+        return False
+    log_path = ws_dir / "units" / slug / "log.md"
+    _append_log_line(log_path, "ship-detect-dismissed", f"sha={sha}")
     return True
 
 
@@ -1174,8 +1194,19 @@ _RULE_HEADLINE = {
 }
 
 
+def _code_complete_waiting_on_open_pr(u: Unit) -> bool:
+    return (u.code_complete and u.pr
+            and u.pr.state == "OPEN" and not u.pr.is_draft)
+
+
+def _code_complete_closed_pr(u: Unit) -> bool:
+    return u.code_complete and u.pr and u.pr.state == "CLOSED"
+
+
 def enumerate_moves(ws: Workstream,
-                    by_slug: Dict[str, Unit]) -> List[Move]:
+                    by_slug: Dict[str, Unit],
+                    overlay: Optional[Dict[str, ReconcileOverlay]] = None
+                    ) -> List[Move]:
     """Every move runnable right now, ranked: at most one per unit,
     ordered by rule priority, then dependents (critical path first),
     then source order. moves[0] is the router's default."""
@@ -1183,6 +1214,8 @@ def enumerate_moves(ws: Workstream,
 
     for i, u in enumerate(ws.units):
         if u.status in ("merged", "dropped"):
+            continue
+        if _overlay_suppresses(u.slug, overlay):
             continue
         deps = -_dependents(u, ws, by_slug)
         if _drifted(u):
@@ -1193,10 +1226,13 @@ def enumerate_moves(ws: Workstream,
             continue
         if u.status not in ("building", "in-review"):
             continue                # blocked: the blocker moves first
-        # Ready PR + tasks done waits on review - not a move.
-        # Drift took restack above; draft PRs stay building
-        # and still resume (mark ready).
-        if u.code_complete and u.pr and not u.pr.is_draft:
+        if _code_complete_waiting_on_open_pr(u):
+            continue
+        if _code_complete_closed_pr(u):
+            ranked.append(((_RULE_RANK["resume"], deps, i),
+                           Move(u.slug, "resume", f"ws-resume {u.slug}",
+                                u.branch or None,
+                                "ledger PR closed — reconcile or drop")))
             continue
         if u.code_complete and not u.pr:
             ranked.append(((_RULE_RANK["ship"], deps, i),
@@ -1233,14 +1269,50 @@ class StackBase:
     readiness: Optional[str] = None
 
 
+_OVERLAY_GATE = frozenset({"tier-a", "tier-b"})
+
+
+@dataclass
+class ReconcileOverlay:
+    """Per-slug ship-detection result; never persisted by ws-next."""
+    slug: str
+    outcome: str
+    record: Optional[MergedVia] = None
+
+
+def _overlay_outcome_gates(outcome: str) -> bool:
+    return outcome in _OVERLAY_GATE
+
+
+def _overlay_suppresses(slug: str,
+                        overlay: Optional[Dict[str, ReconcileOverlay]]
+                        ) -> bool:
+    if not overlay:
+        return False
+    o = overlay.get(slug)
+    return o is not None and _overlay_outcome_gates(o.outcome)
+
+
+def _reconcile_candidates(
+        overlay: Optional[Dict[str, ReconcileOverlay]]
+        ) -> List[ReconcileOverlay]:
+    if not overlay:
+        return []
+    return [o for o in overlay.values() if _overlay_outcome_gates(o.outcome)]
+
+
 def stackable_bases(ws: Workstream,
-                    proposal_repo: Optional[str] = None) -> List[StackBase]:
+                    proposal_repo: Optional[str] = None,
+                    overlay: Optional[Dict[str, ReconcileOverlay]] = None
+                    ) -> List[StackBase]:
     if not proposal_repo:
         return []
     want = proposal_repo.lower()
     out: List[StackBase] = []
     for u in ws.units:
         if u.dropped or not u.branch or not u.repo:
+            continue
+        if _overlay_suppresses(u.slug, overlay):
             continue
         if u.status not in ("building", "in-review"):
             continue
@@ -1254,7 +1326,7 @@ def stackable_bases(ws: Workstream,
 
 @dataclass
 class Decision:
-    rule: str  # restack|ship|resume|triage-*|suggest|waiting|empty|done
+    rule: str  # restack|ship|resume|triage-*|suggest|reconcile-pending|...
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
     unit: Optional[str] = None      # unit slug when the command is unit-scoped
     branch: Optional[str] = None    # ledger branch; None until a worktree exists
@@ -1271,6 +1343,7 @@ class Decision:
     active_focus: Optional[FocusItem] = None
     focus_queue: List[FocusItem] = field(default_factory=list)
     stackable: Optional[List[StackBase]] = None
+    reconcile_candidates: List[ReconcileOverlay] = field(default_factory=list)
 
 
 def _followup_blockers(ws: Workstream,
@@ -1325,8 +1398,12 @@ def _pick_successors(slug: str, units: List[Unit],
 
 
 def _covered_entry(u: Unit, units: List[Unit],
-                   by: Dict[str, Unit]) -> str:
+                   by: Dict[str, Unit],
+                   overlay: Optional[Dict[str, ReconcileOverlay]] = None
+                   ) -> str:
     base = f"{u.slug} — {u.title}" if u.title else u.slug
+    if _overlay_suppresses(u.slug, overlay):
+        base = f"{base} (reconcile pending)"
     if not u.dropped:
         return base
     succs = _pick_successors(u.slug, units, by)
@@ -1335,10 +1412,12 @@ def _covered_entry(u: Unit, units: List[Unit],
     return f"{base} (superseded by {', '.join(succs)})"
 
 
-def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit]) -> List[str]:
+def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit],
+                   overlay: Optional[Dict[str, ReconcileOverlay]] = None
+                   ) -> List[str]:
     """What the store already covers, so a proposal can skip it. Dropped
     units count — the drop was a decision (SPEC)."""
-    out = [_covered_entry(u, ws.units, by_slug) for u in ws.units]
+    out = [_covered_entry(u, ws.units, by_slug, overlay) for u in ws.units]
     out += [f"{p.slug} — {_gist(p.what)} (planned)" for p in ws.planned
             if p.slug not in by_slug]
     return out
@@ -1346,10 +1425,12 @@ def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit]) -> List[str]:
 
 def _proposal_material(
         ws: Workstream,
-        by_slug: Dict[str, Unit]) -> Tuple[List[Proposable], List[str], str]:
+        by_slug: Dict[str, Unit],
+        overlay: Optional[Dict[str, ReconcileOverlay]] = None
+        ) -> Tuple[List[Proposable], List[str], str]:
     """Follow-ups, covered scope, and design path for Propose a unit."""
     return (proposable_followups(ws, by_slug),
-            _covered_scope(ws, by_slug),
+            _covered_scope(ws, by_slug, overlay),
             ws.design)
 
 
@@ -1364,16 +1445,19 @@ def _proposal_attachable(moves: List[Move]) -> bool:
 
 
 def decide_next(ws: Workstream,
-                proposal_repo: Optional[str] = None) -> Decision:
+                proposal_repo: Optional[str] = None,
+                overlay: Optional[Dict[str, ReconcileOverlay]] = None
+                ) -> Decision:
     """Every move runnable now, ranked, with moves[0] as the default.
     Blocked units are never resumed — the router advances their blocker."""
     derive_status(ws)
     by_slug = {u.slug: u for u in ws.units}
+    candidates = _reconcile_candidates(overlay)
 
     def _stackable_for(attach: bool, design: str) -> Optional[List[StackBase]]:
         if not attach or not (design or ws.active_focus):
             return None
-        return stackable_bases(ws, proposal_repo)
+        return stackable_bases(ws, proposal_repo, overlay)
 
     blocked_lines = []
     for u in ws.units:
@@ -1411,13 +1495,14 @@ def decide_next(ws: Workstream,
                         covered=covered or [], design=design,
                         active_focus=active_focus,
                         focus_queue=focus_queue or [],
-                        stackable=stackable)
+                        stackable=stackable,
+                        reconcile_candidates=candidates)
 
     # Everything runnable now, ranked; the leader is the default.
-    moves = enumerate_moves(ws, by_slug)
+    moves = enumerate_moves(ws, by_slug, overlay)
     if moves:
         top = moves[0]
-        proposable, covered, design = _proposal_material(ws, by_slug)
+        proposable, covered, design = _proposal_material(ws, by_slug, overlay)
         attach = (_proposal_attachable(moves)
                   and _has_proposal_source(ws, proposable))
         headline = (top.why if top.rule == "resume" and top.why
@@ -1463,7 +1548,17 @@ def decide_next(ws: Workstream,
     # Terminal fork, first match wins: suggest > triage-backlog >
     # waiting > empty > done. `suggest` when no moves exist; terminal
     # moves may carry proposal material alongside (see early return).
-    proposable, covered, design = _proposal_material(ws, by_slug)
+    proposable, covered, design = _proposal_material(ws, by_slug, overlay)
+    if candidates and _has_proposal_source(ws, proposable):
+        n = len(candidates)
+        headline = (f"reconcile before proposing — {n} unit(s) may have "
+                    "shipped elsewhere")
+        return out("reconcile-pending", None, None, open_items=open_items,
+                   headline=headline,
+                   proposable=proposable, covered=covered, design=design,
+                   active_focus=ws.active_focus,
+                   focus_queue=ws.focus_queued,
+                   stackable=_stackable_for(True, design))
     if _has_proposal_source(ws, proposable):
         headline = ("focus: {} — propose the next unit".format(
             ws.active_focus.slug)

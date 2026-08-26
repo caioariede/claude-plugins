@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.18.0"
+  version: "0.19.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -12,7 +12,7 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 
 **Required first:** load the `ws` skill — the shared contract (SPEC).
 
-**Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives each unit's status, and ranks every move runnable right now — one per unit, default first. It writes nothing; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
+**Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, scans live units read-only for shipped-elsewhere evidence, derives each unit's status, and ranks every move runnable right now — one per unit, default first. It never appends log lines or mutates `progress.md`; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
 
 **Two carve-outs.** Ranked moves always came out of code. **Propose a unit** is the only place you compose new work — in full `suggest` (no moves) or when the user picks a **Propose from …** option from Chain (non-restack moves plus proposal material from the script).
 
@@ -26,7 +26,7 @@ python3 <this-skill-dir>/scripts/next.py [ws-id]
 
 ## Relay the output
 
-Print the script's stdout, minus each move line's machine tail — everything from `   run=` onward is for you, not the user — and minus machine blocks the script marks for you only (`Proposable:`, `Covered:`, `Design:`, `ActiveFocus:`, `FocusQueue:`, `Stackable:` and their lines). Its shape:
+Print the script's stdout, minus each move line's machine tail — everything from `   run=` onward is for you, not the user — and minus machine blocks the script marks for you only (`Proposable:`, `Covered:`, `Design:`, `ActiveFocus:`, `FocusQueue:`, `Stackable:`, `ReconcileCandidates:` and their lines). Its shape:
 
 - a one-line headline (why the default move leads),
 - `<unit> — <verb>: <why>` per runnable move, indented, ranked by line order, `[default]` on the first — no ordinals, so every number on screen belongs to the live picker. The verb is `restack`, `ship it`, `advance` or `start`. The stripped tail carries `run=<command>` (already fully resolved — every argument literal, no `<placeholder>` left in) and, when the unit has a worktree, `branch=<branch>`,
@@ -42,14 +42,18 @@ Keep `ws-*` commands out of the list — the choice on offer is which unit to mo
 - Never describe that unit as "in flight", "covered", or "implementation underway."
 - When proposing `--base` on such a unit, state explicitly that **dependents stay blocked until the base store is backfilled** (tasks checked in `progress.md`).
 - Do not change `Covered:` semantics — ledger dedup still applies.
-- When the default move targets a unit whose work likely shipped on
-  another branch, say so and suggest `ws-resume <slug>` once (or a
-  hand `merged-via` line in `log.md`) — ws-next honors persisted
-  `merged-via` on the next run but does not write it.
+- When `ReconcileCandidates:` is present, tell the user to run
+  `ws-resume <slug>` for each listed unit before Propose a unit.
+  Hard-gate Propose a unit and Chain **Propose from …** options until
+  candidates are cleared. Still relay moves, Waiting, and Blocked.
 
 When there is **no** move at all the script emitted one of these states, named in its headline:
 
 - `blocker dropped/removed` — triage-dropped, which carries a `Next:` command.
+- `reconcile before proposing` — **`reconcile-pending`**; ship evidence
+  found for one or more units. Relay the headline and tell the user to
+  run `ws-resume <slug>` per `ReconcileCandidates:` before proposing.
+  Do not enter Propose a unit.
 - `no store work left` / `focus: <slug>` — **`suggest`**; go to Propose a unit. When active focus exists the headline is `focus: <slug> — propose the next unit`.
 - `open backlog remains` / `advance a blocker` — residue no proposal can take (a planned unit behind an unresolvable need, an `F<n>` in a live blocked unit). Help the user work the listed items; don't invent a command.
 - `waiting on review` — every live unit is code-complete with a ready PR; nothing for the agent to advance. Relay the `Waiting:` lines; don't invent a command.

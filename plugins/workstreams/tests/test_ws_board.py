@@ -682,6 +682,21 @@ class DecideNext(unittest.TestCase):
         self.assertIsNone(d.branch)
         self.assertIn("planned: p", d.open_items[0])
 
+    def test_closed_pr_code_complete_gets_resume_move(self):
+        u = S.Unit(slug="stale", branch="stale", tasks_total=2, tasks_done=2,
+                   pr=pr(9, "CLOSED", False, "main"),
+                   log=[("t", "created", "base=main")])
+        d = S.decide_next(self._ws([u]))
+        self.assertEqual(d.rule, "resume")
+        self.assertEqual(d.moves[0].unit, "stale")
+        self.assertIn("closed", d.moves[0].why.lower())
+
+    def test_closed_pr_does_not_fall_through_to_done(self):
+        u = S.Unit(slug="stale", branch="stale", tasks_total=1, tasks_done=1,
+                   pr=pr(9, "CLOSED", False, "main"),
+                   log=[("t", "created", "base=main")])
+        self.assertNotEqual(S.decide_next(self._ws([u])).rule, "done")
+
     def test_branchless_ledger_line_reports_none(self):
         u = S.Unit(slug="a", tasks_total=2, tasks_done=1)
         self.assertIsNone(S.decide_next(self._ws([u])).branch)

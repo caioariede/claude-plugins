@@ -14,6 +14,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -299,6 +300,7 @@ def _scan_tier_a(store: Path, unit: S.Unit, tip: str,
         return None
     if not isinstance(items, list):
         return None
+    matches: List[S.MergedVia] = []
     for item in items:
         mc = item.get("mergeCommit") or {}
         merge_sha = mc.get("oid") if isinstance(mc, dict) else None
@@ -312,8 +314,10 @@ def _scan_tier_a(store: Path, unit: S.Unit, tip: str,
             contained = _compare_commits(
                 unit.repo, merge_sha, tip)
         if contained:
-            return S.MergedVia(head, tip, num)
-    return None
+            matches.append(S.MergedVia(head, tip, num))
+    if not matches:
+        return None
+    return min(matches, key=lambda m: m.pr or 0)
 
 
 def detect_shipped_elsewhere(
@@ -338,6 +342,11 @@ def detect_shipped_elsewhere(
         unit, wt, default_branch)
     if not tip:
         return S.MergeDetectResult("unknown-git")
+    dismissed = S.ship_detect_dismissed_sha(unit)
+    if dismissed and tip == dismissed:
+        return S.MergeDetectResult("dismissed")
+    if wt is not None and default_tip is None:
+        return S.MergeDetectResult("unknown-git")
     tier_a = _scan_tier_a(store, unit, tip, default_branch, wt)
     inp = S.MergeDetectInput(
         tip_sha=tip,
@@ -350,6 +359,27 @@ def detect_shipped_elsewhere(
         default_branch=default_branch,
     )
     return S.decide_merged_via(inp)
+
+
+def scan_reconcile_overlay(
+        ws: S.Workstream, store: Path, *,
+        budget_s: float = 8.0) -> Dict[str, S.ReconcileOverlay]:
+    """Read-only ship scan for live non-merged units."""
+    deadline = time.monotonic() + budget_s
+    pr_state = gather_pr_state(ws, store)
+    overlay: Dict[str, S.ReconcileOverlay] = {}
+    for u in ws.units:
+        if time.monotonic() > deadline:
+            break
+        if u.dropped or S.is_merged(u):
+            continue
+        result = detect_shipped_elsewhere(
+            u, ws, store, pr_state=pr_state)
+        if not S._overlay_outcome_gates(result.outcome):
+            continue
+        overlay[u.slug] = S.ReconcileOverlay(
+            u.slug, result.outcome, result.record)
+    return overlay
 
 
 # ---------------------------------------------------------------------------

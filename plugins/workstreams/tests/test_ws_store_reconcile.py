@@ -15,6 +15,11 @@ from test_ws_board import ledger, write_ws  # noqa: E402
 
 
 class ReconcileTasksTests(unittest.TestCase):
+    def test_ship_detect_dismissed_sha(self):
+        u = S.Unit(slug="x", branch="x", repo="o/r",
+                   log=[("t", "ship-detect-dismissed", "sha=abc123")])
+        self.assertEqual(S.ship_detect_dismissed_sha(u), "abc123")
+
     def test_flips_open_tasks_only(self):
         raw = (
             "## Tasks\n"

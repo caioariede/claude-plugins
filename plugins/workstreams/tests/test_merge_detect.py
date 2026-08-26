@@ -1,5 +1,6 @@
 """Tests for decide_merged_via and detect_shipped_elsewhere."""
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -27,6 +28,15 @@ def inp(**kw):
 
 
 class DecideMergedViaTests(unittest.TestCase):
+    def test_tier_a_rejected_when_tip_equals_default(self):
+        rec = S.MergedVia("feat-x", "same", 99)
+        r = S.decide_merged_via(inp(
+            tip_sha="same", default_tip_sha="same",
+            tier_a_match=rec, is_ancestor=True, tasks_total=2,
+        ))
+        self.assertEqual(r.outcome, "not-shipped")
+        self.assertIsNone(r.record)
+
     def test_tier_a_when_match(self):
         rec = S.MergedVia("feat-x", "aaa", 99)
         r = S.decide_merged_via(inp(tier_a_match=rec))
@@ -67,6 +77,43 @@ class DetectShippedElsewhereTests(unittest.TestCase):
                    tasks_total=2, tasks_done=2)
         u.log = [("2026-01-01T00:00Z", "created", "base=main")]
         return u
+
+    @mock.patch("ws_cli.resolve_operation", return_value="gh cmd")
+    @mock.patch("ws_cli._scan_tier_a", return_value=None)
+    @mock.patch("ws_cli._git_tip_pair")
+    @mock.patch("ws_cli._run_forge_simple")
+    def test_dismissed_sha_skips_tier_b(self, forge, pair, _scan, _resolve):
+        u = self._unit()
+        u.log.append(("t", "ship-detect-dismissed", "sha=abc123"))
+        ws = S.Workstream(ws_id="w", name="w", units=[u])
+        forge.return_value = "main"
+        pair.return_value = ("abc123", "def456", True)
+        pr_state = {"spike": S.PR(number=1, state="OPEN",
+                                   is_draft=False, base="main")}
+        result = C.detect_shipped_elsewhere(
+            u, ws, Path("/tmp/store"), pr_state=pr_state)
+        self.assertEqual(result.outcome, "dismissed")
+
+    @mock.patch("ws_cli.resolve_operation", return_value="gh cmd")
+    @mock.patch("ws_cli._git_tip_pair")
+    @mock.patch("ws_cli._run_forge_simple")
+    def test_scan_tier_a_picks_oldest_match(self, forge, pair, _resolve):
+        u = self._unit()
+        forge.return_value = "main"
+        pair.return_value = ("abc123", "def456", True)
+        items = [
+            {"number": 20, "headRefName": "feat-new",
+             "mergeCommit": {"oid": "newer_sha"}},
+            {"number": 10, "headRefName": "feat-old",
+             "mergeCommit": {"oid": "older_sha"}},
+        ]
+        with mock.patch("ws_cli._run_shell") as shell:
+            shell.return_value = json.dumps(items)
+            with mock.patch("ws_cli._is_ancestor", return_value=True):
+                rec = C._scan_tier_a(Path("/tmp/store"), u,
+                                     "abc123", "main", Path("/tmp/wt"))
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec.pr, 10)
 
     @mock.patch("ws_cli.resolve_operation", return_value="gh cmd")
     @mock.patch("ws_cli._scan_tier_a")

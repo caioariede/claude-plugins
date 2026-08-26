@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.11.0"
+  version: "0.12.0"
   author: Caio Ariede
 ---
 
@@ -92,7 +92,7 @@ Work may already be on the default branch (ledger tip is behind default).
 3. Continue resume — not shipped yet
 ```
 
-Pick **2** → `python3 <this-skill-dir>/scripts/record_merged_via.py [unit-id] branch=<b> sha=<s> [pr=<n>]` using the candidate fields from the step 2 `ship-detect-candidate` line; print its line; chain to `ws-next` if phase is `done`. Pick **3** → fall through. Never auto-record without pick **2**.
+Pick **1** → `python3 <this-skill-dir>/scripts/record_dismissed.py [unit-id] sha=<s>` using the candidate sha from the step 2 `ship-detect-candidate` line; print its line; fall through or stop per user intent. Pick **2** → `python3 <this-skill-dir>/scripts/record_merged_via.py [unit-id] branch=<b> sha=<s> [pr=<n>]` using the candidate fields from the step 2 `ship-detect-candidate` line; print its line; chain to `ws-next` if phase is `done`. Pick **3** → fall through. Never auto-record without pick **2**.
 
 **plan-pause** — read the plan file; do not derive into `progress.md`
 yet unless the user already picked drift **2** or execute **4**. Print:

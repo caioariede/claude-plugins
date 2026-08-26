@@ -82,6 +82,13 @@ def render_decision(d: S.Decision) -> str:
             if sb.readiness:
                 line += f"  readiness={sb.readiness}"
             lines.append(line)
+    if d.reconcile_candidates:
+        lines.append("ReconcileCandidates:")
+        for rc in d.reconcile_candidates:
+            line = f"- {rc.slug}  outcome={rc.outcome}"
+            if rc.record:
+                line += f"  {S.format_merged_via_payload(rc.record)}"
+            lines.append(line)
     if chain_offers_propose(d):
         summary = propose_source_summary(d)
         if summary:
@@ -89,19 +96,22 @@ def render_decision(d: S.Decision) -> str:
     return "\n".join(lines)
 
 
-def _render(ws: S.Workstream, proposal_repo: Optional[str] = None) -> str:
+def _render(ws: S.Workstream, proposal_repo: Optional[str] = None,
+            overlay: Optional[Dict[str, S.ReconcileOverlay]] = None) -> str:
     if proposal_repo is None:
         proposal_repo = C.current_repo()
-    return render_decision(S.decide_next(ws, proposal_repo=proposal_repo))
+    return render_decision(
+        S.decide_next(ws, proposal_repo=proposal_repo, overlay=overlay))
 
 
 def generate(store: Path, ws_id: str,
              pr_state: Dict[str, Optional[S.PR]],
-             proposal_repo: Optional[str] = None) -> str:
+             proposal_repo: Optional[str] = None,
+             overlay: Optional[Dict[str, S.ReconcileOverlay]] = None) -> str:
     """Pure path used by both main() and the tests."""
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, pr_state)
-    return _render(ws, proposal_repo)
+    return _render(ws, proposal_repo, overlay)
 
 
 def main(argv: List[str]) -> int:
@@ -113,7 +123,8 @@ def main(argv: List[str]) -> int:
         return 2
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, C.gather_pr_state(ws, store))
-    print(_render(ws))
+    overlay = C.scan_reconcile_overlay(ws, store)
+    print(_render(ws, overlay=overlay))
     return 0
 
 
