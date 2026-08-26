@@ -1,0 +1,23 @@
+{
+  "skill_name": "ws-spike",
+  "evals": [
+    {
+      "id": 1,
+      "name": "audit-before-build",
+      "prompt": "Run ws-spike to audit auth before building the implement-auth unit; backlog has needs=audit-auth on that planned line",
+      "expected_output": "Creates audit-auth spike in store, seeds no worktree, offers ws-resume audit-auth"
+    },
+    {
+      "id": 2,
+      "name": "mid-unit-spawn",
+      "prompt": "Mid-build on feat-login, user asks to spike JWT refresh options with --spawned-from feat-login",
+      "expected_output": "Creates spike with spawned-from provenance; offers ws-block feat-login needs <spike> on confirm"
+    },
+    {
+      "id": 3,
+      "name": "refuse-no-design",
+      "prompt": "Run ws-spike on a workstream whose design: is — or missing",
+      "expected_output": "Refuses with no spikes.md or spikes/<slug>/ write"
+    }
+  ]
+}

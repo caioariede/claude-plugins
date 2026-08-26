@@ -23,14 +23,17 @@ import board as B         # noqa: E402
 import next as N          # noqa: E402
 
 
-def write_ws(store, ws_id, units_md="", backlog_md="", workstream_md="",
-             focus_md="", units=None):
+def write_ws(store, ws_id, units_md="", spikes_md="", backlog_md="",
+             workstream_md="", focus_md="", units=None, spikes=None):
     """units: {slug: {progress, log}} -> writes unit files."""
     d = store / ws_id
     (d / "units").mkdir(parents=True, exist_ok=True)
+    (d / "spikes").mkdir(parents=True, exist_ok=True)
     (d / "workstream.md").write_text(
         workstream_md or f"---\nname: {ws_id}\n---\n", "utf-8")
     (d / "units.md").write_text(units_md, "utf-8")
+    (d / "spikes.md").write_text(
+        spikes_md or f"# Spikes — {ws_id} (append-only)\n", "utf-8")
     (d / "backlog.md").write_text(backlog_md, "utf-8")
     if focus_md:
         (d / "focus.md").write_text(focus_md, "utf-8")
@@ -39,6 +42,11 @@ def write_ws(store, ws_id, units_md="", backlog_md="", workstream_md="",
         ud.mkdir(parents=True, exist_ok=True)
         (ud / "progress.md").write_text(files.get("progress", ""), "utf-8")
         (ud / "log.md").write_text(files.get("log", ""), "utf-8")
+    for slug, files in (spikes or {}).items():
+        sd = d / "spikes" / slug
+        sd.mkdir(parents=True, exist_ok=True)
+        (sd / "progress.md").write_text(files.get("progress", ""), "utf-8")
+        (sd / "log.md").write_text(files.get("log", ""), "utf-8")
     return d
 
 
@@ -49,14 +57,22 @@ def ledger(*rows):
     return "\n".join(lines) + "\n"
 
 
+def spike_ledger(*rows):
+    lines = ["# Spikes — 2026-01-01-demo (append-only)"]
+    for r in rows:
+        lines.append("- 2026-01-01T00:00Z  " + r)
+    return "\n".join(lines) + "\n"
+
+
 def pr(number, state="OPEN", is_draft=False, base="master"):
     return S.PR(number=number, state=state, is_draft=is_draft, base=base)
 
 
-def mkws(units=None, planned=None, wfs=None, ws_id="2026-01-01-demo",
+def mkws(units=None, spikes=None, planned=None, wfs=None, ws_id="2026-01-01-demo",
          design=""):
     ws = S.Workstream(ws_id=ws_id, name="demo", design=design)
     ws.units = units or []
+    ws.spikes = spikes or []
     ws.planned = planned or []
     ws.wf_followups = wfs or []
     return ws

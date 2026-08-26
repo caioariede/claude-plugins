@@ -3,7 +3,7 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -22,7 +22,7 @@ Read-only. A bundled script parses the store, resolves the active `forge` flavor
 python3 <this-skill-dir>/scripts/board.py [ws-id] [unit-id]
 ```
 
-A `unit-id` (or a lone bare slug) prints that unit's detail instead of the board.
+A `unit-id` or spike bare slug prints that target's detail instead of the board. Spikes show `[spike]` in the title — no PR sections.
 
 ## Print it verbatim
 

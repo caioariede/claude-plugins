@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.19.0"
+  version: "0.20.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -12,7 +12,7 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 
 **Required first:** load the `ws` skill — the shared contract (SPEC).
 
-**Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, scans live units read-only for shipped-elsewhere evidence, derives each unit's status, and ranks every move runnable right now — one per unit, default first. It never appends log lines or mutates `progress.md`; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
+**Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, scans live units read-only for shipped-elsewhere evidence, derives each unit's and spike's status, and ranks every move runnable right now — one per unit or spike, default first. It never appends log lines or mutates `progress.md`; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
 
 **Two carve-outs.** Ranked moves always came out of code. **Propose a unit** is the only place you compose new work — in full `suggest` (no moves) or when the user picks a **Propose from …** option from Chain (non-restack moves plus proposal material from the script).
 
@@ -29,9 +29,9 @@ python3 <this-skill-dir>/scripts/next.py [ws-id]
 Print the script's stdout, minus each move line's machine tail — everything from `   run=` onward is for you, not the user — and minus machine blocks the script marks for you only (`Proposable:`, `Covered:`, `Design:`, `ActiveFocus:`, `FocusQueue:`, `Stackable:`, `ReconcileCandidates:` and their lines). Its shape:
 
 - a one-line headline (why the default move leads),
-- `<unit> — <verb>: <why>` per runnable move, indented, ranked by line order, `[default]` on the first — no ordinals, so every number on screen belongs to the live picker. The verb is `restack`, `ship it`, `advance` or `start`. The stripped tail carries `run=<command>` (already fully resolved — every argument literal, no `<placeholder>` left in) and, when the unit has a worktree, `branch=<branch>`,
+- `<unit> — <verb>: <why>` per runnable move, indented, ranked by line order, `[default]` on the first — no ordinals, so every number on screen belongs to the live picker. The verb is `restack`, `ship it`, `advance` or `start`. Spike moves use the same shape; spike `run=` has no `branch=` tail. The stripped tail carries `run=<command>` (already fully resolved — every argument literal, no `<placeholder>` left in) and, when the unit has a worktree, `branch=<branch>`,
 - `Next: <command>   (unit: <slug>, branch: <b>)` — only in the triage-dropped fallback, which has no move list,
-- `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit, omitted when none,
+- `Blocked: <unit> — needs <target>[, <target>]` — one line per blocked unit or `<slug> [spike] — needs …` per blocked spike, omitted when none,
 - `Waiting: <unit> — PR #<n>` — one line per code-complete ready-PR unit with no move, omitted when none,
 - `Open backlog:` + a list — no-move states only,
 - `Proposable:` / `Covered:` / `Design:` / `ActiveFocus:` / `FocusQueue:` / `Stackable:` / `ProposeSummary:` — machine material for you, not the user: consume them, don't print them. `ActiveFocus:` / `FocusQueue:` appear whenever focus is set (moves or `suggest`); `Proposable:` / `Covered:` / `Design:` appear in `suggest` or alongside non-restack moves (see Chain). `Stackable:` lists valid `--base` unit-ids for design/focus proposals (tagged `repo=`, `branch=`, optional `readiness=`); empty when gated but none eligible, omitted when not in design/focus proposal mode. `ProposeSummary:` summarizes available proposal sources for you — consume it, don't relay it. `ActiveFocus:` names the active outcome (`<slug>  — <outcome>`); `FocusQueue:` lists queued outcomes the same way.

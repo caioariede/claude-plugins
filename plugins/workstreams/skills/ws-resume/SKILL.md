@@ -1,20 +1,36 @@
 ---
 name: ws-resume
-description: The single verb for advancing a unit at any stage — run it right after ws-start (it reads the unit's charter and plans from the design), to continue a half-done unit's tasks, or to ship a finished one; it also reopens a gone worktree and reconciles a drifted base. Idempotent — safe to run anytime, it does the next right thing for the state it finds. You know which unit; for deciding which unit comes next, that is ws-next.
-argument-hint: "[unit-id]"
+description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, ship a finished unit, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
+argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.12.0"
+  version: "0.13.0"
   author: Caio Ariede
 ---
 
-# ws-resume — resume a unit
+# ws-resume — resume a unit or spike
 
 **Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
-**Input:** `$ARGUMENTS` = `[unit-id]`. If omitted, infer it from the current worktree's branch by scanning `<store>/*/units.md` (store root: SPEC).
+**Input:** `$ARGUMENTS` = `[unit-id|spike-id]`. Resolve via the SPEC bare-slug resolver → `(ws_id, slug, kind)`. If omitted, infer a **unit** from the current worktree's branch by scanning `<store>/*/units.md` — **spikes always require an explicit id** (zero-arg cannot reach a spike).
+
+## Dispatch by kind
+
+After resolving `(ws_id, slug, kind)`:
+
+| Step | Unit path | Spike path |
+|------|-----------|------------|
+| `reconcile.py` / ship-detect / split detect | yes | **skip** |
+| Worktree ensure / `gather_pr_state` | yes | **skip** (store-scoped) |
+| `phase.py` | full (incl. ship) | spike branch (no ship/draft-pr) |
+| Execute | flavor `execute` in worktree | **intrinsic research loop** (below) |
+| Terminal | ship / PR-ready | spec amend + derived `complete` |
+
+---
+
+## Unit path
 
 ## Steps
-1. Resolve the unit via the SPEC bare-slug resolver → `ws-id`, `repo`, `branch`. (With no argument, infer the unit from the current worktree's branch.)
+1. Resolve the unit → `ws-id`, `repo`, `branch`. (With no argument, infer the unit from the current worktree's branch.)
 2. **Merged terminal** — run before worktree ensure and restack. Run
 reconcile; it honors `merged-via` in the log, detects
 shipped-elsewhere evidence, and reconciles tasks when terminal:
@@ -158,3 +174,27 @@ Then act on the phase table above (`loop` → repeat execute; pauses → stop fo
 ## Next
 
 Chain to `ws-next` only when phase is `done`, when the user picks `ws-next` at a pause, or after ship/mark-ready leaves phase `done` (§Next-step chaining). Do not offer `ws-next` as the sole handoff while phase is `loop`.
+
+---
+
+## Spike path
+
+Store-scoped — no worktree, no forge PR state, no reconcile/split/ship.
+
+1. Load `spikes/<slug>/charter.md`, `progress.md`, `log.md`; read umbrella `design:` from `workstream.md`.
+2. **Blocked-awareness guard** — same as units: surface unmet needs, require confirmation to override.
+3. Derive phase:
+
+```
+python3 <this-skill-dir>/scripts/phase.py <spike-id>
+```
+
+| Phase | Action |
+|-------|--------|
+| `plan` | **Plan only.** Read `charter.md` + umbrella `design:`. Resolve plan path via SPEC §Plan path. Run flavor `plan` op (research scope — no product-code file map). Append `plan <absolute-path>` when absent. Re-run phase.py → `plan-pause`. |
+| `plan-pause` | Print plan task list. On confirmation: derive `T1..` into `progress.md`; append **"Amend design spec"** as final task if the plan omits it; append `execute-mode=…`; re-run phase.py → `loop`. |
+| `loop` | **Intrinsic research loop** — no flavor execute/ship. Session stays store-scoped; repo is read-only except the umbrella `design:` path. Writes go to `artifacts/` and the design spec only. Work the first unchecked task; check off in `progress.md`; re-run phase.py. |
+| `blocked` | Blocked-awareness guard; stop. |
+| `done` | Chain to `ws-next`. |
+
+**Spec amend (final task):** before editing `design:`, copy it to `artifacts/spec-before-<ts>.md`. Only one spike per workstream may hold an unchecked "Amend design spec" task — refuse a second concurrent amend. Apply findings under `## Spike: <slug>` or inline; write `artifacts/amendment-<ts>.md`; append `decision spec-amended <summary>`; check off the task. Missing/unwritable design → block check-off; append `decision spec-amend-failed <reason>` if attempted.

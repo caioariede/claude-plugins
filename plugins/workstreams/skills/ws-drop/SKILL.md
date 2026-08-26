@@ -10,7 +10,7 @@ description: >-
   on X" — but confirm the unit isn't already merged first.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   author: Caio Ariede
 ---
 
@@ -18,15 +18,14 @@ metadata:
 
 **Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
-**Input:** `$ARGUMENTS` = `<unit-id>`.
+**Input:** `$ARGUMENTS` = `<unit-id>` or `<spike-id>` (bare slug).
 
-`ws-drop` **abandons** a unit — its work is not being kept. It appends a `dropped` line, and that line is what makes the unit derive to `dropped` status (SPEC, first-match-wins). So this is the wrong tool for a *finished* unit: a merged unit that gets dropped reads as abandoned on the board even though it shipped. Removing a worktree and dropping a unit are different things — the first is cheap, code-only cleanup (the work lives on in its branch / `main`); the second records that the work was thrown away.
+`ws-drop` **abandons** a unit or spike — its work is not being kept. It appends a `dropped` line, and that line is what makes the unit derive to `dropped` status (SPEC, first-match-wins). So this is the wrong tool for a *finished* unit: a merged unit that gets dropped reads as abandoned on the board even though it shipped. Removing a worktree and dropping a unit are different things — the first is cheap, code-only cleanup (the work lives on in its branch / `main`); the second records that the work was thrown away.
 
 ## Steps
-1. **Guard — is the unit already done?** Derive its status (SPEC). If the work is **merged** (its PR merged, or it was fast-forwarded into its base / `main`), do **not** drop it. It shipped; appending a `dropped` line would mislabel it as abandoned and hide it from the "done" tally. A completed unit's worktree is simply disposable — tear it down via the active `worktree-management` flavor's `remove` (no `dropped` log; the ledger line + `progress.md` stay as the shipped record). Explain this and stop. Proceed past this step only when the work is genuinely being **abandoned** — unmerged and unwanted.
-2. Resolve the unit via the SPEC bare-slug resolver → `branch`, worktree path, `repo`, and any open PR. **Show exactly what will be removed** (worktree path, local branch, whether a PR/remote branch exists) and require explicit confirmation. **Dependents check:** scan the workstream for any ledger unit whose `progress.md` `## Needs` targets this unit, any `backlog.md` planned unit whose `needs=` targets it, **and** any ledger unit whose implicit base is this one (`stacked-on=<this-unit>` on its `units.md` line, or a `created base=<this-unit>` line in its `log.md`) (§Dependencies). If any exist, **warn** that dropping strands them. An explicit-need dependent derives `needs <this-unit> (dropped)` and sits blocked until its need is re-pointed or cleared (`ws-block <dependent> clear N<n>`); a base-stacked dependent has no `N<n>` line to clear — its remedy is re-basing (`ws-restack` onto a new base) or accepting the strand. List the dependents and require explicit confirmation to proceed.
-3. Tear down the worktree via the active `worktree-management` flavor's `remove` (SPEC §Flavors). Then delete the **local** branch. Do **not** delete the remote branch or close the PR unless the user asks.
-4. Append a `dropped <reason>` log line per SPEC File formats. **Keep** `progress.md` and the ledger line — they are the reconciliation record. The unit's **deferred** follow-ups already live in `backlog.md` and survive the drop; its in-flight `progress.md` follow-ups go dormant with it.
-Anything the unit **claimed** (`claims=` on its ledger line) re-opens on its own: the `dropped` line releases the claim, and claimed-ness is derived, so there is nothing to rewrite (SPEC §Follow-up units). Say which follow-ups came back, so the user knows what returned to the backlog.
+1. **Guard — is the target already done?** Resolve `(ws_id, slug, kind)` via the SPEC bare-slug resolver. **Unit:** derive status (SPEC). If **merged**, do **not** drop — explain and stop. **Spike:** if status is **complete**, do **not** drop — delivered research would leave Done (mirror merged-unit guard). Proceed only when the work is genuinely being **abandoned**.
+2. Resolve the target. **Units:** `branch`, worktree path, `repo`, open PR. **Spikes:** store dir only — no worktree. **Show exactly what will be removed** and require explicit confirmation. **Dependents check:** scan units **and spikes** whose `progress.md` `## Needs` target this slug; scan `backlog.md` planned `needs=`; scan ledger units whose implicit base is this unit (`stacked-on=`, `created base=`). Warn and list dependents; require confirmation.
+3. **Units only:** tear down the worktree via the active `worktree-management` flavor's `remove` (SPEC §Flavors). Then delete the **local** branch. Do **not** delete the remote branch or close the PR unless the user asks. **Spikes:** skip worktree/branch teardown.
+4. Append a `dropped <reason>` log line per SPEC File formats. **Keep** `progress.md` and the ledger line. Unit deferred follow-ups survive in `backlog.md`; spike has no follow-ups. Dropping does **not** release blocked dependents — they show `(dropped)`.
 
 Restart = run `ws-start` with the same intent; it versions the id and records `restart-of` per SPEC.

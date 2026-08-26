@@ -26,7 +26,8 @@ import ws_cli as C     # noqa: E402
 # ---------------------------------------------------------------------------
 
 def render_board(b: S.Board) -> str:
-    head = f"*{b.name}* — {b.merged_count}/{b.total_count} units done"
+    label = "items done" if b.has_spikes else "units done"
+    head = f"*{b.name}* — {b.merged_count}/{b.total_count} {label}"
     if b.complete:
         head += " · ✅ complete"
     lines = [head, ""]
@@ -114,14 +115,48 @@ def _section_lines(text: str, name: str) -> List[str]:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def render_spike(ws: S.Workstream, store: Path, spike_slug: str) -> str:
+    by_slug = {u.slug: u for u in ws.units}
+    by_spike = {s.slug: s for s in ws.spikes}
+    sp = by_spike.get(spike_slug)
+    if sp is None:
+        return f"spike '{spike_slug}' not found in {ws.ws_id}"
+    S.derive_status(ws)
+    out = [f"*{sp.slug}* [spike] — {sp.status}",
+           f"_{sp.title}_" if sp.title else ""]
+
+    out += ["", S.focus_line_for(ws)]
+
+    raw = _read(store / ws.ws_id / "spikes" / sp.slug / "progress.md")
+    tasks = _section_lines(raw, "Tasks")
+    out += ["", "## Tasks"] + (tasks or ["(none)"])
+
+    need_lines = []
+    for n in S.spike_needs(sp):
+        satisfied, note = S.need_state(n.target, ws, by_slug, by_spike)
+        mark = "satisfied" if satisfied else "open"
+        if note:
+            mark += f", {note}"
+        tail = f" — {n.note}" if n.note else ""
+        need_lines.append(f"- {n.target} [{mark}]{tail}")
+    out += ["", "## Needs"] + (need_lines or ["(none)"])
+
+    log = [f"- {ts}  {kind}  {p}" for ts, kind, p in sp.log][-6:]
+    out += ["", "## Recent log"] + (log or ["(none)"])
+    return "\n".join(x for x in out if x is not None)
+
+
 def generate(store: Path, ws_id: str, unit_slug: Optional[str],
              pr_state: Dict[str, Optional[S.PR]]) -> str:
     """Pure path used by both main() and the tests."""
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, pr_state)
-    if unit_slug:
-        return render_unit(ws, store, unit_slug)
-    return render_board(S.build_board(ws))
+    if not unit_slug:
+        return render_board(S.build_board(ws))
+    kind = C.resolve_kind_in_ws(store, ws_id, unit_slug, fallback="unit")
+    if kind == "spike":
+        return render_spike(ws, store, unit_slug)
+    return render_unit(ws, store, unit_slug)
 
 
 def main(argv: List[str]) -> int:
@@ -132,11 +167,7 @@ def main(argv: List[str]) -> int:
         print(str(p), file=sys.stderr)
         return 2
     ws = S.load_workstream(store / ws_id)
-    S.apply_pr_state(ws, C.gather_pr_state(ws, store))
-    if unit_slug:
-        print(render_unit(ws, store, unit_slug))
-    else:
-        print(render_board(S.build_board(ws)))
+    print(generate(store, ws_id, unit_slug, C.gather_pr_state(ws, store)))
     return 0
 
 

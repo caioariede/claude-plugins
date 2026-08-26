@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -390,6 +391,13 @@ class Pick(Exception):
     """The caller (a human via the skill) must disambiguate."""
 
 
+@dataclass
+class ResolvedTarget:
+    ws_id: str
+    slug: str
+    kind: str   # "unit" | "spike"
+
+
 _WS_SLUG_RE = re.compile(r'^\d{4}-\d{2}-\d{2}-(.+)$')
 
 
@@ -416,14 +424,48 @@ def resolve_workstream(store: Path, token: str) -> List[str]:
 
 
 def resolve_slug(store: Path, token: str) -> List[Tuple[str, str]]:
-    """Bare-slug resolver: (ws_id, slug) matches across all unit ledgers."""
-    hits = []
+    """Bare-slug resolver: (ws_id, slug) matches across unit + spike ledgers."""
+    return [(t.ws_id, t.slug) for t in resolve_target_hits(store, token)]
+
+
+def resolve_target_hits(store: Path, token: str) -> List[ResolvedTarget]:
+    hits: List[ResolvedTarget] = []
     for ws_id in list_workstreams(store):
-        units = S.parse_units((store / ws_id / "units.md").read_text("utf-8"))
-        for u in units:
-            if u.slug == token:
-                hits.append((ws_id, token))
+        units_path = store / ws_id / "units.md"
+        spikes_path = store / ws_id / "spikes.md"
+        if units_path.exists():
+            for u in S.parse_units(units_path.read_text("utf-8")):
+                if u.slug == token:
+                    hits.append(ResolvedTarget(ws_id, token, "unit"))
+        if spikes_path.exists():
+            for sp in S.parse_spikes(spikes_path.read_text("utf-8")):
+                if sp.slug == token:
+                    hits.append(ResolvedTarget(ws_id, token, "spike"))
     return hits
+
+
+def resolve_target(store: Path, token: str) -> ResolvedTarget:
+    hits = resolve_target_hits(store, token)
+    if len(hits) == 1:
+        return hits[0]
+    if not hits:
+        raise Pick(f"NO_MATCH no unit or spike named '{token}'")
+    opts = ", ".join(f"{h.kind}:{h.ws_id}:{h.slug}" for h in hits)
+    raise Pick(f"AMBIGUOUS '{token}' matches: {opts}")
+
+
+def resolve_kind_in_ws(store: Path, ws_id: str, slug: str,
+                       fallback: Optional[str] = None) -> str:
+    """Kind for `slug` within one workstream; raises Pick on ambiguity."""
+    hits = [h for h in resolve_target_hits(store, slug) if h.ws_id == ws_id]
+    if len(hits) == 1:
+        return hits[0].kind
+    if len(hits) > 1:
+        opts = ", ".join(f"{h.kind}:{h.slug}" for h in hits)
+        raise Pick(f"AMBIGUOUS '{slug}' in {ws_id}: {opts}")
+    if fallback is not None:
+        return fallback
+    raise Pick(f"NO_MATCH no unit or spike {slug!r} in {ws_id}")
 
 
 def current_branch(cwd: Optional[Path] = None) -> Optional[str]:
@@ -530,8 +572,12 @@ def resolve_args(store: Path, args: List[str]) -> Tuple[str, Optional[str]]:
             return hits[0]
         if not hits:
             raise Pick(f"NO_MATCH no workstream or unit named '{tok}'")
-        opts = ", ".join(f"{w}:{s}" for w, s in hits)
-        raise Pick(f"AMBIGUOUS unit '{tok}' matches: {opts}")
+        kinds = resolve_target_hits(store, tok)
+        if len(kinds) == 1:
+            t = kinds[0]
+            return t.ws_id, t.slug
+        opts = ", ".join(f"{h.kind}:{h.ws_id}:{h.slug}" for h in kinds)
+        raise Pick(f"AMBIGUOUS '{tok}' matches: {opts}")
     if not all_ws:
         raise Pick("NO_STORE no workstreams found in the store")
     if len(all_ws) == 1:

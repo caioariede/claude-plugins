@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.21.2"
+  version: "0.22.0"
   author: Caio Ariede
 ---
 
@@ -16,12 +16,18 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 <store>/<ws-id>/
   workstream.md          # metadata only
   units.md               # append-only ledger (unit ↔ repo/branch identity map)
+  spikes.md              # append-only ledger (spike identity — no branch=)
   backlog.md             # workstream future work: planned units + deferred follow-ups (mutable)
   focus.md               # outcome queue: one active focus steers ws-next proposals (mutable)
   units/<unit-id>/
     charter.md           # static: why this unit exists (unit-level workstream.md); set at ws-start, read by ws-resume
     progress.md          # MUTABLE current-state: Tasks + Follow-ups checklists (work-state SoT)
     log.md               # APPEND-ONLY: created, dropped, restack, decision, note, merged-via
+  spikes/<slug>/
+    charter.md           # static: what to investigate; set at ws-spike, read by ws-resume
+    progress.md          # MUTABLE: Tasks + Needs only (no Follow-ups)
+    log.md               # APPEND-ONLY: created, dropped, decision, note, plan
+    artifacts/           # working drafts; spec-before snapshots live here too
 ```
 
 ## Source of truth — never store what git/GitHub owns
@@ -44,7 +50,9 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 
 **`ws-start` is the sole creator of `units/<unit-id>/`.** No other skill and no ad-hoc write creates a unit directory or any file in it — not while seeding a backlog, not while capturing a follow-up, not to "get ahead" of a unit that is about to exist. A unit directory with no matching `units.md` ledger line is malformed. Anything that wants a unit runs `ws-start`; anything that wants to *record* a future unit writes `backlog.md` via `ws-backlog`.
 
-**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>` — an unchecked follow-up a live unit **claims** is that unit's work, not an open item (§Follow-up units). Any open item ⇒ **not done**. Dropped units are terminal, not blockers.
+**`ws-spike` is the sole creator of `spikes/<slug>/`.** Same store-only rule — no worktree, no branch. A spike directory with no matching `spikes.md` ledger line is malformed.
+
+**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** no spike is **active** (`researching` or `blocked`) — every ledger spike is terminal (`complete` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>` — an unchecked follow-up a live unit **claims** is that unit's work, not an open item (§Follow-up units). Any open item ⇒ **not done**. Dropped units and dropped spikes are terminal, not blockers.
 
 This predicate reads the store only, so it cannot know whether the `design:` spec still holds unbuilt scope. A workstream can therefore be **done** here while `ws-next` still proposes a unit from the design — the judgment layers on top of the derived answer rather than contradicting it, which is why `ws-next` says "no store work left" instead of claiming done.
 
@@ -53,9 +61,12 @@ A unit's **needs** = `{ base, when base is a unit-id }` ∪ `{ explicit needs }`
 
 **Need target** — each need points at either:
 - a **unit** (`<unit-id>` or bare slug) — **satisfied** when that unit is *code-complete*.
+- a **spike** (bare slug in `spikes.md`) — **satisfied** when that spike is *spike-complete*.
 - a **follow-up** (`<unit-id>:F<n>` or `WF<n>`) — when a live unit **claims** it (§Follow-up units), satisfied through that unit exactly as a unit target; otherwise **satisfied** when the box is checked in its source file.
 
 **code-complete** (derived predicate; never a printed status label): a unit has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. `## Follow-ups` are ignored; zero tasks is *not* code-complete. `merged` implies code-complete.
+
+**spike-complete** (derived predicate; never a printed status label): a spike has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. Zero tasks is *not* spike-complete. Used for need satisfaction and terminal `complete` status — a spike-complete spike with unmet needs is still **blocked**, not Done.
 
 **Merge task reconcile:** when a unit is terminal-merged (`merged-via`
 log or forge `MERGED` on the ledger branch), open `## Tasks` boxes are
@@ -81,10 +92,10 @@ Merge ordering (a stacked unit cannot merge before its base) stays owned by git/
 - **unit-id** = `<ws-id>:<slug(what)>` — globally unique by construction. On disk
   the unit lives at `<store>/<ws-id>/units/<slug>/`; the `<ws-id>:`
   prefix is the typed, global handle.
-- **bare-slug resolver** — any command taking a unit accepts a bare `<slug>` and
-  resolves it by scanning `<store>/*/units.md`: exactly one match →
-  use it; more than one → list the matches and require the `<ws-id>:` prefix; none
-  → error. Skills reference this rule; never restate it.
+- **bare-slug resolver** — any command taking a unit or spike accepts a bare `<slug>` and
+  resolves it by scanning `<store>/*/units.md` and `spikes.md`: exactly one match →
+  use it (with `kind` = unit or spike); more than one → list the matches with kind
+  and require the `<ws-id>:` prefix; none → error. Skills reference this rule; never restate it.
 - **slug** = lowercase; non-alnum → `-`; collapse repeats; trim. Then **shorten**:
   drop filler words (`a an and the this that so it its of to for from in into on
   with when then just at as by but or i we you my our your be is are was were
@@ -135,6 +146,12 @@ when the base is in this one:
 ```
 `<title>` = the `<what>` verbatim — the unshortened intent, so a short `<slug>` costs nothing.
 `claims=` lists the follow-up targets this unit was created to close (§Follow-up units); each target is a `WF<n>` or `<unit-id>:F<n>` per §Dependencies.
+**`spikes.md`** (append-only ledger; one line per `ws-spike`, never edit prior lines):
+```
+# Spikes — <ws-id> (append-only)
+- <ts>  <slug>  "<title>"  repo=<org/repo>  [spawned-from=<unit-id>]  [restart-of=<slug>]
+```
+`repo=` is a read-only exploration anchor — no `branch=`. Explicit needs live in spike `progress.md` `## Needs` only.
 **`backlog.md`** (workstream future work; mutable):
 ```
 ## Planned units
@@ -165,6 +182,29 @@ already provides — don't reimplement it. Specific deliverables are scoped at
 plan time against the design; the charter is the north star, not the plan.>
 ```
 Re-scope is a deliberate human edit here (rare) — like editing `workstream.md`'s goal — not churn.
+
+**`spikes/<slug>/charter.md`** (static — spike intent; no log, no status):
+```
+---
+design: <design spec path | —>
+spawned-from: <unit-id | —>
+---
+<purpose: what to investigate, verbatim from ws-spike input>
+```
+
+**`spikes/<slug>/progress.md`** (mutable current-state — Tasks + Needs only):
+```
+## Tasks
+- [ ] T1  <desc>
+## Needs
+- N1  <target>   — <note>
+```
+No `## Follow-ups` — deferred discoveries go to `backlog.md` via `ws-backlog`.
+
+**`spikes/<slug>/log.md`** (append-only): `- <ts>  <kind>  <payload>`
+kinds: `created` · `dropped <reason>` · `decision <text>` · `note <text>` · `plan <absolute-path>`
+No `merged-via`, `restack`, or `completed` kind — terminal spike = derived `complete`.
+`decision spec-amended <summary>` records the umbrella design amend.
 
 **`units/<unit-id>/progress.md`** (mutable current-state — no branch/status/PR, those derive):
 ```
@@ -256,7 +296,7 @@ central "hub" and never says "run this here, that there." A dedicated
 orchestration terminal is your own convention to name, not a role defined here.
 
 - **Workstream-scoped** — touches only the global store + GitHub (`ws-init`,
-  `ws-start`, `ws-next`, `ws-board`, `ws-drop`, `ws-block`). Runs from anywhere.
+  `ws-start`, `ws-spike`, `ws-next`, `ws-board`, `ws-drop`, `ws-block`). Runs from anywhere.
   With no workstream arg and more than one workstream in the store, the cwd's
   current branch selects when it matches exactly one ledger unit's `branch=`
   (same locate as `ws-backlog` / `ws-resume`); otherwise the command asks.
@@ -265,6 +305,9 @@ orchestration terminal is your own convention to name, not a role defined here.
   worktree in the current session (already inside → continue); `ws-restack`
   operates via `git -C <worktree>`. A per-unit multiplexer window is optional
   ergonomics for parallel work, never required.
+- **Spike-scoped** — store-only research (`ws-spike`, spike path of `ws-resume`).
+  No worktree, no `branch=`, no forge PR state. Zero-arg `ws-resume` infers from
+  cwd branch and cannot reach a spike — spikes always need an explicit id.
 
 ## Next-step chaining
 Every `ws-*` skill ends by naming the single best next command and
@@ -277,6 +320,9 @@ pick; dismissal must not start work.
 (`ws-next` lists every runnable move, settles which unit, then offers
 that one — choosing a unit runs nothing, so an opt-in dismissal lands
 on the step after it.)
+
+**Provisioned-spike handoff:** `ws-spike` may offer `ws-resume` opt-out
+even though spike resume is research work — the spike was just provisioned.
 
 A command that starts or continues code work (`ws-resume`,
 `ws-start`, `ws-restack`) is offered **opt-in** when named from most

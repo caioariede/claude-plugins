@@ -219,6 +219,25 @@ class Unit:
 
 
 @dataclass
+class Spike:
+    slug: str
+    title: str = ""
+    repo: str = ""
+    spawned_from: Optional[str] = None
+    restart_of: Optional[str] = None
+    tasks_total: int = 0
+    tasks_done: int = 0
+    needs: List[Need] = field(default_factory=list)
+    dropped: bool = False
+    log: List[Tuple[str, str, str]] = field(default_factory=list)
+    status: str = "researching"         # derived
+
+    @property
+    def spike_complete(self) -> bool:
+        return self.tasks_total > 0 and self.tasks_done == self.tasks_total
+
+
+@dataclass
 class PlannedUnit:
     slug: str
     base: str = ""
@@ -239,6 +258,7 @@ class Workstream:
     name: str
     design: str = ""                    # workstream.md design: path, verbatim
     units: List[Unit] = field(default_factory=list)
+    spikes: List[Spike] = field(default_factory=list)
     planned: List[PlannedUnit] = field(default_factory=list)
     wf_followups: List[Followup] = field(default_factory=list)  # backlog WF<n>
     active_focus: Optional[FocusItem] = None
@@ -283,6 +303,29 @@ def parse_units(text: str) -> List[Unit]:
     return units
 
 
+def parse_spikes(text: str) -> List[Spike]:
+    """Ledger lines: `- <ts> <slug> "<title>" key=value...`."""
+    spikes: List[Spike] = []
+    for line in text.splitlines():
+        m = _LEDGER_RE.match(line.strip())
+        if not m:
+            continue
+        _ts, slug, title, rest = m.groups()
+        sp = Spike(slug=slug, title=title)
+        for tok in rest.split():
+            if "=" not in tok:
+                continue
+            k, v = tok.split("=", 1)
+            if k == "repo":
+                sp.repo = v
+            elif k == "spawned-from":
+                sp.spawned_from = v
+            elif k == "restart-of":
+                sp.restart_of = v
+        spikes.append(sp)
+    return spikes
+
+
 def _section_of(line: str, headings: Dict[str, str]) -> Optional[str]:
     """Map a `## Heading` line to a section key, else None for non-headings.
 
@@ -300,12 +343,16 @@ _NEED_RE = re.compile(r'^-\s+(N\d+)\s+(.*)$')
 _FU_RE = re.compile(r'^-\s+\[( |x|X)\]\s+(F\d+)\s+(.*)$')
 
 
-def parse_progress(text: str) -> Tuple[int, int, List[Followup], List[Need]]:
+def parse_progress(text: str, *,
+                   include_followups: bool = True
+                   ) -> Tuple[int, int, List[Followup], List[Need]]:
     """(tasks_done, tasks_total, in-flight follow-ups, explicit needs).
 
     Sections may appear in any order; only their headings scope parsing.
     """
-    headings = {"Tasks": "tasks", "Follow-ups": "followups", "Needs": "needs"}
+    headings: Dict[str, str] = {"Tasks": "tasks", "Needs": "needs"}
+    if include_followups:
+        headings["Follow-ups"] = "followups"
     section: Optional[str] = None
     done = total = 0
     fus: List[Followup] = []
@@ -768,6 +815,13 @@ def load_workstream(ws_dir: Path) -> Workstream:
             _read(udir / "progress.md"))
         u.log = parse_log(_read(udir / "log.md"))
         u.dropped = any(kind == "dropped" for _ts, kind, _p in u.log)
+    ws.spikes = parse_spikes(_read(ws_dir / "spikes.md"))
+    for sp in ws.spikes:
+        sdir = ws_dir / "spikes" / sp.slug
+        sp.tasks_done, sp.tasks_total, _, sp.needs = parse_progress(
+            _read(sdir / "progress.md"), include_followups=False)
+        sp.log = parse_log(_read(sdir / "log.md"))
+        sp.dropped = any(kind == "dropped" for _ts, kind, _p in sp.log)
     return ws
 
 
@@ -829,19 +883,53 @@ def followup_open(fid: str, fu: Followup, ws: Workstream) -> bool:
     return not fu.checked and claimer_of(fid, ws) is None
 
 
+def _by_spike(ws: Workstream) -> Dict[str, Spike]:
+    return {s.slug: s for s in ws.spikes}
+
+
+def spike_needs(sp: Spike) -> List[Need]:
+    return list(sp.needs)
+
+
+def derive_spike_status(sp: Spike, ws: Workstream,
+                        by_slug: Dict[str, Unit],
+                        by_spike: Dict[str, Spike]) -> str:
+    if sp.dropped:
+        return "dropped"
+    if spike_needs(sp) and _has_unmet_spike_need(sp, ws, by_slug, by_spike):
+        return "blocked"
+    if sp.spike_complete:
+        return "complete"
+    return "researching"
+
+
+def _has_unmet_spike_need(sp: Spike, ws: Workstream,
+                          by_slug: Dict[str, Unit],
+                          by_spike: Dict[str, Spike]) -> bool:
+    for n in spike_needs(sp):
+        satisfied, _note = need_state(n.target, ws, by_slug, by_spike)
+        if not satisfied:
+            return True
+    return False
+
+
 def derive_status(ws: Workstream) -> None:
-    """Fill each unit's derived status, first-match-wins per SPEC."""
+    """Fill each unit's and spike's derived status, first-match-wins."""
     by_slug = {u.slug: u for u in ws.units}
+    by_spike = _by_spike(ws)
     for u in ws.units:
-        u.status = _status_for(u, ws, by_slug)
+        u.status = _status_for(u, ws, by_slug, by_spike)
+    for sp in ws.spikes:
+        sp.status = derive_spike_status(sp, ws, by_slug, by_spike)
 
 
-def _status_for(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> str:
+def _status_for(u: Unit, ws: Workstream, by_slug: Dict[str, Unit],
+                by_spike: Dict[str, Spike]) -> str:
     if u.dropped:
         return "dropped"
     if is_merged(u):
         return "merged"
-    if unit_needs(u, ws) and _has_unmet_need(u, ws, by_slug):
+    if unit_needs(u, ws) and _has_unmet_need(u, ws, by_slug, by_spike):
         return "blocked"
     if u.pr and u.pr.state == "OPEN" and not u.pr.is_draft:
         return "in-review"
@@ -858,17 +946,43 @@ def unit_needs(u: Unit, ws: Workstream) -> List[Need]:
     return needs
 
 
-def need_state(target: str, ws: Workstream,
-               by_slug: Dict[str, Unit]) -> Tuple[bool, str]:
-    """Return (satisfied, note). note is "dropped" / "removed" / "".
+def pending_spike_slugs(ws: Workstream) -> set:
+    """Slugs referenced in needs= but absent from both ledgers."""
+    ledger = {u.slug for u in ws.units} | {s.slug for s in ws.spikes}
+    pending: set = set()
+    for u in ws.units:
+        for n in u.needs:
+            if _is_followup_target(n.target):
+                continue
+            slug = _slug_of(n.target)
+            if slug not in ledger:
+                pending.add(slug)
+    for sp in ws.spikes:
+        for n in sp.needs:
+            if _is_followup_target(n.target):
+                continue
+            slug = _slug_of(n.target)
+            if slug not in ledger:
+                pending.add(slug)
+    for p in ws.planned:
+        for t in p.needs:
+            slug = _slug_of(t)
+            if slug not in ledger:
+                pending.add(slug)
+    return pending
 
-    Unit target → satisfied at code-complete. Follow-up target → if a
-    live unit claims it, resolve through that unit exactly as a unit
-    target (so the dependent clears when the claiming unit is
-    code-complete, not the moment a box flips); else satisfied when its
-    box is checked. A target that no longer exists is unresolvable
-    (removed), not satisfied.
+
+def need_state(target: str, ws: Workstream,
+               by_slug: Dict[str, Unit],
+               by_spike: Optional[Dict[str, Spike]] = None) -> Tuple[bool, str]:
+    """Return (satisfied, note). note is "dropped" / "pending" / "removed" / "".
+
+    Unit target → satisfied at code-complete. Spike target → satisfied at
+    spike-complete. Follow-up target → claimed or checked. Pending spike
+    slug → open, not removed.
     """
+    if by_spike is None:
+        by_spike = _by_spike(ws)
     if _is_followup_target(target):
         fu = _find_followup(target, ws, by_slug)
         if fu is None:
@@ -883,8 +997,15 @@ def need_state(target: str, ws: Workstream,
         if dep.dropped:
             return False, "dropped"
         return dep.code_complete, ""
+    dep_spike = by_spike.get(slug)
+    if dep_spike is not None:
+        if dep_spike.dropped:
+            return False, "dropped"
+        return dep_spike.spike_complete, ""
     if any(p.slug == slug for p in ws.planned):
-        return False, ""   # planned, not started yet — open, not removed
+        return False, ""   # planned unit, not started — open, not removed
+    if slug in pending_spike_slugs(ws):
+        return False, "pending"
     return False, "removed"
 
 
@@ -910,9 +1031,10 @@ def _find_followup(target: str, ws: Workstream,
 
 
 def _has_unmet_need(u: Unit, ws: Workstream,
-                    by_slug: Dict[str, Unit]) -> bool:
+                    by_slug: Dict[str, Unit],
+                    by_spike: Dict[str, Spike]) -> bool:
     for n in unit_needs(u, ws):
-        satisfied, _note = need_state(n.target, ws, by_slug)
+        satisfied, _note = need_state(n.target, ws, by_slug, by_spike)
         if not satisfied:
             return True
     return False
@@ -941,7 +1063,8 @@ def resume_phase(u: Unit, ws: Workstream,
     """
     if u.dropped or is_merged(u):
         return "done"
-    if _has_unmet_need(u, ws, by_slug):
+    by_spike = _by_spike(ws)
+    if _has_unmet_need(u, ws, by_slug, by_spike):
         return "blocked"
     if not _has_execute_mode(u):
         if _has_plan_line(u):
@@ -956,6 +1079,35 @@ def resume_phase(u: Unit, ws: Workstream,
         return "ship-pause"
     if u.pr.is_draft:
         return "draft-pr"
+    return "done"
+
+
+def _spike_has_plan_line(sp: Spike) -> bool:
+    return any(kind == "plan" for _ts, kind, _p in sp.log)
+
+
+def _spike_has_execute_mode(sp: Spike) -> bool:
+    return any(
+        kind == "decision" and payload.startswith("execute-mode=")
+        for _ts, kind, payload in sp.log
+    )
+
+
+def resume_spike_phase(sp: Spike, ws: Workstream,
+                       by_slug: Dict[str, Unit],
+                       by_spike: Dict[str, Spike]) -> str:
+    """Phase for spike ws-resume: blocked | plan | plan-pause | loop | done."""
+    if sp.dropped:
+        return "done"
+    if _has_unmet_spike_need(sp, ws, by_slug, by_spike):
+        return "blocked"
+    if not _spike_has_execute_mode(sp):
+        if _spike_has_plan_line(sp):
+            return "plan-pause"
+        if sp.tasks_total == 0:
+            return "plan"
+    if not sp.spike_complete:
+        return "loop"
     return "done"
 
 
@@ -992,6 +1144,7 @@ class Board:
     total_count: int = 0
     complete: bool = False
     has_blocked: bool = False
+    has_spikes: bool = False
     focus_line: str = ""
 
 
@@ -1023,10 +1176,21 @@ def _gist(text: str, limit: int = 100) -> str:
     return text if len(text) <= limit else text[:limit].rstrip() + "…"
 
 
+def _spike_tag(slug: str) -> str:
+    return f"{slug} [spike]"
+
+
+def _spike_progress_seg(sp: Spike) -> str:
+    if sp.tasks_total == 0:
+        return " · not planned"
+    return f" · {sp.tasks_done}/{sp.tasks_total}"
+
+
 def build_board(ws: Workstream) -> Board:
     derive_status(ws)
     by_slug = {u.slug: u for u in ws.units}
-    b = Board(name=ws.name)
+    by_spike = _by_spike(ws)
+    b = Board(name=ws.name, has_spikes=bool(ws.spikes))
 
     ledger_slugs = set(by_slug)
     for u in ws.units:
@@ -1035,10 +1199,21 @@ def build_board(ws: Workstream) -> Board:
         elif u.status == "dropped":
             b.dropped.append(u.slug)
         elif u.status == "blocked":
-            b.blocked.append(_blocked_cell(u, ws, by_slug))
+            b.blocked.append(_blocked_cell(u, ws, by_slug, by_spike))
         else:  # building | in-review
             b.in_progress.append(
                 f"{u.slug}{_pr_seg(u)} · {u.tasks_done}/{u.tasks_total}")
+
+    for sp in ws.spikes:
+        cell = _spike_tag(sp.slug)
+        if sp.status == "complete":
+            b.done.append(f"{cell}{_spike_progress_seg(sp)}")
+        elif sp.status == "dropped":
+            b.dropped.append(cell)
+        elif sp.status == "blocked":
+            b.blocked.append(_spike_blocked_cell(sp, ws, by_slug, by_spike))
+        else:
+            b.in_progress.append(f"{cell}{_spike_progress_seg(sp)}")
 
     # Planned units with no ledger line yet: blocked vs not-started.
     for p in ws.planned:
@@ -1052,11 +1227,14 @@ def build_board(ws: Workstream) -> Board:
 
     b.has_blocked = bool(b.blocked)
 
-    # Header counts track the whole board: merged vs every board unit.
     planned_only = [p for p in ws.planned if p.slug not in ledger_slugs]
+    non_dropped_spikes = [s for s in ws.spikes if s.status != "dropped"]
     b.merged_count = len(b.done)
-    b.total_count = len([u for u in ws.units if u.status != "dropped"]) \
+    b.total_count = (
+        len([u for u in ws.units if u.status != "dropped"])
+        + len(non_dropped_spikes)
         + len(planned_only)
+    )
 
     # Backlog: open in-flight F<n> + open workstream WF<n>. A follow-up a
     # live unit claims is that unit's row, not a backlog line.
@@ -1079,18 +1257,22 @@ def build_board(ws: Workstream) -> Board:
 
 
 def _blocked_cell(u: Unit, ws: Workstream,
-                  by_slug: Dict[str, Unit]) -> str:
-    parts = []
-    for n in unit_needs(u, ws):
-        satisfied, note = need_state(n.target, ws, by_slug)
-        if satisfied:
-            continue
-        label = _slug_of(n.target)
-        if note:
-            label += f" ({note})"
-        parts.append(label)
+                  by_slug: Dict[str, Unit],
+                  by_spike: Optional[Dict[str, Spike]] = None) -> str:
+    if by_spike is None:
+        by_spike = _by_spike(ws)
+    pairs = unmet_needs(u, ws, by_slug, by_spike)
+    parts = [_blocked_need_label(t, n, by_spike) for t, n in pairs]
     cell = f"{u.slug} · needs {', '.join(parts)}"
     return cell + _pr_seg(u)
+
+
+def _spike_blocked_cell(sp: Spike, ws: Workstream,
+                        by_slug: Dict[str, Unit],
+                        by_spike: Dict[str, Spike]) -> str:
+    pairs = _spike_unmet_needs(sp, ws, by_slug, by_spike)
+    parts = [_blocked_need_label(t, n, by_spike) for t, n in pairs]
+    return f"{_spike_tag(sp.slug)} · needs {', '.join(parts)}"
 
 
 def _planned_blocked_cell(p: PlannedUnit,
@@ -1105,9 +1287,12 @@ def _planned_blocked_cell(p: PlannedUnit,
 
 
 def workstream_done(ws: Workstream, by_slug: Dict[str, Unit]) -> bool:
-    """SPEC "Workstream done": no active unit and no open backlog work."""
-    active = {"building", "blocked", "in-review"}
-    if any(u.status in active for u in ws.units):
+    """SPEC "Workstream done": no active unit/spike and no open backlog."""
+    active_units = {"building", "blocked", "in-review"}
+    if any(u.status in active_units for u in ws.units):
+        return False
+    active_spikes = {"researching", "blocked"}
+    if any(sp.status in active_spikes for sp in ws.spikes):
         return False
     ledger_slugs = set(by_slug)
     if any(p.slug not in ledger_slugs for p in ws.planned):
@@ -1141,14 +1326,50 @@ def recorded_base(u: Unit) -> Optional[str]:
 
 
 def unmet_needs(u: Unit, ws: Workstream,
-                by_slug: Dict[str, Unit]) -> List[Tuple[str, str]]:
+                by_slug: Dict[str, Unit],
+                by_spike: Optional[Dict[str, Spike]] = None
+                ) -> List[Tuple[str, str]]:
     """(target, note) for each of the unit's needs that isn't satisfied."""
+    return _unmet_need_pairs(unit_needs(u, ws), ws, by_slug, by_spike)
+
+
+def _spike_unmet_needs(sp: Spike, ws: Workstream,
+                       by_slug: Dict[str, Unit],
+                       by_spike: Dict[str, Spike]) -> List[Tuple[str, str]]:
+    return _unmet_need_pairs(spike_needs(sp), ws, by_slug, by_spike)
+
+
+def _unmet_need_pairs(needs: List[Need], ws: Workstream,
+                      by_slug: Dict[str, Unit],
+                      by_spike: Optional[Dict[str, Spike]]) -> List[Tuple[str, str]]:
     out = []
-    for n in unit_needs(u, ws):
-        satisfied, note = need_state(n.target, ws, by_slug)
+    for n in needs:
+        satisfied, note = need_state(n.target, ws, by_slug, by_spike)
         if not satisfied:
             out.append((n.target, note))
     return out
+
+
+def _blocked_need_label(target: str, note: str,
+                        by_spike: Dict[str, Spike]) -> str:
+    lab = (_fu_key(target) if _is_followup_target(target)
+           else _slug_of(target))
+    if note:
+        lab += f" ({note})"
+    elif lab in by_spike:
+        lab += " [spike]"
+    return lab
+
+
+def _spike_readiness(sp: Spike) -> Optional[str]:
+    if sp.spike_complete:
+        return None
+    if sp.tasks_total:
+        left = sp.tasks_total - sp.tasks_done
+        return f"{left} of {sp.tasks_total} tasks left"
+    if _spike_has_plan_line(sp) and not _spike_has_execute_mode(sp):
+        return "plan-pause (store incomplete)"
+    return "no tasks planned yet"
 
 
 def _drifted(u: Unit) -> bool:
@@ -1181,6 +1402,25 @@ def _dependents(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> int:
         if v.slug == u.slug:
             continue
         if any(_slug_of(t) == u.slug for t, _note in unmet_needs(v, ws, by_slug)):
+            n += 1
+    return n
+
+
+def _spike_dependents(sp: Spike, ws: Workstream,
+                      by_slug: Dict[str, Unit],
+                      by_spike: Dict[str, Spike]) -> int:
+    n = 0
+    for v in ws.units:
+        if v.status != "blocked":
+            continue
+        if any(_slug_of(t) == sp.slug
+               for t, _note in unmet_needs(v, ws, by_slug, by_spike)):
+            n += 1
+    for s in ws.spikes:
+        if s.slug == sp.slug or s.status != "blocked":
+            continue
+        if any(_slug_of(t) == sp.slug
+               for t, _note in _spike_unmet_needs(s, ws, by_slug, by_spike)):
             n += 1
     return n
 
@@ -1218,10 +1458,11 @@ def enumerate_moves(ws: Workstream,
                     by_slug: Dict[str, Unit],
                     overlay: Optional[Dict[str, ReconcileOverlay]] = None
                     ) -> List[Move]:
-    """Every move runnable right now, ranked: at most one per unit,
+    """Every move runnable right now, ranked: at most one per unit/spike,
     ordered by rule priority, then dependents (critical path first),
     then source order. moves[0] is the router's default."""
     ranked: List[Tuple[Tuple[int, int, int], Move]] = []
+    by_spike = _by_spike(ws)
 
     for i, u in enumerate(ws.units):
         if u.status in ("merged", "dropped"):
@@ -1258,6 +1499,18 @@ def enumerate_moves(ws: Workstream,
             ranked.append(((_RULE_RANK["resume"], deps, i),
                            Move(u.slug, "resume", f"ws-resume {u.slug}",
                                 u.branch or None, why)))
+
+    base = len(ws.units)
+    for j, sp in enumerate(ws.spikes):
+        if sp.status in ("complete", "dropped"):
+            continue
+        if sp.status == "blocked":
+            continue
+        deps = -_spike_dependents(sp, ws, by_slug, by_spike)
+        why = _spike_readiness(sp) or "no tasks planned yet"
+        ranked.append(((_RULE_RANK["resume"], deps, base + j),
+                       Move(sp.slug, "resume", f"ws-resume {sp.slug}",
+                            None, why)))
 
     ranked.sort(key=lambda pair: pair[0])
     return [m for _key, m in ranked]
@@ -1429,6 +1682,11 @@ def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit],
     """What the store already covers, so a proposal can skip it. Dropped
     units count — the drop was a decision (SPEC)."""
     out = [_covered_entry(u, ws.units, by_slug, overlay) for u in ws.units]
+    for sp in ws.spikes:
+        if sp.status not in ("complete", "dropped"):
+            continue
+        base = f"{sp.slug} — {sp.title} (spike)" if sp.title else f"{sp.slug} (spike)"
+        out.append(base)
     out += [f"{p.slug} — {_gist(p.what)} (planned)" for p in ws.planned
             if p.slug not in by_slug]
     return out
@@ -1463,6 +1721,7 @@ def decide_next(ws: Workstream,
     Blocked units are never resumed — the router advances their blocker."""
     derive_status(ws)
     by_slug = {u.slug: u for u in ws.units}
+    by_spike = _by_spike(ws)
     candidates = _reconcile_candidates(overlay)
 
     def _stackable_for(attach: bool, design: str) -> Optional[List[StackBase]]:
@@ -1474,16 +1733,15 @@ def decide_next(ws: Workstream,
     for u in ws.units:
         if u.status != "blocked":
             continue
-        labels = []
-        for target, note in unmet_needs(u, ws, by_slug):
-            # `_slug_of` would reduce `<ws>:<unit>:F1` to a bare `F1`,
-            # which names nothing.
-            lab = (_fu_key(target) if _is_followup_target(target)
-                   else _slug_of(target))
-            if note:
-                lab += f" ({note})"
-            labels.append(lab)
+        labels = [_blocked_need_label(t, n, by_spike)
+                  for t, n in unmet_needs(u, ws, by_slug, by_spike)]
         blocked_lines.append(f"{u.slug} — needs {', '.join(labels)}")
+    for sp in ws.spikes:
+        if sp.status != "blocked":
+            continue
+        labels = [_blocked_need_label(t, n, by_spike)
+                  for t, n in _spike_unmet_needs(sp, ws, by_slug, by_spike)]
+        blocked_lines.append(f"{sp.slug} [spike] — needs {', '.join(labels)}")
 
     # Code-complete ready PRs emit no move; surface them so
     # a no-move workstream does not claim "done" while

@@ -197,5 +197,33 @@ class PhaseCliMergedTests(unittest.TestCase):
         self.assertEqual(S.resume_phase(a, w, by), "loop")
 
 
+class ResumeSpikePhaseCliTests(unittest.TestCase):
+    def test_generate_loop_for_partial_spike(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            from test_ws_board import spike_ledger, write_ws  # noqa: E402
+
+            write_ws(
+                store,
+                "2026-01-01-demo",
+                spikes_md=spike_ledger('audit  "Audit"  repo=o/r'),
+                spikes={
+                    "audit": {
+                        "progress": "## Tasks\n- [x] T1  a\n- [ ] T2  b\n",
+                        "log": (
+                            "# log\n"
+                            "- 2026-01-01T00:00Z  plan  /tmp/plan.md\n"
+                            "- 2026-01-01T00:01Z  decision  "
+                            "execute-mode=subagent-driven\n"
+                        ),
+                    },
+                },
+            )
+            self.assertEqual(
+                P.generate(store, "2026-01-01-demo", "audit", {}, kind="spike"),
+                "loop",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
