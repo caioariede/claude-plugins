@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.32.4 · August 2026</p>
+    <p class="version">Version 0.33.0 · August 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -458,6 +458,7 @@
       <li class="toc-sub"><a href="#spec-watch">Spec-watch</a></li>
       <li class="toc-sub"><a href="#superpowers-flavor">Using with Superpowers</a></li>
       <li class="toc-sub"><a href="#prewalk-flavor">Prewalk (superpowers-prewalk)</a></li>
+      <li class="toc-sub"><a href="#critic-flavor">Critic (review/ws-critic)</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
     </ol>
@@ -474,6 +475,7 @@
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
     log.md               # APPEND-ONLY: created, dropped, restack, decision, note
     prewalk.md           # optional: read-only exploration digest (superpowers-prewalk)
+    critic.md            # optional: post-complete review (review/ws-critic)
   spikes/&lt;slug&gt;/
     charter.md           # STATIC: what to investigate
     progress.md          # MUTABLE: Tasks + Needs only (no Follow-ups)
@@ -574,7 +576,7 @@ Creates a spike sibling to units: appends <code>spikes.md</code>, seeds <code>sp
 <div class="cmd-head" id="cmd-ws-resume"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id|spike-id]</span></div>
 <p class="cmd-when"><b>Use when</b> resuming or continuing an existing unit or spike, or picking work back up from inside its worktree (units only).</p>
 <div class="cmd-body">
-Dispatches by kind after resolving the bare slug against both ledgers. <b>Units:</b> with no argument, infers from the current worktree's branch; ensures the worktree exists, reconciles base drift, then plans/executes/ships via flavor ops. When <code>spec-driven-development=superpowers-prewalk</code>, unit phases run <code>plan</code> → <code>ws-prewalk</code> → hard stop → <code>plan-pause</code> → <code>loop</code> — see <a href="#prewalk-flavor">Prewalk</a>. Pass <code>--skip-prewalk</code> to bypass prewalk once. <code>/ws-resume</code> must run in the parent session, not a subagent. <b>Spikes:</b> always need an explicit id; store-scoped research loop — no worktree, no ship phase — plan tasks, work in <code>artifacts/</code>, amend the umbrella design spec on the final task, then route via <code>ws-next</code> when spike-complete. Spikes skip prewalk.
+Dispatches by kind after resolving the bare slug against both ledgers. <b>Units:</b> with no argument, infers from the current worktree's branch; ensures the worktree exists, reconciles base drift, then plans/executes/ships via flavor ops. When <code>spec-driven-development=superpowers-prewalk</code>, unit phases run <code>plan</code> → <code>ws-prewalk</code> → hard stop → <code>plan-pause</code> → <code>loop</code> — see <a href="#prewalk-flavor">Prewalk</a>. When <code>review=ws-critic</code>, completed units run a fresh read-only review between <code>loop</code> and <code>ship-pause</code> — see <a href="#critic-flavor">Critic</a>. Pass <code>--skip-prewalk</code> or <code>--skip-critic</code> to bypass those phases once. <code>/ws-resume</code> must run in the parent session, not a subagent. <b>Spikes:</b> always need an explicit id; store-scoped research loop — no worktree, no ship phase — plan tasks, work in <code>artifacts/</code>, amend the umbrella design spec on the final task, then route via <code>ws-next</code> when spike-complete. Spikes skip prewalk and critic.
 </div>
 <pre class="cmd-ex">$ /ws-resume add-is-template-flag
 $ /ws-resume audit-auth-flows</pre>
@@ -789,6 +791,54 @@ $ /ws-config set-config frontier-model.cursor &lt;your-frontier-model&gt;</pre>
 <p><b>What is prewalk-config?</b> A config gate before exploration when <code>agent</code> or <code>cheap-model.&lt;agent&gt;</code> is missing. <code>ws-resume</code> stops with <code>required:</code> lines — run <code>set-config</code>, then resume. Not a durable store phase.</p>
 </details>
 </section>
+<section id="critic-flavor">
+<h3>Critic (review/ws-critic)</h3>
+<p>The <code>ws-critic</code> review flavor adds a fresh-context,
+read-only adversarial review after every unit is code-complete and
+before <code>ship-pause</code>. It checks the charter, design,
+implementation plan, complete branch diff, surrounding code, and
+tests.</p>
+<p><b>Enable it.</b> Run
+<code>/ws-config set review ws-critic</code>. The default is
+<code>review=off</code>, and the setting is independent of the
+spec-driven-development flavor.</p>
+<div class="flow-wrap">
+<p><b>Unit resume flow</b> when critic is enabled:</p>
+<div class="flow">
+  <span class="flow-step">loop</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">critic</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">ship-pause</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">draft-pr</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">done</span>
+</div>
+</div>
+<p><b>Advisory by design.</b> The reviewer reports Critical,
+Important, and Minor findings plus a verdict. A <code>NOT READY</code>
+verdict is shown at <code>ship-pause</code>; it does not remove the
+user's ability to fix, skip, or ship.</p>
+<p><b>Artifacts and reruns.</b>
+<code>units/&lt;slug&gt;/critic.md</code> stores the report. The log
+binds the result to the current diff with
+<code>decision critic=done verdict=... digest=&lt;8-hex&gt;</code>.
+New commits cause a fresh review.</p>
+<p><b>Skip paths.</b> Use <code>--skip-critic</code> for one resume.
+Headless runs and units grandfathered before activation skip it.
+Critic applies to units, not store-only spikes.</p>
+<details>
+<summary><b>Critic FAQ</b></summary>
+<p><b>Does critic replace Superpowers review?</b> No. It is additive
+in v1 and runs after Superpowers' per-task and final reviews.</p>
+<p><b>What if no plan exists?</b> Critic reviews the charter, task
+checklist, diff, and tests, and records the missing plan context.</p>
+<p><b>Can I override it?</b> Yes. Set
+<code>review=off</code> or use <code>--skip-critic</code>.</p>
+<p><b>Do spikes run critic?</b> No. Spikes have no ship boundary.</p>
+</details>
+</section>
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>
 
@@ -803,7 +853,7 @@ $ /ws-config set-config frontier-model.cursor &lt;your-frontier-model&gt;</pre>
 <tr><td><code>ws-oneshot</code></td><td>Single-unit entry: <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> in one user-confirmed chain. Offer when scope reads one PR; never auto-run.</td></tr>
 <tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit. Refuses spike-reserved slugs.</td></tr>
 <tr><td><code>ws-spike</code></td><td>Start store-only research: spike ledger line, <code>spikes/&lt;slug&gt;/</code>, no worktree. Requires <code>design:</code>. Ends by amending the umbrella spec. Chain: <code>ws-resume &lt;spike-id&gt;</code>.</td></tr>
-<tr><td><code>ws-resume</code></td><td>Advance a unit or spike at any stage: plan, optional prewalk, execute loop, ship (units) or spec amend (spikes) — reopening a gone worktree and reconciling base drift as needed for units.</td></tr>
+<tr><td><code>ws-resume</code></td><td>Advance a unit or spike at any stage: plan, optional prewalk, execute loop, optional critic, ship (units) or spec amend (spikes) — reopening a gone worktree and reconciling base drift as needed for units.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Units and spikes on one kanban; spikes tagged <code>[spike]</code>. Read-only.</td></tr>
 <tr><td><code>ws-block</code></td><td>Add or remove needs on a unit or spike. Targets may be units, spikes, or follow-ups. An unmet need derives <code>blocked</code>.</td></tr>
 <tr><td><code>ws-backlog</code></td><td>Capture future work — routes a follow-up (<code>F&lt;n&gt;</code>/<code>WF&lt;n&gt;</code>) or a planned unit (dependency reservation) to its right home so nothing orphans.</td></tr>

@@ -45,7 +45,10 @@ SPEC_GLOB_RE = re.compile(r"[A-Za-z0-9_*?./\[\]-]+")
 SET_CONFIG_KEYS = frozenset({"agent"})
 SET_CONFIG_PREFIXES = ("cheap-model.", "frontier-model.",
                        "cheap-model-handoff.")
-INTERNAL_CONFIG_KEYS = frozenset({"superpowers-prewalk-activated-at"})
+INTERNAL_CONFIG_KEYS = frozenset({
+    "superpowers-prewalk-activated-at",
+    "ws-critic-activated-at",
+})
 
 
 class Fail(Exception):
@@ -316,6 +319,13 @@ def _maybe_record_prewalk_activation(store: Path, group: str,
         set_key(store, "config", "superpowers-prewalk-activated-at", ts)
 
 
+def _maybe_record_review_activation(store: Path, group: str,
+                                    flavor: str) -> None:
+    if group == "review" and flavor == "ws-critic":
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+        set_key(store, "config", "ws-critic-activated-at", ts)
+
+
 def cmd_set(store: Path, group: str, flavor: str) -> int:
     _require_group(group)
     known = C.known_flavors(store, group)
@@ -324,6 +334,7 @@ def cmd_set(store: Path, group: str, flavor: str) -> int:
                    + ", ".join(known))
     set_key(store, "active", group, flavor)
     _maybe_record_prewalk_activation(store, group, flavor)
+    _maybe_record_review_activation(store, group, flavor)
     print(f"[active] {group} = {flavor}")
     effective, eff_prov = C.active_flavor(store, group)
     if effective != flavor:

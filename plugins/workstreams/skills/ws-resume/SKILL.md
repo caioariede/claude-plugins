@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, ship a finished unit, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.14.1"
+  version: "0.15.0"
   author: Caio Ariede
 ---
 
@@ -65,7 +65,7 @@ If the line starts with `split` (open PR and commits ahead of recorded base whil
 7. Derive phase — do not infer planning or execute boundaries from `progress.md` alone:
 
 ```
-python3 <this-skill-dir>/scripts/phase.py [unit-id] [--skip-prewalk] [--headless] [--split-skip]
+python3 <this-skill-dir>/scripts/phase.py [unit-id] [--skip-prewalk] [--skip-critic] [--headless] [--split-skip]
 ```
 
 Pass `--split-skip` when step 5 reported `split …` (skips prewalk for that invocation). **Headless** sessions: pass `--headless` (phase falls through; append `decision prewalk=skipped reason=headless` when entering plan-pause from a skipped prewalk path).
@@ -75,6 +75,7 @@ Pass `--split-skip` when step 5 reported `split …` (skips prewalk for that inv
 | `plan` | **Plan only — no code, no tasks, no execute-mode.** Read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path via SPEC §Plan path (`<design-dir>/<bare-slug>-plan.md` — not the design-basename swap). If **that** path already exists and `log.md` lacks a `plan` line → append `plan` only, re-run phase.py, stop at `plan-pause`, `prewalk-config`, or `prewalk` when enabled. Else: fire `hook-ws-resume-unplanned-before` (interactive); run the flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**; plan-pause owns that gate); fire `hook-ws-resume-unplanned-after`. Append `plan <absolute-path>` to `log.md` when absent. Do **not** derive `T1..`, do **not** append `execute-mode`, do **not** touch source files. Re-run phase.py. **`none` flavor:** its `plan` op writes `T1..` inline and skips this gate. **Headless** (hooks skip): resolve plan path, run `plan` if no file yet, append `plan`, default `execute-mode=subagent-driven`, derive tasks, enter execute. |
 | `prewalk-config` | Prewalk is active but `[config]` is incomplete (`ws-config show` `required:` lines). Print each requirement; tell user to run `ws-config set-config …`, then re-run `/ws-resume`. **Hard stop** — no exploration until `agent` and `cheap-model.<agent>` are pinned. |
 | `prewalk` | When active flavor has `prewalk = on` (typically `superpowers-prewalk`): fire `hook-ws-resume-prewalk` (interactive); invoke the **ws-prewalk** skill — read-only exploration, write `units/<slug>/prewalk.md`, append `decision prewalk=done plan=<path> digest=<8-hex>`. **Hard stop** — print `format_cheap_handoff` from ws_cli (flavor handoff template + `[config]` cheap slug); user switches model and re-runs `/ws-resume`. No source edits. |
+| `critic` | When active review flavor is `ws-critic`: fire `hook-ws-resume-critic` (interactive); invoke **ws-critic** for a fresh, read-only adversarial review of the charter, design, plan, diff, and tests. The parent writes `critic.md` and `decision critic=done verdict=... digest=<8-hex>`. Advisory only; hard stop, then continue to `ship-pause`. |
 | `plan-pause` | **Step 0 (prewalk path):** when resuming after prewalk or when prewalk was skipped/grandfathered, remind user to use cheap model if not already switched (`ws-config show` cheap-model line). Then: when step 5 reported `split …`, print the **drift gate** (§Pause gates) first — before the execute picker. On drift pick **2**: run `backfill_external.py`, re-run phase.py, continue (may leave `plan-pause` or advance). On drift pick **3**: fall through to the execute picker. Then print the **plan-pause** block. On pick **1**, stop. On **2** / **3**: derive unchecked `T1..` into `progress.md`, append `decision execute-mode=subagent-driven` or `execute-mode=inline`, re-run phase.py, enter execute (below). On **4**: run `prepare_external.py`, stop — no flavor execute. Never pick an execute mode or start T1 without the user's choice. Colloquial proceed or named implement skills (`/go`, etc.) at plan-pause: re-show the picker; leaving to implement elsewhere requires pick **4** first or backfill on return. |
 | `loop` | Unless this invocation just cleared `plan-pause`, fire `hook-ws-resume-loop-before` once (superpowers). Run execute for the first unchecked task (below). Enter the execute loop (below). |
 | `ship-pause` | Print the **ship-pause** block (§Pause gates). On **2**, run ship flavor, re-run phase.py. If a `stacked-on` unit is not yet merged (per the active `forge` flavor's `pr-status`), surface it and let the user decide. On **3**, chain to `ws-next`. |
@@ -136,7 +137,8 @@ How do you want to execute?
 
 Pick **4** → `python3 <this-skill-dir>/scripts/prepare_external.py [unit-id]`; print its line; stop.
 
-**ship-pause** — summarize unit state, then print:
+**ship-pause** — summarize unit state, include the latest
+critic verdict and `critic.md` path when present, then print:
 
 ```
 How do you want to proceed?

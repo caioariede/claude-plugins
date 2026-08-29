@@ -79,6 +79,32 @@ class HelperTest(unittest.TestCase):
             self.assertEqual(wt[0], "git-worktree")
             self.assertIn("wmx", wt)
 
+    def test_review_group_bundled(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            self.assertIn("review", C.CORE_OPS)
+            self.assertEqual(C.GROUP_DEFAULTS["review"], "off")
+            flavors = C.known_flavors(store, "review")
+            self.assertIn("off", flavors)
+            self.assertIn("ws-critic", flavors)
+
+    def test_review_enabled_when_ws_critic_active(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nreview = ws-critic\n", "utf-8")
+            self.assertTrue(C.review_enabled(store))
+
+    def test_review_activation_timestamp_is_written(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            CFG.cmd_set(store, "review", "ws-critic")
+            first = C.config_value(store, "ws-critic-activated-at")
+            self.assertRegex(first, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$")
+            CFG.cmd_set(store, "review", "ws-critic")
+            self.assertEqual(C.config_value(store, "ws-critic-activated-at"),
+                             first)
+
     def test_flavor_ops_has_no_default_fallback(self):
         with tempfile.TemporaryDirectory() as td:
             store = store_at(td)

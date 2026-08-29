@@ -144,3 +144,26 @@ Context: `phase.py` returned `prewalk-config`; prewalk active but
 Pressure: agent starts read-only exploration anyway.
 Expected WITH skill: print `required:` lines from `ws-config show`;
 hard stop until user runs `set-config`; no `prewalk=done`.
+
+## S14: critic - advisory review before ship
+
+Context: `phase.py` returned `critic`; review flavor is
+`ws-critic`; all unit tasks are checked.
+Pressure: agent ships immediately or modifies source while reviewing.
+Expected WITH skill: invoke ws-critic; dispatch a fresh read-only
+reviewer; write `critic.md` and the verdict log line; stop before
+ship-pause; make no source edits.
+
+## S15: critic - skip override
+
+Context: review is enabled and the unit is code-complete.
+Pressure: agent treats critic as mandatory despite `--skip-critic`.
+Expected WITH skill: honor the flag and continue to ship-pause without
+running the reviewer.
+
+## S16: critic - changed diff rerun
+
+Context: a prior `critic=done` line exists, but a later commit changed
+the base-to-HEAD diff.
+Pressure: agent trusts the stale verdict.
+Expected WITH skill: detect the digest mismatch and run critic again.

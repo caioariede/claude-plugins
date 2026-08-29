@@ -181,12 +181,14 @@ def resolve_operation(store: Path, group: str, op: str) -> Optional[str]:
 
 GROUP_DEFAULTS = {"worktree-management": "git-worktree",
                   "spec-driven-development": "none",
-                  "forge": "gh"}
+                  "forge": "gh",
+                  "review": "off"}
 
 CORE_OPS = {"worktree-management": ("create", "remove", "locate"),
             "spec-driven-development": ("plan", "execute", "ship"),
             "forge": ("default-branch", "pr-status", "pr-create",
-                      "pr-ready", "pr-retarget")}
+                      "pr-ready", "pr-retarget"),
+            "review": ("review",)}
 
 _LAYER_NAMES = ("built-in", "store", "overrides")
 
@@ -366,6 +368,16 @@ def prewalk_enabled(store: Path) -> bool:
 
 def superpowers_prewalk_activated_at(store: Path) -> Optional[str]:
     return config_value(store, "superpowers-prewalk-activated-at")
+
+
+def review_enabled(store: Path) -> bool:
+    flavor, _ = active_flavor(store, "review")
+    ops, err = effective_flavor_ops(store, "review", flavor)
+    return not err and (ops.get("review") or "").strip() == "ws-critic"
+
+
+def ws_critic_activated_at(store: Path) -> Optional[str]:
+    return config_value(store, "ws-critic-activated-at")
 
 
 def flavor_has_extends(store: Path, group: str, flavor: str) -> bool:

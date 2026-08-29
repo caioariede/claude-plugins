@@ -1095,6 +1095,25 @@ def _has_valid_prewalk_done(u: Unit, plan_path: str,
     return False
 
 
+def _has_critic_skipped(u: Unit, reason: str) -> bool:
+    needle = f"critic=skipped reason={reason}"
+    return any(
+        kind == "decision" and needle in payload
+        for _ts, kind, payload in u.log
+    )
+
+
+def _has_valid_critic_done(u: Unit, digest: Optional[str]) -> bool:
+    if not digest:
+        return False
+    for _ts, kind, payload in reversed(u.log):
+        if kind != "decision" or not payload.startswith("critic=done"):
+            continue
+        if f"digest={digest}" in payload:
+            return True
+    return False
+
+
 def _pending_prewalk_phase(u: Unit, plan_path: Optional[str],
                            digest: Optional[str], *,
                            models_ready: bool) -> Optional[str]:
@@ -1108,6 +1127,18 @@ def _pending_prewalk_phase(u: Unit, plan_path: Optional[str],
             or _has_prewalk_skipped(u, "split")):
         return None
     return "prewalk-config" if not models_ready else "prewalk"
+
+
+def _pending_critic_phase(u: Unit, digest: Optional[str]) -> Optional[str]:
+    if not digest:
+        return None
+    if _has_valid_critic_done(u, digest):
+        return None
+    if (_has_critic_skipped(u, "headless")
+            or _has_critic_skipped(u, "grandfather")
+            or _has_critic_skipped(u, "flag")):
+        return None
+    return "critic"
 
 
 def _should_grandfather_prewalk(u: Unit, activated_at: Optional[str]) -> bool:
@@ -1126,7 +1157,11 @@ def resume_phase(u: Unit, ws: Workstream,
                  headless: bool = False,
                  split_skip: bool = False,
                  grandfather: bool = False,
-                 models_ready: bool = True) -> str:
+                 models_ready: bool = True,
+                 review_enabled: bool = False,
+                 skip_critic: bool = False,
+                 grandfather_critic: bool = False,
+                 critic_digest: Optional[str] = None) -> str:
     """Phase for ws-resume loop control.
 
     First match: blocked > plan > prewalk-config > prewalk > plan-pause >
@@ -1156,6 +1191,11 @@ def resume_phase(u: Unit, ws: Workstream,
             return "loop"
     if not u.code_complete:
         return "loop"
+    if (review_enabled and not skip_critic and not headless
+            and not grandfather_critic):
+        critic = _pending_critic_phase(u, critic_digest)
+        if critic:
+            return critic
     if u.pr is None:
         return "ship-pause"
     if u.pr.is_draft:
@@ -1470,6 +1510,8 @@ def unit_readiness(u: Unit, *, phase: Optional[str] = None) -> Optional[str]:
         return "prewalk (exploring)"
     if phase == "prewalk-config":
         return "prewalk (config required)"
+    if phase == "critic":
+        return "critic (reviewing)"
     if u.code_complete:
         return None
     if u.tasks_total:
@@ -1481,7 +1523,7 @@ def unit_readiness(u: Unit, *, phase: Optional[str] = None) -> Optional[str]:
 
 
 def _readiness_for_phase(u: Unit, phase: str) -> Optional[str]:
-    if phase in ("prewalk", "prewalk-config"):
+    if phase in ("prewalk", "prewalk-config", "critic"):
         return unit_readiness(u, phase=phase) or phase
     if phase == "plan-pause":
         return unit_readiness(u)

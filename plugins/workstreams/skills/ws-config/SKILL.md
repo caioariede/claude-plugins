@@ -4,7 +4,7 @@ description: Use to view or change workstream flavors — which external tool ba
 argument-hint: "[show | set <group> <flavor> | set-config <key> <value> | add <group> <flavor> | set-overrides <path> | list [group]]"
 compatibility: requires python3
 metadata:
-  version: "0.7.1"
+  version: "0.7.2"
   author: Caio Ariede
 ---
 

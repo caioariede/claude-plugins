@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.23.1"
+  version: "0.24.0"
   author: Caio Ariede
 ---
 
@@ -24,6 +24,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
     progress.md          # MUTABLE current-state: Tasks + Follow-ups checklists (work-state SoT)
     log.md               # APPEND-ONLY: created, dropped, restack, decision, note, merged-via
     prewalk.md           # optional: exploration digest (superpowers-prewalk)
+    critic.md            # optional: post-complete review (review/ws-critic)
   spikes/<slug>/
     charter.md           # static: what to investigate; set at ws-spike, read by ws-resume
     progress.md          # MUTABLE: Tasks + Needs only (no Follow-ups)
@@ -366,6 +367,7 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 - `worktree-management` — `create` (worktree+branch `<branch>` off `<base>`) · `remove` (`<branch>`) · `locate` (worktree path for `<branch>`).
 - `spec-driven-development` — `plan` (charter+design → `T1..`) · `execute` (first unchecked task) · `ship` (open the PR) · `spec-glob` (optional — glob of this flavor's design-spec paths; powers Spec-watch below).
 - `forge` — `default-branch` · `pr-status` (number+draft/ready/merged+base for `<branch>`) · `pr-create` (`<branch>`→`<base>`) · `pr-ready` (`<pr>`) · `pr-retarget` (`<pr>`→`<new-base>`).
+- `review` — `review` (post-complete review implementation).
 
 **Files (INI), merged low→high precedence**
 1. built-in — `references/flavors.ini`, bundled with this `ws` skill
@@ -385,6 +387,9 @@ Reserved flavor keys: `extends`, `prewalk`, `cheap-model-handoff`, `cheap-model-
 **Availability (detection)** — judge **effective** merged ops (layers + `extends`). A flavor whose `extends` target is missing is stub/unavailable.
 
 **Flavor hooks** — optional `hook-<skill>-<event>` operations (e.g. `hook-ws-start-after`); each skill documents the events it fires. `ws-resume`: `unplanned-before` / `unplanned-after` around the plan op, `prewalk` when `prewalk = on`, `loop-before` once on in-progress units — headless fallback when hooks skip (see ws-resume). At an event, and **only in an interactive session** (never a subagent/headless run), the skill fires that hook from every **active** flavor — across all groups, in group order (`worktree-management`, `spec-driven-development`, `forge`) — that defines it. `<hook>.prompt` (a question; its presence makes the hook interactive) · `<hook>.choices.<name>` (an option's instruction; empty = skip) · `<hook>.choices.<name>.desc` (its picker description — label is `<name>`). **Modes:** no `.prompt` → run the base instruction unconditionally · `.prompt` without `.choices` → binary (Yes runs the base instruction, No skips) · `.prompt` with `.choices` → present the 2–4 options and run the chosen one (base ignored; a choices-mode hook may omit the base key entirely). Choices display in merged-key order — a key a later layer overrides keeps its built-in position — and the first choice is the preselected, safe one. A dismissed prompt skips. Base and `.choices` values resolve as any instruction (rule 4). An instruction naming a placeholder the firing skill has no value for — e.g. `<branch>` for a unit whose worktree does not exist yet — is **unfillable**: drop that choice, and drop the whole hook when the unfillable one is the base in a `.choices`-less mode or when fewer than two choices survive (falls back to the default offer, §Next-step chaining). `hook-`, `.prompt` and `.choices.` are reserved on operation keys, and an option `<name>` may not be `prompt`.
+
+The `review` group is evaluated after `forge` when active flavor hooks
+run. Its `hook-ws-resume-critic` hook invokes the post-complete review.
 
 **Spec-watch (runtime hook)** — when a written path matches the active `spec-driven-development` flavor's `spec-glob` and no workstream's `design:` claims that spec, the runtime injects a one-line nudge to offer `ws-init` with it as the design (naming a design-less workstream as the attach-instead alternative when one exists). Mechanics: the runtime wiring (`hooks/hooks.json`) saves PostToolUse stdin and runs `<store>/hooks/spec-watch-<flavor>.sh`, emitting the first non-empty stdout; the installed script is the runtime flag. `ws-config` reconciles it on every run from the bundled template (`hooks/spec-watch.sh`), baking in the flavor's `spec-glob`; a flavor without one gets no script for that watcher. Ownership matches the spec's basename against `design:` lines — spellings vary (`~`/absolute/symlink), dated filenames don't. Distinct from §Flavor hooks (those fire *from* `ws-*` skills; this fires when an upstream tool — e.g. superpowers brainstorming — writes a spec before any workstream exists). Suggestion only: no store write, and no command runs without the user.
 
