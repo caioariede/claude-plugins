@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.31.0 · August 2026</p>
+    <p class="version">Version 0.32.4 · August 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -457,6 +457,7 @@
       <li class="toc-sub"><a href="#flavor-hooks">Flavor hooks</a></li>
       <li class="toc-sub"><a href="#spec-watch">Spec-watch</a></li>
       <li class="toc-sub"><a href="#superpowers-flavor">Using with Superpowers</a></li>
+      <li class="toc-sub"><a href="#prewalk-flavor">Prewalk (superpowers-prewalk)</a></li>
       <li><a href="#cheatsheet">Cheat sheet</a></li>
       <li><a href="#faq">Gotchas &amp; FAQ</a></li>
     </ol>
@@ -472,6 +473,7 @@
     charter.md           # STATIC: why this unit exists — the north star
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
     log.md               # APPEND-ONLY: created, dropped, restack, decision, note
+    prewalk.md           # optional: read-only exploration digest (superpowers-prewalk)
   spikes/&lt;slug&gt;/
     charter.md           # STATIC: what to investigate
     progress.md          # MUTABLE: Tasks + Needs only (no Follow-ups)
@@ -530,7 +532,11 @@ npx skills update    # refresh installed skills later</pre>
 <h3>First run</h3>
 <p>Run <code>/ws-config</code> once after installing. It detects which tools you have — <code>wmx</code>, superpowers, <code>gh</code> — and offers to activate the matching flavors for any group you haven't set; accept and you're configured. It also flags an active flavor whose tool is missing. Defaults are <code>git-worktree</code> for worktree management, <code>gh</code> for the forge, and <code>none</code> for spec-driven development; change any of them later with <code>ws-config set</code> — see the <a href="#flavors">Flavors</a> section.</p>
 <pre class="cmd-ex">$ /ws-config
-$ /ws-config set spec-driven-development superpowers</pre>
+$ /ws-config set spec-driven-development superpowers
+$ /ws-config set spec-driven-development superpowers-prewalk
+$ /ws-config set-config agent cursor
+$ /ws-config set-config cheap-model.cursor &lt;your-cheap-model&gt;
+$ /ws-config set-config frontier-model.cursor &lt;your-frontier-model&gt;</pre>
 </section>
 <section id="commands"><h2>The workflow commands</h2>
 <p class="lead">The workflow commands cover the full life of a unit of work — from spinning up a container to tearing a branch down, plus deciding what's next and configuring flavors — while every durable fact lives in the global store, never in a worktree.</p>
@@ -565,10 +571,10 @@ Creates a spike sibling to units: appends <code>spikes.md</code>, seeds <code>sp
 </div>
 
 <div class="cmd">
-<div class="cmd-head"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id|spike-id]</span></div>
+<div class="cmd-head" id="cmd-ws-resume"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id|spike-id]</span></div>
 <p class="cmd-when"><b>Use when</b> resuming or continuing an existing unit or spike, or picking work back up from inside its worktree (units only).</p>
 <div class="cmd-body">
-Dispatches by kind after resolving the bare slug against both ledgers. <b>Units:</b> with no argument, infers from the current worktree's branch; ensures the worktree exists, reconciles base drift, then plans/executes/ships via flavor ops. <b>Spikes:</b> always need an explicit id; store-scoped research loop — no worktree, no ship phase — plan tasks, work in <code>artifacts/</code>, amend the umbrella design spec on the final task, then route via <code>ws-next</code> when spike-complete.
+Dispatches by kind after resolving the bare slug against both ledgers. <b>Units:</b> with no argument, infers from the current worktree's branch; ensures the worktree exists, reconciles base drift, then plans/executes/ships via flavor ops. When <code>spec-driven-development=superpowers-prewalk</code>, unit phases run <code>plan</code> → <code>ws-prewalk</code> → hard stop → <code>plan-pause</code> → <code>loop</code> — see <a href="#prewalk-flavor">Prewalk</a>. Pass <code>--skip-prewalk</code> to bypass prewalk once. <code>/ws-resume</code> must run in the parent session, not a subagent. <b>Spikes:</b> always need an explicit id; store-scoped research loop — no worktree, no ship phase — plan tasks, work in <code>artifacts/</code>, amend the umbrella design spec on the final task, then route via <code>ws-next</code> when spike-complete. Spikes skip prewalk.
 </div>
 <pre class="cmd-ex">$ /ws-resume add-is-template-flag
 $ /ws-resume audit-auth-flows</pre>
@@ -740,10 +746,48 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <li><b>Brainstorm the spec.</b> Run the Superpowers <code>brainstorming</code> skill as usual to produce the design doc.</li>
 <li><b>Pick an entry path at spec time.</b> Accept the <a href="#spec-watch">spec-watch</a> nudge and run <code>ws-init</code> — then <code>ws-focus</code> and split with <code>ws-start</code>. Single-unit scope may use <code>ws-oneshot</code> (init + start + resume in one confirmed chain) instead of focus + manual start.</li>
 <li><b>Multi-unit: split the spec into units</b> with <code>ws-start</code>, one slice at a time — each unit's <code>charter.md</code> captures that slice's intent against the shared design.</li>
-<li><b>Let each unit plan itself.</b> First <code>ws-resume</code> on an unplanned unit runs <code>writing-plans</code> (plan saved as <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code>). At <b>plan-pause</b> pick Subagent-driven, Inline, or <b>Execute outside ws-resume</b> (option 4) before tasks land in <code>progress.md</code>. If you implement elsewhere without that pick, return to <code>ws-resume</code> — drift detection offers confirm-only backfill when an open PR is ahead of the store. Later runs print orientation (goal, progress, plan path) then continue executing.</li>
+<li><b>Let each unit plan itself.</b> First <code>ws-resume</code> on an unplanned unit runs <code>writing-plans</code> (plan saved as <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code>).</li>
+<li><b>4a (optional). Prewalk before execute.</b> When <code>spec-driven-development=superpowers-prewalk</code>, the next <code>ws-resume</code> runs read-only codebase exploration, writes <code>prewalk.md</code>, then stops for a model switch before cheaper execution. See <a href="#prewalk-flavor">Prewalk</a>.</li>
+<li><b>Pick execute mode at plan-pause.</b> At <b>plan-pause</b> pick Subagent-driven, Inline, or <b>Execute outside ws-resume</b> (option 4) before tasks land in <code>progress.md</code>. If you implement elsewhere without that pick, return to <code>ws-resume</code> — drift detection offers confirm-only backfill when an open PR is ahead of the store. Later runs print orientation (goal, progress, plan path) then continue executing.</li>
 </ol>
 <aside class="note note-rule"><b>Planning lives in units.</b> After the spec, go <code>ws-init</code> → <code>ws-focus</code> → <code>ws-start</code>. <code>writing-plans</code> is deferred into each unit's <code>ws-resume</code>. <b>Oneshot:</b> <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> — one workstream, one unit, one confirmed chain.</aside>
 <aside class="note note-tip"><b>Plan path.</b> Unit plans live at <code>&lt;design-dir&gt;/&lt;slug&gt;-plan.md</code> next to the workstream design spec — not in <code>docs/superpowers/plans/</code>. The store records the path in <code>log.md</code> as <code>plan &lt;absolute-path&gt;</code>.</aside>
+
+<h3 id="prewalk-flavor">Prewalk (superpowers-prewalk)</h3>
+<p>The <code>superpowers-prewalk</code> flavor extends <code>superpowers</code> with optional prewalk. It complements <a href="#superpowers-flavor">Superpowers</a> — it does not replace <code>writing-plans</code>. After a unit plan is written, <code>ws-resume</code> invokes the <code>ws-prewalk</code> skill for read-only codebase exploration; the parent session writes store artifacts and log lines. No source edits happen during prewalk.</p>
+<p><b>Why use it.</b> <b>Cost reduction:</b> front-load exploration on a frontier model, then switch to <code>cheap-model</code> for plan-pause and the implementation loop — the expensive model covers planning and read-only discovery once; bulk execution runs cheaper. <b>Better execution context:</b> <code>prewalk.md</code> gives the cheap model file paths, patterns, and constraints up front, so loop turns spend fewer tokens re-exploring.</p>
+<p><b>When to enable.</b> Large or unfamiliar codepaths where upfront exploration pays off and you want most turns on a cheaper model. Activate with <code>ws-config set spec-driven-development superpowers-prewalk</code>, pin <code>agent</code>, and set <code>cheap-model.&lt;agent&gt;</code> via <code>set-config</code> (required). Optionally set <code>frontier-model.&lt;agent&gt;</code> for your planning model — no bundled defaults. Run <code>/ws-config</code> to see <code>required:</code> and <code>recommended:</code> lines until config is complete. Skip on spikes, in headless runs, when split/drift evidence applies, or for grandfathered plans (a plan written before prewalk was activated).</p>
+<div class="flow-wrap">
+<p><b>Unit resume flow</b> when prewalk is enabled:</p>
+<div class="flow">
+  <span class="flow-step">plan</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step flow-plain">prewalk-config</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">prewalk</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step flow-plain">hard stop</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">plan-pause</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">loop</span>
+</div>
+<p><code>prewalk-config</code> runs only when <code>agent</code> or <code>cheap-model.&lt;agent&gt;</code> is unset — <code>ws-resume</code> stops and prints <code>required:</code> lines from <code>ws-config show</code>; no exploration until you <code>set-config</code> and re-run.</p>
+</div>
+<pre class="cmd-ex">$ /ws-config set spec-driven-development superpowers-prewalk
+$ /ws-config set-config agent cursor
+$ /ws-config set-config cheap-model.cursor &lt;your-cheap-model&gt;
+$ /ws-config set-config frontier-model.cursor &lt;your-frontier-model&gt;</pre>
+<p><b>Model handoff.</b> After prewalk completes, <code>ws-resume</code> stops. Run <code>/model &lt;cheap-model&gt;</code>, then <code>/ws-resume &lt;unit&gt;</code> again. Plan-pause step 0 is the model-switch gate — not a separate durable phase.</p>
+<p><b>Artifacts and log.</b> <code>units/&lt;slug&gt;/prewalk.md</code> holds the exploration digest. The log records <code>decision prewalk=done plan=&lt;path&gt; digest=&lt;8-hex&gt;</code> — not prose.</p>
+<aside class="note note-tip"><b>Superpowers still plans.</b> <code>writing-plans</code> runs in the plan phase; prewalk runs only on the unit path, between plan completion and execute-mode selection. See <a href="#cmd-ws-resume">ws-resume</a>.</aside>
+<details>
+<summary><b>Prewalk FAQ</b></summary>
+<p><b>Prewalk vs superpowers?</b> Superpowers plans; prewalk explores after the plan.</p>
+<p><b>Why bother with the model switch?</b> Prewalk separates expensive read-only discovery from cheaper implementation — same unit, lower total cost when loop volume is high.</p>
+<p><b>Spikes?</b> Prewalk v1 is unit-only; spikes skip prewalk.</p>
+<p><b>What is prewalk-config?</b> A config gate before exploration when <code>agent</code> or <code>cheap-model.&lt;agent&gt;</code> is missing. <code>ws-resume</code> stops with <code>required:</code> lines — run <code>set-config</code>, then resume. Not a durable store phase.</p>
+</details>
 </section>
 <section id="cheatsheet">
 <h2>Cheat sheet</h2>
@@ -759,7 +803,7 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <tr><td><code>ws-oneshot</code></td><td>Single-unit entry: <code>ws-init</code> → <code>ws-start</code> → <code>ws-resume</code> in one user-confirmed chain. Offer when scope reads one PR; never auto-run.</td></tr>
 <tr><td><code>ws-start</code></td><td>Start a unit: its own worktree, branch, ledger line, and <code>progress.md</code>/<code>log.md</code>. The only thing that creates a unit. Refuses spike-reserved slugs.</td></tr>
 <tr><td><code>ws-spike</code></td><td>Start store-only research: spike ledger line, <code>spikes/&lt;slug&gt;/</code>, no worktree. Requires <code>design:</code>. Ends by amending the umbrella spec. Chain: <code>ws-resume &lt;spike-id&gt;</code>.</td></tr>
-<tr><td><code>ws-resume</code></td><td>Advance a unit or spike at any stage: plan, execute loop, ship (units) or spec amend (spikes) — reopening a gone worktree and reconciling base drift as needed for units.</td></tr>
+<tr><td><code>ws-resume</code></td><td>Advance a unit or spike at any stage: plan, optional prewalk, execute loop, ship (units) or spec amend (spikes) — reopening a gone worktree and reconciling base drift as needed for units.</td></tr>
 <tr><td><code>ws-board</code></td><td>Show or share where a workstream stands. Units and spikes on one kanban; spikes tagged <code>[spike]</code>. Read-only.</td></tr>
 <tr><td><code>ws-block</code></td><td>Add or remove needs on a unit or spike. Targets may be units, spikes, or follow-ups. An unmet need derives <code>blocked</code>.</td></tr>
 <tr><td><code>ws-backlog</code></td><td>Capture future work — routes a follow-up (<code>F&lt;n&gt;</code>/<code>WF&lt;n&gt;</code>) or a planned unit (dependency reservation) to its right home so nothing orphans.</td></tr>
@@ -781,7 +825,8 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 │   └── &lt;unit-id&gt;/
 │       ├── charter.md      # STATIC: why this unit exists (the north star)
 │       ├── progress.md     # MUTABLE work-state: Tasks + Follow-ups checklists
-│       └── log.md          # APPEND-ONLY: created · dropped · restack · decision · note
+│       ├── log.md          # APPEND-ONLY: created · dropped · restack · decision · note
+│       └── prewalk.md      # optional: exploration digest (superpowers-prewalk)
 └── spikes/
     └── &lt;slug&gt;/
         ├── charter.md      # STATIC: what to investigate
@@ -842,6 +887,14 @@ hook-ws-next-after.choices.window.desc = New window</pre>
 <tr>
 <td><b>Q:</b> I opened a per-unit window and it didn't auto-start the agent.</td>
 <td><b>A:</b> Windows are optional — run <code>ws-resume</code> in your current session, or launch <code>claude</code> in the window yourself. A window only autostarts the agent when your <code>worktree-management</code> flavor is configured to.</td>
+</tr>
+<tr>
+<td><b>Q:</b> What is prewalk and when should I enable it?</td>
+<td><b>A:</b> A <code>superpowers-prewalk</code> flavor (<code>extends = superpowers</code>) that runs read-only exploration after a unit plan — frontier model discovers context once, then a cheaper model runs the loop. Enable with <code>/ws-config set spec-driven-development superpowers-prewalk</code>, pin <code>agent</code> via <code>set-config</code>, set <code>cheap-model.&lt;agent&gt;</code> (required), and optionally <code>frontier-model.&lt;agent&gt;</code> (recommended). See <a href="#prewalk-flavor">Prewalk</a>. Spikes skip it.</td>
+</tr>
+<tr>
+<td><b>Q:</b> Why does ws-resume stop after prewalk?</td>
+<td><b>A:</b> Prewalk ends with a hard stop so you can <code>/model &lt;cheap-model&gt;</code> before plan-pause and the implementation loop — separating expensive discovery from cheaper execution.</td>
 </tr>
 <tr>
 <td><b>Q:</b> Can a workstream span multiple repos?</td>

@@ -110,20 +110,67 @@ def _layers(store: Path) -> List[configparser.ConfigParser]:
     return layers
 
 
-def resolve_operation(store: Path, group: str, op: str) -> Optional[str]:
-    """SPEC §Flavors resolution: the active flavor's op, merged per key
-    across layers, falling back to the group default flavor's op."""
-    layers = _layers(store)
-    flavor = active_flavor(store, group)[0]
-    for section in (f"{group}/{flavor}",
-                    f"{group}/{GROUP_DEFAULTS[group]}"):
-        instr = None
-        for cp in layers:
-            if cp.has_option(section, op):
-                instr = cp.get(section, op).strip()
-        if instr is not None:
-            return instr
+def _merge_inherited_ops(parent: Dict[str, str],
+                         child: Dict[str, str]) -> Dict[str, str]:
+    """Parent keys first; child overrides keep parent insertion order."""
+    out = dict(parent)
+    for k, v in child.items():
+        out[k] = v
+    return out
+
+
+def effective_flavor_ops(store: Path, group: str, flavor: str,
+                         _chain: Optional[frozenset] = None
+                         ) -> Tuple[Dict[str, str], Optional[str]]:
+    """Effective ops after layer merge and single-level ``extends``.
+
+    Returns ``(ops, error)``. ``error`` is a machine token when
+    inheritance is broken; ``ops`` is then child-only (fail closed).
+    """
+    if _chain is None:
+        _chain = frozenset()
+    if flavor in _chain:
+        return {}, "EXTENDS_CYCLE"
+    child = flavor_ops(store, group, flavor)
+    parent_name = (child.pop("extends", None) or "").strip()
+    if not parent_name:
+        return child, None
+    if parent_name == flavor:
+        return child, "EXTENDS_SELF"
+    if parent_name not in known_flavors(store, group):
+        return child, "EXTENDS_UNKNOWN"
+    parent_own = flavor_ops(store, group, parent_name)
+    if (parent_own.get("extends") or "").strip():
+        return child, "EXTENDS_TRANSITIVE"
+    parent_ops, parent_err = effective_flavor_ops(
+        store, group, parent_name, _chain | {flavor})
+    if parent_err:
+        return child, parent_err
+    return _merge_inherited_ops(parent_ops, child), None
+
+
+def _resolve_op_from_effective(store: Path, group: str, flavor: str,
+                               op: str) -> Optional[str]:
+    ops, err = effective_flavor_ops(store, group, flavor)
+    if err:
+        if op in ops:
+            return ops[op]
+        return None
+    if op in ops:
+        return ops[op]
+    default = GROUP_DEFAULTS[group]
+    if flavor != default:
+        dops, derr = effective_flavor_ops(store, group, default)
+        if not derr and op in dops:
+            return dops[op]
     return None
+
+
+def resolve_operation(store: Path, group: str, op: str) -> Optional[str]:
+    """SPEC §Flavors resolution: effective active flavor op, then group
+    default when inheritance is valid."""
+    flavor = active_flavor(store, group)[0]
+    return _resolve_op_from_effective(store, group, flavor, op)
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +257,119 @@ def flavor_deps(ops: Dict[str, str], group: str) -> List[Tuple[str, str]]:
 def overrides_path(store: Path) -> Optional[Path]:
     """The [config] overrides-file path from the store layer, or None."""
     return _overrides_from(_load_ini(store / "flavors.ini"))
+
+
+def config_value(store: Path, key: str) -> Optional[str]:
+    """Merged ``[config]`` value across store layers (not overrides file)."""
+    val = None
+    for cp in _layers(store)[1:2]:  # store layer only
+        if cp.has_option("config", key):
+            val = cp.get("config", key).strip()
+    return val or None
+
+
+def resolve_agent(store: Path) -> Optional[str]:
+    """Pinned agent id, or a runtime hint when unset."""
+    pinned = config_value(store, "agent")
+    if pinned:
+        return pinned
+    if os.environ.get("CURSOR_AGENT") or os.environ.get("CURSOR_TRACE_ID"):
+        return "cursor"
+    if os.environ.get("CLAUDE_CODE") or os.environ.get("CLAUDE_SESSION"):
+        return "claude"
+    return None
+
+
+def _model_key(prefix: str, agent: Optional[str]) -> str:
+    if agent:
+        return f"{prefix}.{agent}"
+    return prefix
+
+
+def flavor_model(store: Path, prefix: str,
+                 agent: Optional[str] = None) -> Optional[str]:
+    """Resolve model slug from ``[config]`` (``set-config``)."""
+    agent = agent or resolve_agent(store)
+    if agent:
+        v = config_value(store, f"{prefix}.{agent}")
+        if v:
+            return v
+    return config_value(store, prefix)
+
+
+def prewalk_model_requirements(store: Path) -> List[str]:
+    """Unset ``[config]`` keys required before prewalk (pinned agent only)."""
+    if not prewalk_enabled(store):
+        return []
+    pinned = config_value(store, "agent")
+    if not pinned:
+        return ["set-config agent <claude|cursor|codex>"]
+    if cheap_model(store, pinned):
+        return []
+    return [f"set-config cheap-model.{pinned} <slug>"]
+
+
+def prewalk_model_recommended(store: Path) -> List[str]:
+    """Optional ``[config]`` keys shown when unset (workflow convention)."""
+    if not prewalk_enabled(store):
+        return []
+    pinned = config_value(store, "agent")
+    if not pinned or frontier_model(store, pinned):
+        return []
+    return [f"set-config frontier-model.{pinned} <slug> (recommended)"]
+
+
+def prewalk_models_ready(store: Path) -> bool:
+    return not prewalk_model_requirements(store)
+
+
+def cheap_model(store: Path, agent: Optional[str] = None) -> Optional[str]:
+    return flavor_model(store, "cheap-model", agent)
+
+
+def frontier_model(store: Path, agent: Optional[str] = None) -> Optional[str]:
+    return flavor_model(store, "frontier-model", agent)
+
+
+def cheap_model_handoff(store: Path, agent: Optional[str] = None
+                        ) -> Optional[str]:
+    group = "spec-driven-development"
+    flavor, _ = active_flavor(store, group)
+    ops, err = effective_flavor_ops(store, group, flavor)
+    if err:
+        return None
+    agent = agent or resolve_agent(store)
+    key = _model_key("cheap-model-handoff", agent)
+    return (ops.get(key) or ops.get("cheap-model-handoff") or "").strip() or None
+
+
+def format_cheap_handoff(store: Path, agent: Optional[str] = None
+                         ) -> Optional[str]:
+    """Handoff template with ``{cheap}`` filled from ``[config]``."""
+    template = cheap_model_handoff(store, agent)
+    if not template:
+        return None
+    cheap = cheap_model(store, agent)
+    if not cheap:
+        return template
+    return template.replace("{cheap}", cheap)
+
+
+def prewalk_enabled(store: Path) -> bool:
+    group = "spec-driven-development"
+    flavor, _ = active_flavor(store, group)
+    ops, err = effective_flavor_ops(store, group, flavor)
+    if err:
+        return False
+    return (ops.get("prewalk") or "").strip().lower() == "on"
+
+
+def superpowers_prewalk_activated_at(store: Path) -> Optional[str]:
+    return config_value(store, "superpowers-prewalk-activated-at")
+
+
+def flavor_has_extends(store: Path, group: str, flavor: str) -> bool:
+    return bool((flavor_ops(store, group, flavor).get("extends") or "").strip())
 
 
 # ---------------------------------------------------------------------------

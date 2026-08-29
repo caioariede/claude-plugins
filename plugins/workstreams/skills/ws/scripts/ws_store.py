@@ -13,11 +13,12 @@ here so the rules live in one place, next to the SPEC.
 from __future__ import annotations
 
 import configparser
+import hashlib
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +455,14 @@ def plan_log_path(u: Unit) -> Optional[str]:
         if kind == "plan":
             return payload.strip()
     return None
+
+
+def latest_plan_log_path(u: Unit) -> Optional[str]:
+    path: Optional[str] = None
+    for _ts, kind, payload in u.log:
+        if kind == "plan":
+            path = payload.strip()
+    return path
 
 
 def store_split_eligible(u: Unit) -> bool:
@@ -1051,15 +1060,78 @@ def _has_execute_mode(u: Unit) -> bool:
     )
 
 
+def plan_file_digest(path: str) -> Optional[str]:
+    p = Path(path)
+    if not p.is_file():
+        return None
+    return hashlib.sha256(p.read_bytes()).hexdigest()[:8]
+
+
+def _first_plan_log_ts(u: Unit) -> Optional[str]:
+    for ts, kind, _payload in u.log:
+        if kind == "plan":
+            return ts
+    return None
+
+
+def _has_prewalk_skipped(u: Unit, reason: str) -> bool:
+    needle = f"prewalk=skipped reason={reason}"
+    return any(
+        kind == "decision" and needle in payload
+        for _ts, kind, payload in u.log
+    )
+
+
+def _has_valid_prewalk_done(u: Unit, plan_path: str,
+                            digest: str) -> bool:
+    for _ts, kind, payload in reversed(u.log):
+        if kind != "decision" or not payload.startswith("prewalk=done"):
+            continue
+        if f"plan={plan_path}" not in payload:
+            continue
+        if f"digest={digest}" not in payload:
+            continue
+        return True
+    return False
+
+
+def _pending_prewalk_phase(u: Unit, plan_path: Optional[str],
+                           digest: Optional[str], *,
+                           models_ready: bool) -> Optional[str]:
+    if not plan_path or not digest:
+        return None
+    if _has_valid_prewalk_done(u, plan_path, digest):
+        return None
+    if _has_prewalk_skipped(u, "headless"):
+        return None
+    if (_has_prewalk_skipped(u, "grandfather")
+            or _has_prewalk_skipped(u, "split")):
+        return None
+    return "prewalk-config" if not models_ready else "prewalk"
+
+
+def _should_grandfather_prewalk(u: Unit, activated_at: Optional[str]) -> bool:
+    if not activated_at:
+        return False
+    plan_ts = _first_plan_log_ts(u)
+    if not plan_ts:
+        return False
+    return plan_ts < activated_at
+
+
 def resume_phase(u: Unit, ws: Workstream,
-                 by_slug: Dict[str, Unit]) -> str:
+                 by_slug: Dict[str, Unit], *,
+                 prewalk_enabled: bool = False,
+                 skip_prewalk: bool = False,
+                 headless: bool = False,
+                 split_skip: bool = False,
+                 grandfather: bool = False,
+                 models_ready: bool = True) -> str:
     """Phase for ws-resume loop control.
 
-    First match: blocked > plan > plan-pause > loop > ship-pause >
-    draft-pr > done. Planning gates on a ``plan`` log line plus an
-    ``execute-mode`` decision — not on empty tasks alone. The ``none``
-    flavor may derive tasks without either; those units skip straight
-    to ``loop``.
+    First match: blocked > plan > prewalk-config > prewalk > plan-pause >
+    loop > ship-pause > draft-pr > done. Planning gates on a ``plan`` log
+    line plus an ``execute-mode`` decision — not on empty tasks alone.
     """
     if u.dropped or is_merged(u):
         return "done"
@@ -1068,6 +1140,15 @@ def resume_phase(u: Unit, ws: Workstream,
         return "blocked"
     if not _has_execute_mode(u):
         if _has_plan_line(u):
+            if (prewalk_enabled and not skip_prewalk and not headless
+                    and not split_skip and not grandfather):
+                plan_path = latest_plan_log_path(u)
+                digest = (plan_file_digest(plan_path)
+                          if plan_path else None)
+                prewalk = _pending_prewalk_phase(
+                    u, plan_path, digest, models_ready=models_ready)
+                if prewalk:
+                    return prewalk
             return "plan-pause"
         if u.tasks_total == 0:
             return "plan"
@@ -1186,7 +1267,8 @@ def _spike_progress_seg(sp: Spike) -> str:
     return f" · {sp.tasks_done}/{sp.tasks_total}"
 
 
-def build_board(ws: Workstream) -> Board:
+def build_board(ws: Workstream,
+                phase_for: Optional[Callable[[Unit], str]] = None) -> Board:
     derive_status(ws)
     by_slug = {u.slug: u for u in ws.units}
     by_spike = _by_spike(ws)
@@ -1201,8 +1283,9 @@ def build_board(ws: Workstream) -> Board:
         elif u.status == "blocked":
             b.blocked.append(_blocked_cell(u, ws, by_slug, by_spike))
         else:  # building | in-review
-            b.in_progress.append(
-                f"{u.slug}{_pr_seg(u)} · {u.tasks_done}/{u.tasks_total}")
+            ph = phase_for(u) if phase_for else None
+            suffix = unit_board_suffix(u, phase=ph)
+            b.in_progress.append(f"{u.slug}{_pr_seg(u)} · {suffix}")
 
     for sp in ws.spikes:
         cell = _spike_tag(sp.slug)
@@ -1381,8 +1464,12 @@ def _drifted(u: Unit) -> bool:
     return rb is not None and u.pr.base != rb
 
 
-def unit_readiness(u: Unit) -> Optional[str]:
+def unit_readiness(u: Unit, *, phase: Optional[str] = None) -> Optional[str]:
     """Stack-base display suffix; None when implicit base need satisfied."""
+    if phase == "prewalk":
+        return "prewalk (exploring)"
+    if phase == "prewalk-config":
+        return "prewalk (config required)"
     if u.code_complete:
         return None
     if u.tasks_total:
@@ -1391,6 +1478,38 @@ def unit_readiness(u: Unit) -> Optional[str]:
     if _has_plan_line(u) and not _has_execute_mode(u):
         return "plan-pause (store incomplete)"
     return "no tasks planned yet"
+
+
+def _readiness_for_phase(u: Unit, phase: str) -> Optional[str]:
+    if phase in ("prewalk", "prewalk-config"):
+        return unit_readiness(u, phase=phase) or phase
+    if phase == "plan-pause":
+        return unit_readiness(u)
+    return None
+
+
+def unit_board_suffix(u: Unit, *, phase: Optional[str] = None) -> str:
+    """In-progress column suffix for board display."""
+    if phase:
+        r = _readiness_for_phase(u, phase)
+        if r:
+            return r
+    if u.tasks_total:
+        return f"{u.tasks_done}/{u.tasks_total}"
+    return unit_readiness(u) or f"{u.tasks_done}/{u.tasks_total}"
+
+
+def _resume_move_why(u: Unit, *,
+                     phase_for: Optional[Callable[[Unit], str]] = None
+                     ) -> str:
+    if phase_for:
+        r = _readiness_for_phase(u, phase_for(u))
+        if r:
+            return r
+    if u.code_complete:
+        return (f"tasks done, PR #{u.pr.number}" if u.pr and u.pr.number
+                else "tasks done, PR open")
+    return unit_readiness(u) or "no tasks planned yet"
 
 
 def _dependents(u: Unit, ws: Workstream, by_slug: Dict[str, Unit]) -> int:
@@ -1456,7 +1575,9 @@ def _code_complete_closed_pr(u: Unit) -> bool:
 
 def enumerate_moves(ws: Workstream,
                     by_slug: Dict[str, Unit],
-                    overlay: Optional[Dict[str, ReconcileOverlay]] = None
+                    overlay: Optional[Dict[str, ReconcileOverlay]] = None,
+                    *,
+                    phase_for: Optional[Callable[[Unit], str]] = None
                     ) -> List[Move]:
     """Every move runnable right now, ranked: at most one per unit/spike,
     ordered by rule priority, then dependents (critical path first),
@@ -1491,11 +1612,7 @@ def enumerate_moves(ws: Workstream,
                            Move(u.slug, "ship", f"ws-resume {u.slug}",
                                 u.branch or None, "tasks done, no PR")))
         else:
-            if u.code_complete:
-                why = (f"tasks done, PR #{u.pr.number}" if u.pr.number
-                       else "tasks done, PR open")
-            else:
-                why = unit_readiness(u) or "no tasks planned yet"
+            why = _resume_move_why(u, phase_for=phase_for)
             ranked.append(((_RULE_RANK["resume"], deps, i),
                            Move(u.slug, "resume", f"ws-resume {u.slug}",
                                 u.branch or None, why)))
@@ -1715,7 +1832,9 @@ def _proposal_attachable(moves: List[Move]) -> bool:
 
 def decide_next(ws: Workstream,
                 proposal_repo: Optional[str] = None,
-                overlay: Optional[Dict[str, ReconcileOverlay]] = None
+                overlay: Optional[Dict[str, ReconcileOverlay]] = None,
+                *,
+                phase_for: Optional[Callable[[Unit], str]] = None
                 ) -> Decision:
     """Every move runnable now, ranked, with moves[0] as the default.
     Blocked units are never resumed — the router advances their blocker."""
@@ -1768,7 +1887,7 @@ def decide_next(ws: Workstream,
                         reconcile_candidates=candidates)
 
     # Everything runnable now, ranked; the leader is the default.
-    moves = enumerate_moves(ws, by_slug, overlay)
+    moves = enumerate_moves(ws, by_slug, overlay, phase_for=phase_for)
     if moves:
         top = moves[0]
         proposable, covered, design = _proposal_material(ws, by_slug, overlay)

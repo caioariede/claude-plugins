@@ -1,10 +1,10 @@
 ---
 name: ws-config
 description: Use to view or change workstream flavors — which external tool backs each behavior group (worktree-management, spec-driven-development, forge). Bare/`show` also detects which flavors' tools are installed, flags an active flavor whose tool is missing, and offers to activate detected flavors for unset groups. Set a flavor, point at an overrides file, or scaffold a custom flavor.
-argument-hint: "[show | set <group> <flavor> | add <group> <flavor> | set-overrides <path> | list [group]]"
+argument-hint: "[show | set <group> <flavor> | set-config <key> <value> | add <group> <flavor> | set-overrides <path> | list [group]]"
 compatibility: requires python3
 metadata:
-  version: "0.6.3"
+  version: "0.7.1"
   author: Caio Ariede
 ---
 
@@ -15,8 +15,10 @@ metadata:
 Every verb runs through the bundled engine (relative to this skill's directory; `${CLAUDE_PLUGIN_ROOT}/skills/ws-config/scripts/config.py` when set):
 
 ```
-python3 <this-skill-dir>/scripts/config.py [show | set <group> <flavor> | add <group> <flavor> | set-overrides <path> | list [group]]
+python3 <this-skill-dir>/scripts/config.py [show | set <group> <flavor> | set-config <key> <value> | add <group> <flavor> | set-overrides <path> | list [group]]
 ```
+
+`set-config` writes `[config]` keys: `agent`, `cheap-model.<agent>`, `frontier-model.<agent>`, `cheap-model-handoff.<agent>`. With `superpowers-prewalk` active: pin `agent` and set `cheap-model.<agent>` (required); `frontier-model.<agent>` is recommended for planning/prewalk but not enforced. `show` prints `required:` / `recommended:` until set.
 
 No arguments = `show`. The script renders the output, performs all store writes surgically (comments in a hand-edited `flavors.ini` survive), and reconciles the spec-watch script on every run — it reports the reconcile only when something changed. Relay its output, then finish the two parts only a session can do:
 

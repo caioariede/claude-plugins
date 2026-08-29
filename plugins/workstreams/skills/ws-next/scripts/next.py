@@ -19,9 +19,11 @@ from pathlib import Path
 from typing import Dict, Optional, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws-resume" / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ws_store as S   # noqa: E402
 import ws_cli as C     # noqa: E402
+import phase as P      # noqa: E402
 from chain_summary import chain_offers_propose, propose_source_summary  # noqa: E402
 
 
@@ -97,11 +99,14 @@ def render_decision(d: S.Decision) -> str:
 
 
 def _render(ws: S.Workstream, proposal_repo: Optional[str] = None,
-            overlay: Optional[Dict[str, S.ReconcileOverlay]] = None) -> str:
+            overlay: Optional[Dict[str, S.ReconcileOverlay]] = None,
+            store: Optional[Path] = None) -> str:
     if proposal_repo is None:
         proposal_repo = C.current_repo()
+    phase_for = P.phase_for_unit(store, ws) if store else None
     return render_decision(
-        S.decide_next(ws, proposal_repo=proposal_repo, overlay=overlay))
+        S.decide_next(ws, proposal_repo=proposal_repo, overlay=overlay,
+                      phase_for=phase_for))
 
 
 def generate(store: Path, ws_id: str,
@@ -111,7 +116,7 @@ def generate(store: Path, ws_id: str,
     """Pure path used by both main() and the tests."""
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, pr_state)
-    return _render(ws, proposal_repo, overlay)
+    return _render(ws, proposal_repo, overlay, store=store)
 
 
 def main(argv: List[str]) -> int:
@@ -124,7 +129,7 @@ def main(argv: List[str]) -> int:
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, C.gather_pr_state(ws, store))
     overlay = C.scan_reconcile_overlay(ws, store)
-    print(_render(ws, overlay=overlay))
+    print(_render(ws, overlay=overlay, store=store))
     return 0
 
 

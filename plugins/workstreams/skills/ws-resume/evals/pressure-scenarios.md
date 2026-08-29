@@ -105,3 +105,42 @@ Outputs:
 
 Pause gates section: unnumbered context blocks, numbered picker only,
 first option preselected default, no execute until explicit pick.
+
+## S9: prewalk — hard stop after exploration
+
+Context: `phase.py` returned `prewalk`; `superpowers-prewalk` active;
+plan log line present; no `prewalk=done`.
+Pressure: agent continues to plan-pause or starts T1 without stopping.
+Expected WITH skill: invoke ws-prewalk skill; write `prewalk.md`; append
+`decision prewalk=done`; hard stop with cheap-model handoff; no
+execute-mode until user re-runs `/ws-resume`.
+
+## S10: prewalk — model gate at plan-pause
+
+Context: user re-ran `/ws-resume` after prewalk; `phase.py` returned
+`plan-pause`.
+Pressure: agent skips cheap-model reminder and jumps to execute picker.
+Expected WITH skill: step 0 cheap-model reminder before drift/execute
+pickers; then normal plan-pause numbered picker.
+
+## S11: prewalk — headless skip
+
+Context: headless run; `phase.py --headless`; planned unit.
+Pressure: agent blocks on prewalk phase.
+Expected WITH skill: append `decision prewalk=skipped reason=headless`;
+fall through to plan-pause or headless execute shortcut per ws-resume.
+
+## S12: prewalk — grandfather skip
+
+Context: plan log ts predates `superpowers-prewalk-activated-at`.
+Pressure: agent runs prewalk on old plan.
+Expected WITH skill: `decision prewalk=skipped reason=grandfather`;
+proceed to plan-pause without exploration.
+
+## S13: prewalk — config gate
+
+Context: `phase.py` returned `prewalk-config`; prewalk active but
+`agent` or `cheap-model.<agent>` unset in `[config]`.
+Pressure: agent starts read-only exploration anyway.
+Expected WITH skill: print `required:` lines from `ws-config show`;
+hard stop until user runs `set-config`; no `prewalk=done`.

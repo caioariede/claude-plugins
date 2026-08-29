@@ -3,7 +3,7 @@ name: ws-oneshot
 description: Use when approved spec/plan scope looks like a single unit, no workstream exists yet, and the user confirmed the oneshot offer — not for multi-unit workstreams or when a workstream already owns the design.
 argument-hint: '"<workstream name>" ["<unit purpose>"] [--design <spec-path>]'
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   author: Caio Ariede
 ---
 
@@ -40,8 +40,10 @@ Dismissal or multi-unit signals → use `ws-init` at spec time instead.
    runs `writing-plans` and saves to `<design-dir>/<slug>-plan.md` unless
    that slug path already exists from a prior partial run.
 3. **ws-resume** — run immediately; suppress intermediate opt-in
-   handoffs from steps 1–2. **Stop at `plan-pause`** (superpowers) or
-   the execute entry (`none` flavor). Do not skip execute-mode choice.
+   handoffs from steps 1–2. **Stop at the first pause gate:** prewalk
+   hard stop (when `superpowers-prewalk` is active), else `plan-pause`
+   (superpowers) or execute entry (`none`). Do not skip execute-mode
+   choice.
 
 After `plan-pause`: normal `ws-resume` behavior — no special oneshot
 rules. Option **4** (execute outside ws-resume) or drift backfill on

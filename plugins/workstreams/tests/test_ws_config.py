@@ -115,6 +115,125 @@ class HelperTest(unittest.TestCase):
                 "[config]\noverrides-file = /nope/x.ini\n", "utf-8")
             self.assertEqual(C.overrides_path(store), Path("/nope/x.ini"))
 
+    def test_effective_flavor_ops_extends_inherits_core(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[spec-driven-development/child]\n"
+                "extends = superpowers\n"
+                "prewalk = on\n", "utf-8")
+            ops, err = C.effective_flavor_ops(
+                store, "spec-driven-development", "child")
+            self.assertIsNone(err)
+            self.assertEqual(ops["plan"], "superpowers:writing-plans")
+            self.assertEqual(ops["prewalk"], "on")
+            self.assertIn("spec-glob", ops)
+
+    def test_effective_flavor_ops_child_overrides_parent(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[spec-driven-development/child]\n"
+                "extends = superpowers\n"
+                "execute = custom:execute\n", "utf-8")
+            ops, err = C.effective_flavor_ops(
+                store, "spec-driven-development", "child")
+            self.assertIsNone(err)
+            self.assertEqual(ops["execute"], "custom:execute")
+            self.assertEqual(ops["plan"], "superpowers:writing-plans")
+
+    def test_effective_flavor_ops_unknown_parent(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[spec-driven-development/bad]\n"
+                "extends = nope\n", "utf-8")
+            ops, err = C.effective_flavor_ops(
+                store, "spec-driven-development", "bad")
+            self.assertEqual(err, "EXTENDS_UNKNOWN")
+            self.assertEqual(ops, {})
+
+    def test_resolve_operation_uses_extends(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = child\n\n"
+                "[spec-driven-development/child]\n"
+                "extends = superpowers\n", "utf-8")
+            self.assertEqual(
+                C.resolve_operation(store, "spec-driven-development", "plan"),
+                "superpowers:writing-plans")
+
+    def test_resolve_operation_fail_closed_on_bad_extends(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = bad\n\n"
+                "[spec-driven-development/bad]\n"
+                "extends = nope\n", "utf-8")
+            self.assertIsNone(
+                C.resolve_operation(store, "spec-driven-development", "plan"))
+
+    def test_prewalk_enabled_on_effective_flavor(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = child\n\n"
+                "[spec-driven-development/child]\n"
+                "extends = superpowers\n"
+                "prewalk = on\n", "utf-8")
+            self.assertTrue(C.prewalk_enabled(store))
+
+    def test_cheap_model_from_config_not_flavor(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers-prewalk\n"
+                "[config]\nagent = cursor\ncheap-model.cursor = fast\n",
+                "utf-8")
+            self.assertEqual(C.cheap_model(store), "fast")
+
+    def test_prewalk_model_requirements_when_unset(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers-prewalk\n",
+                "utf-8")
+            reqs = C.prewalk_model_requirements(store)
+            self.assertEqual(reqs, ["set-config agent <claude|cursor|codex>"])
+
+    def test_prewalk_model_requirements_pinned_agent_needs_cheap(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers-prewalk\n"
+                "[config]\nagent = cursor\n", "utf-8")
+            reqs = C.prewalk_model_requirements(store)
+            self.assertEqual(reqs,
+                             ["set-config cheap-model.cursor <slug>"])
+            self.assertFalse(C.prewalk_models_ready(store))
+
+    def test_prewalk_model_recommended_frontier_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers-prewalk\n"
+                "[config]\nagent = cursor\ncheap-model.cursor = fast\n",
+                "utf-8")
+            self.assertTrue(C.prewalk_models_ready(store))
+            recs = C.prewalk_model_recommended(store)
+            self.assertIn("frontier-model.cursor", recs[0])
+
+    def test_format_cheap_handoff_substitutes_slug(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers-prewalk\n"
+                "[config]\nagent = claude\ncheap-model.claude = sonnet\n",
+                "utf-8")
+            handoff = C.format_cheap_handoff(store)
+            self.assertEqual(handoff, "/model sonnet")
+
 
 class ShowTest(unittest.TestCase):
     def test_defaults_render_with_provenance(self):
@@ -133,6 +252,17 @@ class ShowTest(unittest.TestCase):
                 "[active]\nworktree-management = wmx\n", "utf-8")
             p = run_config(td, "show", tools=("git", "gh", "wmx"))
             self.assertIn("worktree-management: wmx  (explicit, store)",
+                          p.stdout)
+
+    def test_prewalk_show_required_model_config(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            (store / "flavors.ini").write_text(
+                "[active]\nspec-driven-development = superpowers-prewalk\n"
+                "[config]\nagent = cursor\n", "utf-8")
+            p = run_config(td, "show", tools=("git", "gh"))
+            self.assertIn("required: set-config cheap-model.cursor", p.stdout)
+            self.assertIn("recommended: set-config frontier-model.cursor",
                           p.stdout)
 
     def test_missing_shell_dep_marks_unresolved(self):
@@ -520,6 +650,16 @@ class SuperpowersHooksTest(unittest.TestCase):
             "hook-ws-resume-loop-before",
         ):
             self.assertIn(key, text, f"missing {key} in bundled flavors.ini")
+
+    def test_superpowers_prewalk_extends_bundled(self):
+        ini = ROOT / "skills" / "ws" / "references" / "flavors.ini"
+        text = ini.read_text("utf-8")
+        self.assertIn("[spec-driven-development/superpowers-prewalk]", text)
+        self.assertIn("extends = superpowers", text)
+        self.assertIn("prewalk = on", text)
+        self.assertIn("hook-ws-resume-prewalk", text)
+        self.assertNotIn("cheap-model.claude", text)
+        self.assertNotIn("frontier-model.", text)
 
 
 class HookLineOrder(unittest.TestCase):

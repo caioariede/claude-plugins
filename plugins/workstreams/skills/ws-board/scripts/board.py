@@ -17,8 +17,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws-resume" / "scripts"))
 import ws_store as S   # noqa: E402
 import ws_cli as C     # noqa: E402
+import phase as P      # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +154,8 @@ def generate(store: Path, ws_id: str, unit_slug: Optional[str],
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, pr_state)
     if not unit_slug:
-        return render_board(S.build_board(ws))
+        return render_board(
+            S.build_board(ws, phase_for=P.phase_for_unit(store, ws)))
     kind = C.resolve_kind_in_ws(store, ws_id, unit_slug, fallback="unit")
     if kind == "spike":
         return render_spike(ws, store, unit_slug)

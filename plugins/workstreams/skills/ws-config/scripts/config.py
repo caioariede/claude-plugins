@@ -10,8 +10,8 @@ settles only the `?` marks (skill deps, prose-vs-missing-tool) and
 runs the interactive offer from the OFFER lines (prefix-addressed —
 their position in the output carries no meaning).
 
-Usage: config.py [show | set <group> <flavor> | add <group> <flavor>
-                  | set-overrides <path> | list [group]]
+Usage: config.py [show | set <group> <flavor> | set-config <key> <value>
+                  | add <group> <flavor> | set-overrides <path> | list [group]]
 Exit 2 with a machine-readable first stderr token (UNKNOWN_GROUP,
 UNKNOWN_FLAVOR, ALREADY_EXISTS, BAD_ARGS, BAD_STORE) when the caller
 must correct the request or repair the store file.
@@ -24,8 +24,9 @@ import os
 import re
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
 import ws_store as S   # noqa: E402
@@ -41,6 +42,10 @@ MARK = {"ok": "✓", "maybe": "?", "stub": "✗"}
 # exclude quotes, whitespace, and expansion characters by construction.
 FLAVOR_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 SPEC_GLOB_RE = re.compile(r"[A-Za-z0-9_*?./\[\]-]+")
+SET_CONFIG_KEYS = frozenset({"agent"})
+SET_CONFIG_PREFIXES = ("cheap-model.", "frontier-model.",
+                       "cheap-model-handoff.")
+INTERNAL_CONFIG_KEYS = frozenset({"superpowers-prewalk-activated-at"})
 
 
 class Fail(Exception):
@@ -68,6 +73,40 @@ def flavor_state(ops: Dict[str, str], group: str):
             notes.append(f'? unresolved head "{val}" '
                          "(prose or missing tool)")
     return verdict, notes
+
+
+def _effective_ops(store: Path, group: str,
+                   flavor: str) -> Tuple[Dict[str, str], Optional[str]]:
+    return C.effective_flavor_ops(store, group, flavor)
+
+
+def _hook_companion_lints(ops: Dict[str, str]) -> List[str]:
+    """Orphaned hook companions after merge."""
+    notes: List[str] = []
+    for k in ops:
+        if not k.startswith("hook-") or "." not in k:
+            continue
+        base = k.split(".")[0]
+        if not (ops.get(base) or "").strip():
+            notes.append(f"orphan hook companion {k} (no base {base})")
+    return notes
+
+
+def _unknown_active_groups(store: Path) -> List[str]:
+    unknown: List[str] = []
+    cp = C._load_ini(store / "flavors.ini")
+    if cp.has_section("active"):
+        for g in cp.options("active"):
+            if g not in C.CORE_OPS:
+                unknown.append(g)
+    ov = C.overrides_path(store)
+    if ov is not None and ov.exists():
+        ocp = C._load_ini(ov)
+        if ocp.has_section("active"):
+            for g in ocp.options("active"):
+                if g not in C.CORE_OPS:
+                    unknown.append(g)
+    return sorted(set(unknown))
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +152,26 @@ def _layers_line(store: Path) -> str:
 def cmd_show(store: Path) -> int:
     lines = ["workstream flavors — effective [active]", ""]
     offers: List[str] = []
+    for unk in _unknown_active_groups(store):
+        lines.append(f"warning: unknown [active] group {unk!r} — "
+                     "ignored (legacy config?)")
+    agent = C.resolve_agent(store)
+    pinned = C.config_value(store, "agent")
+    if agent:
+        lines.append(f"agent: {agent}"
+                     + (" (pinned)" if pinned else " (detected)"))
+    for req in C.prewalk_model_requirements(store):
+        lines.append(f"required: {req}")
+    for rec in C.prewalk_model_recommended(store):
+        lines.append(f"recommended: {rec}")
+    if C.prewalk_enabled(store) and pinned:
+        cheap = C.cheap_model(store, pinned)
+        frontier = C.frontier_model(store, pinned)
+        if cheap:
+            lines.append(f"cheap-model ({pinned}): {cheap}")
+        if frontier:
+            lines.append(f"frontier-model ({pinned}): {frontier}")
+    lines.append("")
     for group in C.CORE_OPS:
         flavor, prov = C.active_flavor(store, group)
         known = C.known_flavors(store, group)
@@ -123,16 +182,27 @@ def cmd_show(store: Path) -> int:
                          f"layer — fix with ws-config set {group} "
                          "<flavor>)")
         active_ops: Dict[str, str] = {}
+        active_err: Optional[str] = None
         for f in known:
-            ops = C.flavor_ops(store, group, f)
+            ops, err = _effective_ops(store, group, f)
             if f == flavor:
-                active_ops = ops
-            verdict, notes = flavor_state(ops, group)
-            lines.append(f"  {MARK[verdict]} {f}")
+                active_ops, active_err = ops, err
+            if err:
+                verdict, notes = "stub", [f"stub (extends: {err})"]
+            else:
+                verdict, notes = flavor_state(ops, group)
+            ext = C.flavor_has_extends(store, group, f)
+            ext_mark = " extends" if ext else ""
+            lines.append(f"  {MARK[verdict]} {f}{ext_mark}")
             lines += [f"      {n}" for n in notes]
             if (prov == "default" and f != C.GROUP_DEFAULTS[group]
-                    and verdict != "stub"):
+                    and verdict != "stub" and not ext):
                 offers.append(f"OFFER {group} {f}")
+        if active_err:
+            lines.append(f"  warning: active flavor extends error: "
+                         f"{active_err}")
+        for n in _hook_companion_lints(active_ops):
+            lines.append(f"  warning: {n}")
         for h in _hook_lines(active_ops):
             lines.append(f"  hook: {h}")
         lines.append("")
@@ -151,11 +221,19 @@ def cmd_list(store: Path, group: Optional[str]) -> int:
         active, _ = C.active_flavor(store, g)
         out.append(f"## {g}")
         for fl in C.known_flavors(store, g):
-            ops = C.flavor_ops(store, g, fl)
-            verdict, notes = flavor_state(ops, g)
+            ops, err = _effective_ops(store, g, fl)
+            if err:
+                verdict, notes = "stub", [f"stub (extends: {err})"]
+            else:
+                verdict, notes = flavor_state(ops, g)
             star = " (active)" if fl == active else ""
             out.append(f"[{g}/{fl}] {MARK[verdict]}{star}")
+            own = C.flavor_ops(store, g, fl)
+            if own.get("extends"):
+                out.append(f"  extends = {own['extends']}")
             for k, v in ops.items():
+                if k == "extends":
+                    continue
                 out.append(f"  {k} = {v}")
             out += [f"  {n}" for n in notes]
             out.append("")
@@ -216,6 +294,28 @@ def _require_group(group: str) -> None:
                    + ", ".join(C.CORE_OPS))
 
 
+def _require_set_config_key(key: str) -> None:
+    if key in SET_CONFIG_KEYS or key in INTERNAL_CONFIG_KEYS:
+        return
+    if any(key.startswith(p) for p in SET_CONFIG_PREFIXES):
+        return
+    raise Fail(f"BAD_ARGS unknown config key {key!r}")
+
+
+def cmd_set_config(store: Path, key: str, value: str) -> int:
+    _require_set_config_key(key)
+    set_key(store, "config", key, value)
+    print(f"[config] {key} = {value}")
+    return 0
+
+
+def _maybe_record_prewalk_activation(store: Path, group: str,
+                                     flavor: str) -> None:
+    if group == "spec-driven-development" and flavor == "superpowers-prewalk":
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+        set_key(store, "config", "superpowers-prewalk-activated-at", ts)
+
+
 def cmd_set(store: Path, group: str, flavor: str) -> int:
     _require_group(group)
     known = C.known_flavors(store, group)
@@ -223,19 +323,25 @@ def cmd_set(store: Path, group: str, flavor: str) -> int:
         raise Fail(f"UNKNOWN_FLAVOR '{flavor}' for {group}; known: "
                    + ", ".join(known))
     set_key(store, "active", group, flavor)
+    _maybe_record_prewalk_activation(store, group, flavor)
     print(f"[active] {group} = {flavor}")
     effective, eff_prov = C.active_flavor(store, group)
     if effective != flavor:
         print(f"warning: the {eff_prov} layer sets {group} = {effective}"
               " — the store value is shadowed and will not take effect")
-    verdict, notes = flavor_state(C.flavor_ops(store, group, flavor),
-                                  group)
+    ops, err = _effective_ops(store, group, flavor)
+    if err:
+        print(f"warning: extends error {err} — flavor unavailable")
+        return 0
+    verdict, notes = flavor_state(ops, group)
     if verdict == "stub":
         print("warning: " + "; ".join(notes)
               + " — fill the operations before use")
     else:
         for n in notes:
             print(n)     # `?` marks — the session settles them
+    for req in C.prewalk_model_requirements(store):
+        print(f"required: {req}")
     return 0
 
 
@@ -280,8 +386,11 @@ def _reconcile_watch(store: Path, *, glob_key: str, prefix: str,
     flavor, _ = C.active_flavor(store, "spec-driven-development")
     # The active flavor's OWN glob only — a flavor without one gets no
     # script, so no rule-3 fallback here.
-    ops = C.flavor_ops(store, "spec-driven-development", flavor)
-    glob = (ops.get(glob_key) or "").strip()
+    ops, err = _effective_ops(store, "spec-driven-development", flavor)
+    if err:
+        glob = ""
+    else:
+        glob = (ops.get(glob_key) or "").strip()
     changed: List[str] = []
     if glob and not SPEC_GLOB_RE.fullmatch(glob):
         # Substituted into a double-quoted sh string in the hook template;
@@ -333,6 +442,8 @@ def main(argv: List[str]) -> int:
                 rc = cmd_show(store)
             elif verb == "set" and len(args) == 2:
                 rc = cmd_set(store, args[0], args[1])
+            elif verb == "set-config" and len(args) == 2:
+                rc = cmd_set_config(store, args[0], args[1])
             elif verb == "add" and len(args) == 2:
                 rc = cmd_add(store, args[0], args[1])
             elif verb == "set-overrides" and len(args) == 1:
