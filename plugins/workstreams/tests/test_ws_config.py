@@ -83,17 +83,22 @@ class HelperTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             store = store_at(td)
             self.assertIn("review", C.CORE_OPS)
-            self.assertEqual(C.GROUP_DEFAULTS["review"], "off")
+            self.assertEqual(C.GROUP_DEFAULTS["review"], "ws-critic")
             flavors = C.known_flavors(store, "review")
+            self.assertEqual(flavors[0], "ws-critic")
             self.assertIn("off", flavors)
-            self.assertIn("ws-critic", flavors)
 
-    def test_review_enabled_when_ws_critic_active(self):
+    def test_review_enabled_by_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = store_at(td)
+            self.assertTrue(C.review_enabled(store))
+
+    def test_review_disabled_when_off_active(self):
         with tempfile.TemporaryDirectory() as td:
             store = store_at(td)
             (store / "flavors.ini").write_text(
-                "[active]\nreview = ws-critic\n", "utf-8")
-            self.assertTrue(C.review_enabled(store))
+                "[active]\nreview = off\n", "utf-8")
+            self.assertFalse(C.review_enabled(store))
 
     def test_review_activation_timestamp_is_written(self):
         with tempfile.TemporaryDirectory() as td:

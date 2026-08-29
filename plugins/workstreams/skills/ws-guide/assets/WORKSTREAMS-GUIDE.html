@@ -798,10 +798,10 @@ read-only adversarial review after every unit is code-complete and
 before <code>ship-pause</code>. It checks the charter, design,
 implementation plan, complete branch diff, surrounding code, and
 tests.</p>
-<p><b>Enable it.</b> Run
-<code>/ws-config set review ws-critic</code>. The default is
-<code>review=off</code>, and the setting is independent of the
-spec-driven-development flavor.</p>
+<p><b>On by default.</b> Fresh installs use
+<code>review=ws-critic</code>. Disable with
+<code>/ws-config set review off</code>. The setting is independent of
+the spec-driven-development flavor.</p>
 <div class="flow-wrap">
 <p><b>Unit resume flow</b> when critic is enabled:</p>
 <div class="flow">

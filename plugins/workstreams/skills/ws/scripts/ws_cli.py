@@ -182,7 +182,7 @@ def resolve_operation(store: Path, group: str, op: str) -> Optional[str]:
 GROUP_DEFAULTS = {"worktree-management": "git-worktree",
                   "spec-driven-development": "none",
                   "forge": "gh",
-                  "review": "off"}
+                  "review": "ws-critic"}
 
 CORE_OPS = {"worktree-management": ("create", "remove", "locate"),
             "spec-driven-development": ("plan", "execute", "ship"),

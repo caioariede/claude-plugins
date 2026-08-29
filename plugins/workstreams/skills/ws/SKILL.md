@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.24.0"
+  version: "0.24.1"
   author: Caio Ariede
 ---
 
@@ -377,7 +377,7 @@ External tools are pluggable via **flavors** — skills never hardwire wmx / sup
 `[active]` maps `group = flavor`; `[group/flavor]` maps `operation = instruction`.
 
 **Resolution** (group `G`, operation `O`)
-1. active flavor = merged `[active] G` → else default (`git-worktree` / `none` / `gh`).
+1. active flavor = merged `[active] G` → else default (`git-worktree` / `none` / `gh` / `ws-critic`).
 2. instruction = effective `[G/<flavor>]` ops: layer merge, then single-level `extends` (child overrides parent per key; invalid `extends` fails closed).
 3. missing after effective merge → the group **default flavor's** `O`; an optional op no layer defines → skip.
 4. `word:word` → invoke as a skill; a `ws-*` command line (e.g. `ws-resume <unit>`) → invoke that skill with those arguments; else run as shell. Fill `<branch> <base> <path> <repo> <pr> <new-base>` from context; hook instructions and their `.prompt`/`.choices` may also use `<unit>` (the target unit id) and `<command>` (the firing skill's resolved next command).
