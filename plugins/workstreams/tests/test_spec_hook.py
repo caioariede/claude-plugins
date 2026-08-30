@@ -13,13 +13,15 @@ Run: python3 -m unittest discover -s plugins/workstreams/tests
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from test_ws_config import run_config
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+
+from test_ws_config import run_config
 TEMPLATE = ROOT / "hooks" / "spec-watch.sh"
 HOOKS_JSON = ROOT / "hooks" / "hooks.json"
 GLOB = "*specs/*-design.md"
