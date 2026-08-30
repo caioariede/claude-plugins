@@ -1,0 +1,43 @@
+flowchart TD
+    %% ws-resume spike execution flow
+
+    start([Start / ws-resume spike]) --> check_dropped{Dropped?}
+    check_dropped -- Yes --> done([done])
+    check_dropped -- No --> check_needs{Unmet needs?}
+    
+    check_needs -- Yes --> blocked[blocked]
+    blocked --> guard_blocked{{"spike.blocked-override (guard)"}}
+    guard_blocked -- Confirm override --> check_exec_mode
+    guard_blocked -- Stop --> stop_blocked([stop])
+    
+    check_needs -- No --> check_exec_mode{Has execute-mode?}
+    
+    check_exec_mode -- No --> check_plan_line{Has plan line in log?}
+    check_plan_line -- Yes --> plan_pause{{"spike.plan-pause (confirm)"}}
+    check_plan_line -- No --> check_zero_tasks{Tasks total == 0?}
+    check_zero_tasks -- Yes --> plan[plan]
+    plan --> plan_save[Save plan] --> plan_pause
+    check_zero_tasks -- No --> check_complete_early{Spike complete?}
+    check_complete_early -- No --> loop[loop]
+    
+    plan_pause -- Confirm --> derive_tasks[Derive T1.. + Amend design task] --> loop
+    plan_pause -- Stop --> stop_plan([stop])
+    
+    check_exec_mode -- Yes --> check_complete{Spike complete?}
+    check_complete -- No --> loop[loop]
+    loop --> execute_task[Execute research task] --> check_off[Check off in progress.md] --> check_complete
+    
+    check_complete -- Yes --> done
+
+    classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
+    classDef action_stop fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+    classDef terminal fill:#f3f4f6,stroke:#4b5563,stroke-width:2px;
+    classDef condition fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px;
+    classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
+    classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
+
+    class plan_pause picker;
+    class done,stop_plan,stop_blocked terminal;
+    class check_dropped,check_needs,check_exec_mode,check_plan_line,check_zero_tasks,check_complete_early,check_complete condition;
+    class plan,loop,derive_tasks,execute_task,check_off,plan_save,blocked action;
+    class guard_blocked guard;

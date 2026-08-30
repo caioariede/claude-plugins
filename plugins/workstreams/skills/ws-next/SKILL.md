@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.20.2"
+  version: "0.21.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -11,6 +11,8 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 # ws-next — what can move next in a workstream
 
 **Required first:** load the `ws` skill — the shared contract (SPEC).
+
+**Flow reference:** see visual decision diagrams and terminal states in `skills/ws/references/flows/diagrams/next-terminal.mmd`.
 
 **Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, scans live units read-only for shipped-elsewhere evidence, derives each unit's and spike's status, and ranks every move runnable right now — one per unit or spike, default first. It never appends log lines or mutates `progress.md`; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
 

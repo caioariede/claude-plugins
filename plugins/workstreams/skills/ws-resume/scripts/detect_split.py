@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """ws-resume detect_split — read-only store/git drift check.
 
-Usage: detect_split.py [unit-id]
+Usage: detect_split.py [unit-id] [--emit-gate]
 
 Prints one line:
   no-split
   split pr=#N commits=N
   unknown-pr
 
+When --emit-gate is passed and drift is detected, emits the structured
+unit.drift gate block after the split line.
+
 Exit 0 always (skill interprets output).
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -21,6 +25,7 @@ from typing import List
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
 import ws_store as S   # noqa: E402
 import ws_cli as C     # noqa: E402
+import gate_emit       # noqa: E402
 
 
 def _store() -> Path:
@@ -54,10 +59,20 @@ def detect(unit: S.Unit, ws: S.Workstream, store: Path) -> str:
     return f"split pr=#{n} commits={commits}"
 
 
+def _parse_args(argv: List[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="detect_split.py")
+    p.add_argument("unit_id", nargs="?", default="")
+    p.add_argument("--emit-gate", action="store_true",
+                   help="Emit structured gate definition when drift detected")
+    return p.parse_args(argv)
+
+
 def main(argv: List[str]) -> int:
     store = _store()
+    ns = _parse_args(argv)
+    unit_args = [ns.unit_id] if ns.unit_id else []
     try:
-        ws_id, slug = C.resolve_args(store, argv)
+        ws_id, slug = C.resolve_args(store, unit_args)
     except C.Pick as p:
         print(str(p), file=sys.stderr)
         return 2
@@ -69,7 +84,12 @@ def main(argv: List[str]) -> int:
     if unit is None:
         print(f"NO_MATCH no unit {slug!r} in {ws_id}", file=sys.stderr)
         return 2
-    print(detect(unit, ws, store))
+    res = detect(unit, ws, store)
+    print(res)
+    if ns.emit_gate and res.startswith("split"):
+        block = gate_emit.emit_gate("plan-pause", kind="unit", overlay="drift")
+        if block:
+            print(block)
     return 0
 
 

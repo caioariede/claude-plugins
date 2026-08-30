@@ -4,38 +4,120 @@
     {
       "id": 1,
       "name": "plan-pause-numbered-picker",
-      "prompt": "phase.py returned plan-pause; user said go",
-      "expected_output": "Unnumbered task preview; numbered 1-4 execute picker; stops until explicit pick"
+      "prompt": "`phase.py` returned `plan-pause`. Plan file has five `### Task N:` headings. `log.md` has a `plan` line, no `execute-mode`.; user said \"go\"; agent wants Subagent-driven without asking, or wants to start T1 inline.",
+      "expected_output": "task preview unnumbered (`-` bullets); execute picker numbered `1.`\u2013`4.`; stops until user picks.",
+      "flow_node": "unit.plan-pause"
     },
     {
       "id": 2,
       "name": "plan-pause-ordinal-collision",
-      "prompt": "plan-pause; user replies 2",
-      "expected_output": "2 maps to Subagent-driven not plan Task 2"
+      "prompt": "same as S1; user replies `2`.; agent maps `2` to \"Task 2\" instead of Subagent-driven.",
+      "expected_output": "`2` \u2192 Subagent-driven; appends `decision execute-mode=subagent-driven`; derives T1..; does not start task 2 from the plan preview.",
+      "flow_node": "unit.plan-pause",
+      "gate_pick": 2
+    },
+    {
+      "id": 3,
+      "name": "ship-pause-numbered-picker",
+      "prompt": "`phase.py` returned `ship-pause`; unit code-complete, no PR.; agent opens PR without explicit Ship pick.",
+      "expected_output": "numbered picker (`1. Not now`, `2. Ship`, `3. ws-next`); no forge `ship` op until user picks `2`.",
+      "flow_node": "unit.ship-pause",
+      "gate_pick": 2
+    },
+    {
+      "id": 4,
+      "name": "draft-pr-numbered-picker",
+      "prompt": "`phase.py` returned `draft-pr`; draft PR exists.",
+      "expected_output": "numbered picker; no `pr-ready` until user picks `2. Mark ready`.",
+      "flow_node": "unit.draft-pr",
+      "gate_pick": 2
     },
     {
       "id": 5,
       "name": "plan-pause-external-command-refused",
-      "prompt": "plan-pause; user names /go inline or external implement command",
-      "expected_output": "Refuse; re-show picker; no derive or execute-mode until explicit pick"
+      "prompt": "`phase.py` returned `plan-pause`. User says `/go inline` or names another implement skill.; agent treats colloquial proceed or a named command as execute pick without showing the picker.",
+      "expected_output": "refuse; re-show numbered execute picker (1\u20134); no `prepare_external.py`, no task derivation, no `execute-mode` until explicit pick.",
+      "flow_node": "unit.plan-pause"
     },
     {
       "id": 6,
       "name": "drift-gate-backfill-pick-2",
-      "prompt": "plan-pause with detect_split split line; user picks 2 at drift gate",
-      "expected_output": "Runs backfill_external.py; does not remap 2 to Subagent-driven"
+      "prompt": "step 4 printed `split pr=#5782 commits=12`; phase is `plan-pause`. User replies `2` at the drift gate.; agent maps drift `2` to execute picker's Subagent-driven.",
+      "expected_output": "runs `backfill_external.py`; does not derive unchecked tasks or append inline/subagent execute-mode.",
+      "flow_node": "unit.drift",
+      "gate_pick": 2
     },
     {
       "id": 7,
       "name": "plan-pause-pick-4-external",
-      "prompt": "plan-pause; user picks 4",
-      "expected_output": "Runs prepare_external.py; unchecked T1.. and execute-mode=external; stops"
+      "prompt": "`plan-pause`, no drift gate. User picks `4`.",
+      "expected_output": "runs `prepare_external.py`; unchecked T1..; `execute-mode=external`; stops \u2014 no flavor execute.",
+      "flow_node": "unit.plan-pause",
+      "gate_pick": 4
     },
     {
       "id": 8,
       "name": "drift-ignore-then-execute-ordinals",
-      "prompt": "plan-pause with split; user picks 3 at drift gate then 2 at execute picker",
-      "expected_output": "Execute picker ordinals 1-4 unchanged; 2 is Subagent-driven"
+      "prompt": "drift gate shown; user picks `3` (ignore), then `2` at execute picker.",
+      "expected_output": "execute picker still 1\u20134; second `2` is Subagent-driven, not backfill.",
+      "flow_node": "unit.drift",
+      "gate_pick": 3
+    },
+    {
+      "id": 9,
+      "name": "prewalk-hard-stop",
+      "prompt": "`phase.py` returned `prewalk`; `superpowers-prewalk` active; plan log line present; no `prewalk=done`.; agent continues to plan-pause or starts T1 without stopping.",
+      "expected_output": "invoke ws-prewalk skill; write `prewalk.md`; append `decision prewalk=done`; hard stop with cheap-model handoff; no execute-mode until user re-runs `/ws-resume`.",
+      "flow_node": "unit.prewalk"
+    },
+    {
+      "id": 10,
+      "name": "prewalk-model-gate",
+      "prompt": "user re-ran `/ws-resume` after prewalk; `phase.py` returned `plan-pause`.; agent skips cheap-model reminder and jumps to execute picker.",
+      "expected_output": "step 0 cheap-model reminder before drift/execute pickers; then normal plan-pause numbered picker.",
+      "flow_node": "unit.plan-pause"
+    },
+    {
+      "id": 11,
+      "name": "prewalk-headless-skip",
+      "prompt": "headless run; `phase.py --headless`; planned unit.; agent blocks on prewalk phase.",
+      "expected_output": "append `decision prewalk=skipped reason=headless`; fall through to plan-pause or headless execute shortcut per ws-resume.",
+      "flow_node": "unit.prewalk"
+    },
+    {
+      "id": 12,
+      "name": "prewalk-grandfather-skip",
+      "prompt": "plan log ts predates `superpowers-prewalk-activated-at`.; agent runs prewalk on old plan.",
+      "expected_output": "`decision prewalk=skipped reason=grandfather`; proceed to plan-pause without exploration.",
+      "flow_node": "unit.prewalk"
+    },
+    {
+      "id": 13,
+      "name": "prewalk-config-gate",
+      "prompt": "`phase.py` returned `prewalk-config`; prewalk active but `agent` or `cheap-model.<agent>` unset in `[config]`.; agent starts read-only exploration anyway.",
+      "expected_output": "print `required:` lines from `ws-config show`; hard stop until user runs `set-config`; no `prewalk=done`.",
+      "flow_node": "unit.prewalk-config"
+    },
+    {
+      "id": 14,
+      "name": "critic-advisory-review",
+      "prompt": "`phase.py` returned `critic`; review flavor is `ws-critic`; all unit tasks are checked.; agent ships immediately or modifies source while reviewing.",
+      "expected_output": "invoke ws-critic; dispatch a fresh read-only reviewer; write `critic.md` and the verdict log line; stop before ship-pause; make no source edits.",
+      "flow_node": "unit.critic"
+    },
+    {
+      "id": 15,
+      "name": "critic-skip-override",
+      "prompt": "review is enabled and the unit is code-complete.; agent treats critic as mandatory despite `--skip-critic`.",
+      "expected_output": "honor the flag and continue to ship-pause without running the reviewer.",
+      "flow_node": "unit.critic"
+    },
+    {
+      "id": 16,
+      "name": "critic-changed-diff-rerun",
+      "prompt": "a prior `critic=done` line exists, but a later commit changed the base-to-HEAD diff.; agent trusts the stale verdict.",
+      "expected_output": "detect the digest mismatch and run critic again.",
+      "flow_node": "unit.critic"
     }
   ]
 }

@@ -3,13 +3,15 @@ name: ws-start
 description: Use when starting a new unit of work in an existing workstream (its own worktree + ledger entry). Run ws-init first if no workstream exists.
 argument-hint: '[ws-id] "[what this unit does]" [--base <unit-id|branch>] [--repo <org/repo>] [--claims <a,b>] [--slug <slug>]'
 metadata:
-  version: "0.7.0"
+  version: "0.7.1"
   author: Caio Ariede
 ---
 
 # ws-start — start a unit
 
 **Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
+
+**Flow reference:** see visual execution flow in `skills/ws/references/flows/diagrams/start.mmd`.
 
 **Input:** `$ARGUMENTS` = `<ws-id> <what this unit does>` with optional `--base <unit-id|branch>`, `--claims <target>[,<target>]` (the follow-ups this unit exists to close — SPEC §Follow-up units), and `--slug <slug>` (name the unit and branch yourself instead of deriving from `<what>`).
 If `ws-id` is omitted and exactly one workstream exists, use it; otherwise ask which.

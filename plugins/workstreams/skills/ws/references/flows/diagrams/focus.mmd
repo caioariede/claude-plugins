@@ -1,0 +1,15 @@
+flowchart TD
+    %% ws-focus outcome queue flow
+
+    start([Start / ws-focus]) --> subcmd{Subcommand}
+    subcmd -- list --> read_focus[Read and format focus.md numbered list]
+    subcmd -- "add <outcome>" --> append_focus[Append unchecked - [ ] outcome]
+    subcmd -- "activate <n|slug>" --> flip_active[Mark active [>] and clear others]
+    subcmd -- "done [n|slug]" --> mark_done[Mark [x] and move to done tail]
+    subcmd -- "move <from> <to>" --> reorder[Reorder open focus list]
+    append_focus --> update_store[Write focus.md]
+    flip_active --> update_store
+    mark_done --> update_store
+    reorder --> update_store
+    update_store --> finish([Done])
+    read_focus --> finish

@@ -10,13 +10,15 @@ description: >-
   on X" — but confirm the unit isn't already merged first.
 argument-hint: "[unit-id]"
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
   author: Caio Ariede
 ---
 
 # ws-drop — drop (abandon) a unit
 
 **Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
+
+**Flow reference:** see visual execution flow in `skills/ws/references/flows/diagrams/drop.mmd`.
 
 **Input:** `$ARGUMENTS` = `<unit-id>` or `<spike-id>` (bare slug).
 

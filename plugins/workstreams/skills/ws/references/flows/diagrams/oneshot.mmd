@@ -1,0 +1,10 @@
+flowchart TD
+    %% ws-oneshot single-unit entry flow
+
+    start([Start / ws-oneshot]) --> check_scope{Scope check: single PR & no existing ws?}
+    check_scope -- No --> ws_init_fallback[Suggest ws-init / multi-unit]
+    check_scope -- Yes --> step1[1. ws-init: create store & design]
+    step1 --> step2[2. ws-start: create unit & worktree]
+    step2 --> step3[3. ws-resume: auto-plan & pause gate]
+    step3 --> plan_pause{plan-pause gate}
+    plan_pause --> normal_resume([Enter normal ws-resume loop])

@@ -1,0 +1,13 @@
+flowchart TD
+    %% ws-spike spike provisioning flow
+
+    start([Start / ws-spike]) --> check_design{workstream.md design set?}
+    check_design -- No --> refuse[Refuse: requires design spec]
+    check_design -- Yes --> resolve[Resolve ws-id, slug, repo]
+    resolve --> init_spike_store[Create spikes/slug: charter, progress, log, artifacts]
+    init_spike_store --> append_ledger[Append to spikes.md]
+    append_ledger --> seed_needs{Has --needs?}
+    seed_needs -- Yes --> record_needs[Seed ## Needs in progress.md]
+    seed_needs -- No --> offer_resume
+    record_needs --> offer_resume[Offer ws-resume spike-id]
+    offer_resume --> resume([Run ws-resume spike-id])

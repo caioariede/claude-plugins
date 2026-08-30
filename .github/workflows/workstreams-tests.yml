@@ -19,6 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: check plugin version and guide
+        run: |
+          python3 tools/plugin_version.py check plugins/workstreams
+          python3 tools/plugin_version.py check-guide plugins/workstreams plugins/workstreams/skills/ws-guide/assets/WORKSTREAMS-GUIDE.html
+      - name: check flow diagrams and catalog
+        run: python3 plugins/workstreams/skills/ws/scripts/gen_flows.py --check
       # Discover needs the repo root as CWD; the suites resolve their
       # own paths from __file__ and drive the engines as subprocesses.
       - name: workstreams engine suites

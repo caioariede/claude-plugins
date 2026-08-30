@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ws-resume reconcile — merged terminal + task reconcile.
 
-Usage: reconcile.py [unit-id]
+Usage: reconcile.py [unit-id] [--emit-gate]
 
 Exit 0 when nothing to do or reconcile succeeded.
 Exit 2 when the caller must pick (same tokens as ws-board).
@@ -9,10 +9,14 @@ Prints one line:
   reconciled <task-ids> | already-consistent | not-merged
   unknown-forge | unknown-git
   ship-detect-candidate branch=... sha=... [pr=...]
+
+When --emit-gate is passed and ship-detect-candidate is printed,
+emits the structured unit.ship-detect gate block after the candidate line.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -21,6 +25,7 @@ from typing import List, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
 import ws_store as S   # noqa: E402
 import ws_cli as C     # noqa: E402
+import gate_emit       # noqa: E402
 
 
 def _store() -> Path:
@@ -37,10 +42,20 @@ def _reconcile_line(ws_dir: Path, slug: str, pr: Optional[S.PR], *,
     return "already-consistent"
 
 
+def _parse_args(argv: List[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="reconcile.py")
+    p.add_argument("unit_id", nargs="?", default="")
+    p.add_argument("--emit-gate", action="store_true",
+                   help="Emit structured gate definition when ship-detect candidate found")
+    return p.parse_args(argv)
+
+
 def main(argv: List[str]) -> int:
     store = _store()
+    ns = _parse_args(argv)
+    unit_args = [ns.unit_id] if ns.unit_id else []
     try:
-        ws_id, slug = C.resolve_args(store, argv)
+        ws_id, slug = C.resolve_args(store, unit_args)
     except C.Pick as p:
         print(str(p), file=sys.stderr)
         return 2
@@ -74,6 +89,10 @@ def main(argv: List[str]) -> int:
         rec = result.record
         line = f"ship-detect-candidate {S.format_merged_via_payload(rec)}"
         print(line)
+        if ns.emit_gate:
+            block = gate_emit.emit_gate("ship-detect", kind="unit", overlay="ship-detect")
+            if block:
+                print(block)
         return 0
 
     print("not-merged")

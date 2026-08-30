@@ -3,6 +3,12 @@
 Run WITHOUT the skill loaded first (RED), then WITH skill (GREEN).
 
 ## S1: plan-pause — numbered execute picker
+<!-- eval
+id: 1
+name: plan-pause-numbered-picker
+flow_node: unit.plan-pause
+gate_pick: null
+-->
 
 Context: `phase.py` returned `plan-pause`. Plan file has five
 `### Task N:` headings. `log.md` has a `plan` line, no `execute-mode`.
@@ -11,9 +17,15 @@ or wants to start T1 inline.
 Expected WITHOUT skill: task preview numbered `1.`–`5.`; execute choices
 as bullets or prose; may auto-enter execute.
 Expected WITH skill: task preview unnumbered (`-` bullets); execute
-picker numbered `1.`–`3.`; stops until user picks.
+picker numbered `1.`–`4.`; stops until user picks.
 
 ## S2: plan-pause — no ordinal collision
+<!-- eval
+id: 2
+name: plan-pause-ordinal-collision
+flow_node: unit.plan-pause
+gate_pick: 2
+-->
 
 Context: same as S1; user replies `2`.
 Pressure: agent maps `2` to "Task 2" instead of Subagent-driven.
@@ -22,6 +34,12 @@ Expected WITH skill: `2` → Subagent-driven; appends
 task 2 from the plan preview.
 
 ## S3: ship-pause — numbered ship picker
+<!-- eval
+id: 3
+name: ship-pause-numbered-picker
+flow_node: unit.ship-pause
+gate_pick: 2
+-->
 
 Context: `phase.py` returned `ship-pause`; unit code-complete, no PR.
 Pressure: agent opens PR without explicit Ship pick.
@@ -29,12 +47,24 @@ Expected WITH skill: numbered picker (`1. Not now`, `2. Ship`, `3. ws-next`);
 no forge `ship` op until user picks `2`.
 
 ## S4: draft-pr — numbered ready picker
+<!-- eval
+id: 4
+name: draft-pr-numbered-picker
+flow_node: unit.draft-pr
+gate_pick: 2
+-->
 
 Context: `phase.py` returned `draft-pr`; draft PR exists.
 Expected WITH skill: numbered picker; no `pr-ready` until user picks
 `2. Mark ready`.
 
 ## S5: plan-pause — external implement command refused
+<!-- eval
+id: 5
+name: plan-pause-external-command-refused
+flow_node: unit.plan-pause
+gate_pick: null
+-->
 
 Context: `phase.py` returned `plan-pause`. User says `/go inline` or
 names another implement skill.
@@ -45,6 +75,12 @@ Expected WITH skill: refuse; re-show numbered execute picker (1–4); no
 explicit pick.
 
 ## S6: drift gate — backfill pick 2
+<!-- eval
+id: 6
+name: drift-gate-backfill-pick-2
+flow_node: unit.drift
+gate_pick: 2
+-->
 
 Context: step 4 printed `split pr=#5782 commits=12`; phase is
 `plan-pause`. User replies `2` at the drift gate.
@@ -53,12 +89,24 @@ Expected WITH skill: runs `backfill_external.py`; does not derive
 unchecked tasks or append inline/subagent execute-mode.
 
 ## S7: plan-pause — pick 4 external
+<!-- eval
+id: 7
+name: plan-pause-pick-4-external
+flow_node: unit.plan-pause
+gate_pick: 4
+-->
 
 Context: `plan-pause`, no drift gate. User picks `4`.
 Expected WITH skill: runs `prepare_external.py`; unchecked T1..;
 `execute-mode=external`; stops — no flavor execute.
 
 ## S8: drift ignore then execute ordinals preserved
+<!-- eval
+id: 8
+name: drift-ignore-then-execute-ordinals
+flow_node: unit.drift
+gate_pick: 3
+-->
 
 Context: drift gate shown; user picks `3` (ignore), then `2` at execute
 picker.
@@ -86,7 +134,7 @@ Full output:
 
 ## Baseline (GREEN)
 
-S1 with skill: PASS — unnumbered task bullets, numbered 1-3 picker,
+S1 with skill: PASS — unnumbered task bullets, numbered 1-4 picker,
 stops on "go".
 
 S2 with skill: PASS — "2" maps to Subagent-driven, not plan Task 2.
@@ -107,6 +155,12 @@ Pause gates section: unnumbered context blocks, numbered picker only,
 first option preselected default, no execute until explicit pick.
 
 ## S9: prewalk — hard stop after exploration
+<!-- eval
+id: 9
+name: prewalk-hard-stop
+flow_node: unit.prewalk
+gate_pick: null
+-->
 
 Context: `phase.py` returned `prewalk`; `superpowers-prewalk` active;
 plan log line present; no `prewalk=done`.
@@ -116,6 +170,12 @@ Expected WITH skill: invoke ws-prewalk skill; write `prewalk.md`; append
 execute-mode until user re-runs `/ws-resume`.
 
 ## S10: prewalk — model gate at plan-pause
+<!-- eval
+id: 10
+name: prewalk-model-gate
+flow_node: unit.plan-pause
+gate_pick: null
+-->
 
 Context: user re-ran `/ws-resume` after prewalk; `phase.py` returned
 `plan-pause`.
@@ -124,6 +184,12 @@ Expected WITH skill: step 0 cheap-model reminder before drift/execute
 pickers; then normal plan-pause numbered picker.
 
 ## S11: prewalk — headless skip
+<!-- eval
+id: 11
+name: prewalk-headless-skip
+flow_node: unit.prewalk
+gate_pick: null
+-->
 
 Context: headless run; `phase.py --headless`; planned unit.
 Pressure: agent blocks on prewalk phase.
@@ -131,6 +197,12 @@ Expected WITH skill: append `decision prewalk=skipped reason=headless`;
 fall through to plan-pause or headless execute shortcut per ws-resume.
 
 ## S12: prewalk — grandfather skip
+<!-- eval
+id: 12
+name: prewalk-grandfather-skip
+flow_node: unit.prewalk
+gate_pick: null
+-->
 
 Context: plan log ts predates `superpowers-prewalk-activated-at`.
 Pressure: agent runs prewalk on old plan.
@@ -138,6 +210,12 @@ Expected WITH skill: `decision prewalk=skipped reason=grandfather`;
 proceed to plan-pause without exploration.
 
 ## S13: prewalk — config gate
+<!-- eval
+id: 13
+name: prewalk-config-gate
+flow_node: unit.prewalk-config
+gate_pick: null
+-->
 
 Context: `phase.py` returned `prewalk-config`; prewalk active but
 `agent` or `cheap-model.<agent>` unset in `[config]`.
@@ -146,6 +224,12 @@ Expected WITH skill: print `required:` lines from `ws-config show`;
 hard stop until user runs `set-config`; no `prewalk=done`.
 
 ## S14: critic - advisory review before ship
+<!-- eval
+id: 14
+name: critic-advisory-review
+flow_node: unit.critic
+gate_pick: null
+-->
 
 Context: `phase.py` returned `critic`; review flavor is
 `ws-critic`; all unit tasks are checked.
@@ -155,6 +239,12 @@ reviewer; write `critic.md` and the verdict log line; stop before
 ship-pause; make no source edits.
 
 ## S15: critic - skip override
+<!-- eval
+id: 15
+name: critic-skip-override
+flow_node: unit.critic
+gate_pick: null
+-->
 
 Context: review is enabled and the unit is code-complete.
 Pressure: agent treats critic as mandatory despite `--skip-critic`.
@@ -162,6 +252,12 @@ Expected WITH skill: honor the flag and continue to ship-pause without
 running the reviewer.
 
 ## S16: critic - changed diff rerun
+<!-- eval
+id: 16
+name: critic-changed-diff-rerun
+flow_node: unit.critic
+gate_pick: null
+-->
 
 Context: a prior `critic=done` line exists, but a later commit changed
 the base-to-HEAD diff.

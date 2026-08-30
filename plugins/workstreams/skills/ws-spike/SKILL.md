@@ -9,13 +9,15 @@ description: >-
   spike id after creation.
 argument-hint: '[ws-id] "<what to investigate>" [--slug <slug>] [--spawned-from <unit-id>] [--needs <target>]'
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   author: Caio Ariede
 ---
 
 # ws-spike — start a spike
 
 **Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
+
+**Flow reference:** see visual execution flow in `skills/ws/references/flows/diagrams/spike.mmd`.
 
 **Input:** `$ARGUMENTS` = `<ws-id> "<what to investigate>"` with optional `--slug <slug>`, `--spawned-from <unit-id>`, and `--needs <target>[,<target>]`.
 If `ws-id` is omitted and exactly one workstream exists, use it; otherwise ask which.

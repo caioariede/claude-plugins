@@ -11,13 +11,15 @@ description: >-
   onto a merged base (ws-restack).
 argument-hint: '<unit> needs <target> ["note"] | <unit> clear N<n>'
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   author: Caio Ariede
 ---
 
 # ws-block — manage a unit's dependencies (needs)
 
 **Required first:** load the `ws` skill — the shared contract (SPEC) this skill references throughout; §Dependencies defines needs, targets, `code-complete`, and `blocked`.
+
+**Flow reference:** see visual execution flow in `skills/ws/references/flows/diagrams/block.mmd`.
 
 `ws-block` edits a unit's or spike's **needs** — the dependencies that gate it. `blocked` is the *derived* state (SPEC §Dependencies), never hand-set here: you add or clear needs, and the board/router derive the rest. Workstream-scoped — it touches only the store, runs from any session, and can target a unit or spike other than the one you are in. It targets a **started** (ledger) unit or spike; a not-yet-started planned unit's dependencies live in `backlog.md` `needs=` — edit that line directly (`ws-start` seeds it into `## Needs` once the unit starts, SPEC File formats).
 

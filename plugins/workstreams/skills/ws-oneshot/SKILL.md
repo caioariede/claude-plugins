@@ -3,13 +3,15 @@ name: ws-oneshot
 description: Use when approved spec/plan scope looks like a single unit, no workstream exists yet, and the user confirmed the oneshot offer — not for multi-unit workstreams or when a workstream already owns the design.
 argument-hint: '"<workstream name>" ["<unit purpose>"] [--design <spec-path>]'
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
   author: Caio Ariede
 ---
 
 # ws-oneshot — single-unit workstream entry
 
 **Required first:** load the `ws` skill — the shared contract (SPEC) this skill references throughout.
+
+**Flow reference:** see visual execution flow in `skills/ws/references/flows/diagrams/oneshot.mmd`.
 
 Shorthand for confirmed single-unit entry: `ws-init` → `ws-start` →
 `ws-resume` in one chain. Never invoke without user confirmation —

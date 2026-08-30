@@ -8,7 +8,7 @@ description: >-
   backlog capture (ws-backlog), or routing which unit moves (ws-next).
 argument-hint: 'list | add "<outcome>" | activate <n|slug> | done [n|slug] | move <from> <to> [--ws <ws-id>]'
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   author: Caio Ariede
 compatibility: requires python3 on PATH
 ---
@@ -16,6 +16,8 @@ compatibility: requires python3 on PATH
 # ws-focus — workstream outcome queue
 
 **Required first:** load the `ws` skill — the shared contract (SPEC) this skill references throughout.
+
+**Flow reference:** see visual execution flow in `skills/ws/references/flows/diagrams/focus.mmd`.
 
 `ws-focus` maintains `<store>/<ws-id>/focus.md` — a **manual** queue of user-visible outcomes that steer `ws-next`'s `suggest` proposals. Open focuses preserve insertion order; one line is **active** (`[>]`) at a time; recently done lines (`[x]`, last three kept) trail the open list. Nothing auto-advances — the user activates explicitly. Workstream-scoped, store-only, runs from any session (SPEC "Command scope").
 

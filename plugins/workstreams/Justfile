@@ -38,8 +38,16 @@ check-plugin-version:
 set-plugin-version version:
     python3 "{{tool}}" set "{{plugin}}" "{{version}}"
 
+# Generate Mermaid flow diagrams for ws-* skills.
+gen-flows:
+    python3 skills/ws/scripts/gen_flows.py
+
+# Check that Mermaid flow diagrams match generated output.
+check-flows:
+    python3 skills/ws/scripts/gen_flows.py --check
+
 # Every check CI runs.
-check: check-plugin-version check-guide
+check: check-plugin-version check-guide check-flows
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{justfile_directory()}}/../.."

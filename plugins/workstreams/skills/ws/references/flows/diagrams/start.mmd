@@ -1,0 +1,15 @@
+flowchart TD
+    %% ws-start unit provisioning flow
+
+    start([Start / ws-start]) --> resolve[Resolve ws-id, slug, repo, base]
+    resolve --> check_exists{units/slug exists?}
+    check_exists -- Yes --> confirm_restart{Confirm resume or restart-of}
+    confirm_restart --> create_wt[Create worktree for branch]
+    check_exists -- No --> create_wt
+    create_wt --> append_ledger[Append to units.md]
+    append_ledger --> init_store[Create charter.md, progress.md, log.md]
+    init_store --> check_claims{Has --claims?}
+    check_claims -- Yes --> record_claims[Record claims & copy to purpose]
+    check_claims -- No --> handoff
+    record_claims --> handoff[Fire hook-ws-start-after / offer ws-resume]
+    handoff --> resume([Run ws-resume])

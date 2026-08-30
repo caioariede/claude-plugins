@@ -1,0 +1,15 @@
+flowchart TD
+    %% ws-block dependency management flow
+
+    start([Start / ws-block]) --> mode{Command mode}
+    mode -- "needs (add)" --> resolve_target[Resolve unit/spike & target]
+    resolve_target --> validate{Check self-need & cycle graph}
+    validate -- Invalid --> refuse_cycle[Refuse: self-need or cycle detected]
+    validate -- Valid --> append_need[Append monotonic N&lt;n&gt; to ## Needs]
+    append_need --> log_decision[Append decision need N&lt;n&gt; to log.md]
+    log_decision --> chain_next([Offer ws-next])
+
+    mode -- "clear N<n>" --> resolve_clear[Resolve unit/spike & N<n>]
+    resolve_clear --> remove_need[Remove N&lt;n&gt; line from ## Needs]
+    remove_need --> log_clear[Append decision cleared need to log.md]
+    log_clear --> chain_next

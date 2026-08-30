@@ -23,6 +23,7 @@ from typing import Dict, List, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
 import ws_store as S   # noqa: E402
 import ws_cli as C     # noqa: E402
+import gate_emit       # noqa: E402
 
 
 def _store() -> Path:
@@ -149,6 +150,8 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     p.add_argument("--skip-critic", action="store_true")
     p.add_argument("--headless", action="store_true")
     p.add_argument("--split-skip", action="store_true")
+    p.add_argument("--emit-gate", action="store_true",
+                   help="Emit structured gate definition after phase token")
     return p.parse_args(argv)
 
 
@@ -161,11 +164,29 @@ def main(argv: List[str]) -> int:
         ws = S.load_workstream(store / target.ws_id)
         pr_state = C.gather_pr_state(ws, store)
         S.apply_pr_state(ws, pr_state)
-        print(phase_for_ws(ws, target.slug, target.kind, store,
+        ph = phase_for_ws(ws, target.slug, target.kind, store,
                            skip_prewalk=ns.skip_prewalk,
                            skip_critic=ns.skip_critic,
                            headless=ns.headless,
-                           split_skip=ns.split_skip))
+                           split_skip=ns.split_skip)
+        print(ph)
+        if ns.emit_gate:
+            ctx = None
+            if target.kind == "unit" and ph == "plan-pause":
+                unit = next((u for u in ws.units if u.slug == target.slug), None)
+                if unit:
+                    plan_path = S.latest_plan_log_path(unit)
+                    if plan_path and Path(plan_path).exists():
+                        ctx = {"plan": plan_path}
+                        try:
+                            with open(plan_path, "r", encoding="utf-8") as f:
+                                tasks = S.derive_tasks_from_plan(f.read())
+                                ctx["tasks"] = [title for _, title in tasks]
+                        except Exception:
+                            pass
+            gate_block = gate_emit.emit_gate(ph, kind=target.kind, context=ctx)
+            if gate_block:
+                print(gate_block)
         return 0
     except C.Pick as p:
         print(str(p), file=sys.stderr)

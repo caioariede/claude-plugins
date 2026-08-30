@@ -1,0 +1,13 @@
+flowchart TD
+    %% ws-drop abandonment flow
+
+    start([Start / ws-drop]) --> check_status{Unit merged or spike complete?}
+    check_status -- Yes --> refuse_merged[Refuse: work already finished / merged]
+    check_status -- No --> scan_dependents[Scan dependent units, spikes & backlog]
+    scan_dependents --> confirm{Confirm teardown with user}
+    confirm -- No --> abort([Stop / abort])
+    confirm -- Yes --> check_kind{Kind?}
+    check_kind -- Unit --> remove_wt[Remove worktree & delete local branch]
+    check_kind -- Spike --> append_drop[Append dropped log line]
+    remove_wt --> append_drop
+    append_drop --> done([Unit / spike marked dropped])
