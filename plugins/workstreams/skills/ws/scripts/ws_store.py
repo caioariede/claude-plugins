@@ -56,128 +56,6 @@ class PR:
 
 
 @dataclass
-class MergedVia:
-    branch: str
-    sha: str
-    pr: Optional[int] = None
-
-
-_MERGED_VIA_RE = re.compile(
-    r'branch=(\S+)\s+sha=(\S+)(?:\s+pr=(\d+))?')
-
-
-def parse_merged_via_payload(text: str) -> Optional[MergedVia]:
-    m = _MERGED_VIA_RE.search(text)
-    if not m:
-        return None
-    pr = int(m.group(3)) if m.group(3) else None
-    return MergedVia(branch=m.group(1), sha=m.group(2), pr=pr)
-
-
-def format_merged_via_payload(rec: MergedVia) -> str:
-    payload = f"branch={rec.branch} sha={rec.sha}"
-    if rec.pr is not None:
-        payload += f" pr={rec.pr}"
-    return payload
-
-
-def merged_via_record(u: Unit) -> Optional[MergedVia]:
-    for _ts, kind, payload in reversed(u.log):
-        if kind != "merged-via":
-            continue
-        rec = parse_merged_via_payload(payload)
-        if rec is not None:
-            return rec
-    return None
-
-
-def effective_merged_via(u: Unit) -> Optional[MergedVia]:
-    """Honor merged-via only when the unit had shippable work."""
-    rec = merged_via_record(u)
-    if rec is None:
-        return None
-    if u.tasks_total <= 0 and not (
-            u.pr is not None and u.pr.state == "MERGED"):
-        return None
-    return rec
-
-
-def is_merged(u: Unit) -> bool:
-    if effective_merged_via(u) is not None:
-        return True
-    return u.pr is not None and u.pr.state == "MERGED"
-
-
-@dataclass
-class MergeDetectInput:
-    tip_sha: str
-    default_tip_sha: str
-    ledger_pr_state: Optional[str]
-    tasks_total: int
-    had_ledger_pr: bool
-    tier_a_match: Optional[MergedVia] = None
-    is_ancestor: bool = False
-    default_branch: str = ""
-
-
-@dataclass
-class MergeDetectResult:
-    outcome: str
-    record: Optional[MergedVia] = None
-
-
-def decide_merged_via(inp: MergeDetectInput) -> MergeDetectResult:
-    if inp.ledger_pr_state == "MERGED":
-        return MergeDetectResult("already-merged")
-    if inp.tip_sha == inp.default_tip_sha:
-        return MergeDetectResult("not-shipped")
-    if inp.tasks_total <= 0 and not inp.had_ledger_pr:
-        return MergeDetectResult("not-shipped")
-    if inp.tier_a_match is not None:
-        return MergeDetectResult("tier-a", inp.tier_a_match)
-    if not inp.is_ancestor:
-        return MergeDetectResult("not-shipped")
-    branch = inp.default_branch or "default"
-    return MergeDetectResult(
-        "tier-b",
-        MergedVia(branch=branch, sha=inp.tip_sha),
-    )
-
-
-def append_merged_via(ws_dir: Path, slug: str, rec: MergedVia) -> bool:
-    """Append merged-via when absent for this sha; return True if written."""
-    prior = merged_via_record(_unit_from_log(ws_dir, slug))
-    if prior and prior.sha == rec.sha:
-        return False
-    log_path = ws_dir / "units" / slug / "log.md"
-    _append_log_line(log_path, "merged-via", format_merged_via_payload(rec))
-    return True
-
-
-def _unit_from_log(ws_dir: Path, slug: str) -> Unit:
-    log_path = ws_dir / "units" / slug / "log.md"
-    return Unit(slug=slug, log=parse_log(_read(log_path)))
-
-
-def ship_detect_dismissed_sha(u: Unit) -> Optional[str]:
-    for _ts, kind, payload in reversed(u.log):
-        if kind != "ship-detect-dismissed":
-            continue
-        m = re.search(r"\bsha=([0-9a-f]+)\b", payload)
-        if m:
-            return m.group(1)
-    return None
-
-
-def append_ship_detect_dismissed(ws_dir: Path, slug: str, sha: str) -> bool:
-    if ship_detect_dismissed_sha(_unit_from_log(ws_dir, slug)) == sha:
-        return False
-    log_path = ws_dir / "units" / slug / "log.md"
-    _append_log_line(log_path, "ship-detect-dismissed", f"sha={sha}")
-    return True
-
-
-@dataclass
 class Need:
     nid: str            # N<n> for explicit needs, "base" for the implicit one
     target: str         # raw target text (slug / unit-id / F-id / WF-id)
@@ -211,12 +89,21 @@ class Unit:
     status: str = "building"            # derived
 
     @property
-    def code_complete(self) -> bool:
-        # SPEC: >=1 task and every task checked. Zero tasks is NOT
-        # code-complete. merged implies code-complete.
-        if is_merged(self):
-            return True
+    def tasks_complete(self) -> bool:
         return self.tasks_total > 0 and self.tasks_done == self.tasks_total
+
+    @property
+    def followups_complete(self) -> bool:
+        return not self.followups or all(fu.checked for fu in self.followups)
+
+    @property
+    def unit_complete(self) -> bool:
+        return self.tasks_complete and self.followups_complete
+
+    @property
+    def code_complete(self) -> bool:
+        """Alias for ``unit_complete`` (need satisfaction + terminal)."""
+        return self.unit_complete
 
 
 @dataclass
@@ -469,31 +356,6 @@ def latest_plan_from_log(log: List[Tuple[str, str, str]]) -> Optional[str]:
     return path
 
 
-def reconcile_tasks_on_merge(text: str) -> Tuple[str, List[str]]:
-    """Check open ## Tasks boxes; leave follow-ups/needs untouched."""
-    headings = {"Tasks": "tasks", "Follow-ups": "followups",
-                "Needs": "needs"}
-    section: Optional[str] = None
-    reconciled: List[str] = []
-    out: List[str] = []
-    for raw in text.splitlines():
-        line = raw.strip()
-        sec = _section_of(line, headings)
-        if sec is not None:
-            section = sec
-            out.append(raw)
-            continue
-        if section == "tasks":
-            m = _TASK_LINE_RE.match(line)
-            if m and m.group(2) == " ":
-                reconciled.append(m.group(4))
-                out.append(f"{m.group(1)}x{m.group(3)}")
-                continue
-        out.append(raw)
-    suffix = "\n" if text.endswith("\n") else ""
-    return "\n".join(out) + suffix, reconciled
-
-
 def _append_log_line(log_path: Path, kind: str, payload: str) -> None:
     from datetime import datetime, timezone
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -503,40 +365,6 @@ def _append_log_line(log_path: Path, kind: str, payload: str) -> None:
             f.write(line)
     else:
         log_path.write_text(f"# log\n{line}", encoding="utf-8")
-
-
-def _reconcile_source_label(pr: Optional[PR],
-                            merged_via: Optional[MergedVia]) -> str:
-    if merged_via is not None:
-        return f"merged-via {format_merged_via_payload(merged_via)}"
-    if pr and pr.number is not None:
-        return f"merged PR #{pr.number}"
-    return "merged"
-
-
-def maybe_reconcile_merged_unit(ws_dir: Path, slug: str,
-                                pr: Optional[PR], *,
-                                merged_via: Optional[MergedVia] = None
-                                ) -> List[str]:
-    """Check open task boxes when terminal-merged; return reconciled ids."""
-    udir = ws_dir / "units" / slug
-    log_path = udir / "log.md"
-    if merged_via is None:
-        u = Unit(slug=slug, log=parse_log(_read(log_path)))
-        merged_via = merged_via_record(u)
-    if merged_via is None and not (pr and pr.state == "MERGED"):
-        return []
-    prog_path = udir / "progress.md"
-    raw = _read(prog_path)
-    new_text, ids = reconcile_tasks_on_merge(raw)
-    if not ids:
-        return []
-    prog_path.write_text(new_text, encoding="utf-8")
-    _append_log_line(
-        log_path, "decision",
-        f"reconciled tasks from {_reconcile_source_label(pr, merged_via)}: "
-        f"{', '.join(ids)}")
-    return ids
 
 
 def _append_log_lines(log_path: Path,
@@ -989,12 +817,10 @@ def _status_for(u: Unit, ws: Workstream, by_slug: Dict[str, Unit],
                 by_spike: Dict[str, Spike]) -> str:
     if u.dropped:
         return "dropped"
-    if is_merged(u):
-        return "merged"
     if unit_needs(u, ws) and _has_unmet_need(u, ws, by_slug, by_spike):
         return "blocked"
-    if u.pr and u.pr.state == "OPEN" and not u.pr.is_draft:
-        return "in-review"
+    if u.unit_complete:
+        return "complete"
     return "building"
 
 
@@ -1214,10 +1040,9 @@ def resume_phase(u: Unit, ws: Workstream,
     """Phase for ws-resume loop control.
 
     First match: blocked > plan > prewalk-config > prewalk > plan-pause >
-    loop > ship-pause > draft-pr > done. ``plan-pause`` when a plan exists
-    and ``tasks_total == 0``.
+    loop (tasks, then follow-ups) > critic > done.
     """
-    if u.dropped or is_merged(u):
+    if u.dropped:
         return "done"
     by_spike = _by_spike(ws)
     if _has_unmet_need(u, ws, by_slug, by_spike):
@@ -1235,17 +1060,13 @@ def resume_phase(u: Unit, ws: Workstream,
                     return prewalk
             return "plan-pause"
         return "plan"
-    if not u.code_complete:
+    if not u.tasks_complete or not u.followups_complete:
         return "loop"
     if (review_enabled and not skip_critic and not headless
             and not grandfather_critic):
         critic = _pending_critic_phase(u, critic_digest)
         if critic:
             return critic
-    if u.pr is None:
-        return "ship-pause"
-    if u.pr.is_draft:
-        return "draft-pr"
     return "done"
 
 
@@ -1257,7 +1078,7 @@ def resume_spike_phase(sp: Spike, ws: Workstream,
                        by_slug: Dict[str, Unit],
                        by_spike: Dict[str, Spike]) -> str:
     """Phase for spike ws-resume: blocked | plan | plan-pause | loop | done."""
-    if sp.dropped:
+    if sp.dropped or sp.spike_complete:
         return "done"
     if _has_unmet_spike_need(sp, ws, by_slug, by_spike):
         return "blocked"
@@ -1319,9 +1140,6 @@ def focus_line_for(ws: Workstream) -> str:
 
 
 def _pr_seg(u: Unit) -> str:
-    mv = effective_merged_via(u)
-    if mv and mv.pr:
-        return f" · #{mv.pr} via {mv.branch}"
     return f" · #{u.pr.number}" if u.pr and u.pr.number else ""
 
 
@@ -1354,13 +1172,13 @@ def build_board(ws: Workstream,
 
     ledger_slugs = set(by_slug)
     for u in ws.units:
-        if u.status == "merged":
+        if u.status == "complete":
             b.done.append(f"{u.slug}{_pr_seg(u)}")
         elif u.status == "dropped":
             b.dropped.append(u.slug)
         elif u.status == "blocked":
             b.blocked.append(_blocked_cell(u, ws, by_slug, by_spike))
-        else:  # building | in-review
+        else:  # building
             ph = phase_for(u) if phase_for else None
             suffix = unit_board_suffix(u, phase=ph)
             b.in_progress.append(f"{u.slug}{_pr_seg(u)} · {suffix}")
@@ -1400,7 +1218,7 @@ def build_board(ws: Workstream,
     # Backlog: open in-flight F<n> + open workstream WF<n>. A follow-up a
     # live unit claims is that unit's row, not a backlog line.
     for u in ws.units:
-        if u.status in ("merged", "dropped"):
+        if u.status in ("complete", "dropped"):
             continue
         for fu in u.followups:
             if followup_open(f"{u.slug}:{fu.fid}", fu, ws):
@@ -1449,7 +1267,7 @@ def _planned_blocked_cell(p: PlannedUnit,
 
 def workstream_done(ws: Workstream, by_slug: Dict[str, Unit]) -> bool:
     """SPEC "Workstream done": no active unit/spike and no open backlog."""
-    active_units = {"building", "blocked", "in-review"}
+    active_units = {"building", "blocked"}
     if any(u.status in active_units for u in ws.units):
         return False
     active_spikes = {"researching", "blocked"}
@@ -1550,11 +1368,15 @@ def unit_readiness(u: Unit, *, phase: Optional[str] = None) -> Optional[str]:
         return "prewalk (config required)"
     if phase == "critic":
         return "critic (reviewing)"
-    if u.code_complete:
+    if u.unit_complete:
         return None
     if u.tasks_total:
         left = u.tasks_total - u.tasks_done
-        return f"{left} of {u.tasks_total} tasks left"
+        msg = f"{left} of {u.tasks_total} tasks left"
+        if u.followups and not u.followups_complete:
+            fu_left = sum(1 for fu in u.followups if not fu.checked)
+            msg += f", {fu_left} follow-up(s)"
+        return msg
     if _has_plan_line(u) and u.tasks_total == 0:
         return "plan-pause (store incomplete)"
     return "no tasks planned yet"
@@ -1586,9 +1408,11 @@ def _resume_move_why(u: Unit, *,
         r = _readiness_for_phase(u, phase_for(u))
         if r:
             return r
-    if u.code_complete:
-        return (f"tasks done, PR #{u.pr.number}" if u.pr and u.pr.number
-                else "tasks done, PR open")
+    if u.unit_complete:
+        return unit_readiness(u) or "scope complete"
+    if u.tasks_complete and not u.followups_complete:
+        fu_left = sum(1 for fu in u.followups if not fu.checked)
+        return f"{fu_left} follow-up(s) left"
     return unit_readiness(u) or "no tasks planned yet"
 
 
@@ -1627,7 +1451,7 @@ def _spike_dependents(sp: Spike, ws: Workstream,
 @dataclass
 class Move:
     unit: str                       # unit slug (ledger unit or planned)
-    rule: str                       # restack|ship|resume
+    rule: str                       # restack|resume
     command: str                    # resolved ws-* command
     branch: Optional[str] = None    # None until a worktree exists
     why: str = ""                   # short display phrase
@@ -1635,27 +1459,16 @@ class Move:
 
 # Rule priority for ranking: a rebase unblocks everything downstream,
 # a finished unit is one PR away, work in flight beats work not begun.
-_RULE_RANK = {"restack": 0, "ship": 1, "resume": 2}
+_RULE_RANK = {"restack": 0, "resume": 1}
 
 _RULE_HEADLINE = {
     "restack": "base moved; rebase before proceeding",
-    "ship": "tasks done, no PR — ship it",
     "resume": "advance the in-flight unit",
 }
 
 
-def _code_complete_waiting_on_open_pr(u: Unit) -> bool:
-    return (u.code_complete and u.pr
-            and u.pr.state == "OPEN" and not u.pr.is_draft)
-
-
-def _code_complete_closed_pr(u: Unit) -> bool:
-    return u.code_complete and u.pr and u.pr.state == "CLOSED"
-
-
 def enumerate_moves(ws: Workstream,
                     by_slug: Dict[str, Unit],
-                    overlay: Optional[Dict[str, ReconcileOverlay]] = None,
                     *,
                     phase_for: Optional[Callable[[Unit], str]] = None
                     ) -> List[Move]:
@@ -1666,9 +1479,7 @@ def enumerate_moves(ws: Workstream,
     by_spike = _by_spike(ws)
 
     for i, u in enumerate(ws.units):
-        if u.status in ("merged", "dropped"):
-            continue
-        if _overlay_suppresses(u.slug, overlay):
+        if u.status == "dropped":
             continue
         deps = -_dependents(u, ws, by_slug)
         if _drifted(u):
@@ -1677,25 +1488,12 @@ def enumerate_moves(ws: Workstream,
                                 u.branch or None,
                                 f"base moved off {recorded_base(u)}")))
             continue
-        if u.status not in ("building", "in-review"):
+        if u.status != "building":
             continue                # blocked: the blocker moves first
-        if _code_complete_waiting_on_open_pr(u):
-            continue
-        if _code_complete_closed_pr(u):
-            ranked.append(((_RULE_RANK["resume"], deps, i),
-                           Move(u.slug, "resume", f"ws-resume {u.slug}",
-                                u.branch or None,
-                                "ledger PR closed — reconcile or drop")))
-            continue
-        if u.code_complete and not u.pr:
-            ranked.append(((_RULE_RANK["ship"], deps, i),
-                           Move(u.slug, "ship", f"ws-resume {u.slug}",
-                                u.branch or None, "tasks done, no PR")))
-        else:
-            why = _resume_move_why(u, phase_for=phase_for)
-            ranked.append(((_RULE_RANK["resume"], deps, i),
-                           Move(u.slug, "resume", f"ws-resume {u.slug}",
-                                u.branch or None, why)))
+        why = _resume_move_why(u, phase_for=phase_for)
+        ranked.append(((_RULE_RANK["resume"], deps, i),
+                       Move(u.slug, "resume", f"ws-resume {u.slug}",
+                            u.branch or None, why)))
 
     base = len(ws.units)
     for j, sp in enumerate(ws.spikes):
@@ -1730,64 +1528,9 @@ class StackBase:
     readiness: Optional[str] = None
 
 
-_OVERLAY_GATE = frozenset({"tier-a", "tier-b"})
-
-
-@dataclass
-class ReconcileOverlay:
-    """Per-slug ship-detection result; never persisted by ws-next."""
-    slug: str
-    outcome: str
-    record: Optional[MergedVia] = None
-
-
-def _overlay_outcome_gates(outcome: str) -> bool:
-    return outcome in _OVERLAY_GATE
-
-
-def _overlay_suppresses(slug: str,
-                        overlay: Optional[Dict[str, ReconcileOverlay]]
-                        ) -> bool:
-    if not overlay:
-        return False
-    o = overlay.get(slug)
-    return o is not None and _overlay_outcome_gates(o.outcome)
-
-
-def _reconcile_candidates(
-        overlay: Optional[Dict[str, ReconcileOverlay]]
-        ) -> List[ReconcileOverlay]:
-    if not overlay:
-        return []
-    return [o for o in overlay.values() if _overlay_outcome_gates(o.outcome)]
-
-
-def stackable_bases(ws: Workstream,
-                    proposal_repo: Optional[str] = None,
-                    overlay: Optional[Dict[str, ReconcileOverlay]] = None
-                    ) -> List[StackBase]:
-    if not proposal_repo:
-        return []
-    want = proposal_repo.lower()
-    out: List[StackBase] = []
-    for u in ws.units:
-        if u.dropped or not u.branch or not u.repo:
-            continue
-        if _overlay_suppresses(u.slug, overlay):
-            continue
-        if u.status not in ("building", "in-review"):
-            continue
-        if _drifted(u):
-            continue
-        if u.repo.lower() != want:
-            continue
-        out.append(StackBase(u.slug, u.repo, u.branch, unit_readiness(u)))
-    return out
-
-
 @dataclass
 class Decision:
-    rule: str  # restack|ship|resume|triage-*|suggest|reconcile-pending|...
+    rule: str  # restack|resume|triage-*|suggest|...
     command: Optional[str] = None   # resolved ws-* command; None for triage/done
     unit: Optional[str] = None      # unit slug when the command is unit-scoped
     branch: Optional[str] = None    # ledger branch; None until a worktree exists
@@ -1804,7 +1547,26 @@ class Decision:
     active_focus: Optional[FocusItem] = None
     focus_queue: List[FocusItem] = field(default_factory=list)
     stackable: Optional[List[StackBase]] = None
-    reconcile_candidates: List[ReconcileOverlay] = field(default_factory=list)
+
+
+def stackable_bases(ws: Workstream,
+                    proposal_repo: Optional[str] = None
+                    ) -> List[StackBase]:
+    if not proposal_repo:
+        return []
+    want = proposal_repo.lower()
+    out: List[StackBase] = []
+    for u in ws.units:
+        if u.dropped or not u.branch or not u.repo:
+            continue
+        if u.status != "building":
+            continue
+        if _drifted(u):
+            continue
+        if u.repo.lower() != want:
+            continue
+        out.append(StackBase(u.slug, u.repo, u.branch, unit_readiness(u)))
+    return out
 
 
 def _followup_blockers(ws: Workstream,
@@ -1835,7 +1597,7 @@ def proposable_followups(ws: Workstream,
     found = [(fu.fid, fu, fu.origin or ws.ws_id)
              for fu in ws.wf_followups if followup_open(fu.fid, fu, ws)]
     for u in ws.units:
-        if u.status != "merged":
+        if u.status != "complete":
             continue
         found += [(f"{u.slug}:{fu.fid}", fu, u.slug) for fu in u.followups
                   if followup_open(f"{u.slug}:{fu.fid}", fu, ws)]
@@ -1853,18 +1615,13 @@ def _pick_successors(slug: str, units: List[Unit],
     if not all_s:
         return []
     live = [s for s in all_s
-            if not by[s].dropped
-            and not is_merged(by[s])]
+            if not by[s].dropped and not by[s].unit_complete]
     return live if live else [all_s[-1]]
 
 
 def _covered_entry(u: Unit, units: List[Unit],
-                   by: Dict[str, Unit],
-                   overlay: Optional[Dict[str, ReconcileOverlay]] = None
-                   ) -> str:
+                   by: Dict[str, Unit]) -> str:
     base = f"{u.slug} — {u.title}" if u.title else u.slug
-    if _overlay_suppresses(u.slug, overlay):
-        base = f"{base} (reconcile pending)"
     if not u.dropped:
         return base
     succs = _pick_successors(u.slug, units, by)
@@ -1873,12 +1630,10 @@ def _covered_entry(u: Unit, units: List[Unit],
     return f"{base} (superseded by {', '.join(succs)})"
 
 
-def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit],
-                   overlay: Optional[Dict[str, ReconcileOverlay]] = None
-                   ) -> List[str]:
+def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit]) -> List[str]:
     """What the store already covers, so a proposal can skip it. Dropped
     units count — the drop was a decision (SPEC)."""
-    out = [_covered_entry(u, ws.units, by_slug, overlay) for u in ws.units]
+    out = [_covered_entry(u, ws.units, by_slug) for u in ws.units]
     for sp in ws.spikes:
         if sp.status not in ("complete", "dropped"):
             continue
@@ -1892,11 +1647,10 @@ def _covered_scope(ws: Workstream, by_slug: Dict[str, Unit],
 def _proposal_material(
         ws: Workstream,
         by_slug: Dict[str, Unit],
-        overlay: Optional[Dict[str, ReconcileOverlay]] = None
         ) -> Tuple[List[Proposable], List[str], str]:
     """Follow-ups, covered scope, and design path for Propose a unit."""
     return (proposable_followups(ws, by_slug),
-            _covered_scope(ws, by_slug, overlay),
+            _covered_scope(ws, by_slug),
             ws.design)
 
 
@@ -1912,7 +1666,6 @@ def _proposal_attachable(moves: List[Move]) -> bool:
 
 def decide_next(ws: Workstream,
                 proposal_repo: Optional[str] = None,
-                overlay: Optional[Dict[str, ReconcileOverlay]] = None,
                 *,
                 phase_for: Optional[Callable[[Unit], str]] = None
                 ) -> Decision:
@@ -1921,12 +1674,11 @@ def decide_next(ws: Workstream,
     derive_status(ws)
     by_slug = {u.slug: u for u in ws.units}
     by_spike = _by_spike(ws)
-    candidates = _reconcile_candidates(overlay)
 
     def _stackable_for(attach: bool, design: str) -> Optional[List[StackBase]]:
         if not attach or not (design or ws.active_focus):
             return None
-        return stackable_bases(ws, proposal_repo, overlay)
+        return stackable_bases(ws, proposal_repo)
 
     blocked_lines = []
     for u in ws.units:
@@ -1942,35 +1694,25 @@ def decide_next(ws: Workstream,
                   for t, n in _spike_unmet_needs(sp, ws, by_slug, by_spike)]
         blocked_lines.append(f"{sp.slug} [spike] — needs {', '.join(labels)}")
 
-    # Code-complete ready PRs emit no move; surface them so
-    # a no-move workstream does not claim "done" while
-    # review is still pending.
-    waiting_lines = []
-    for u in ws.units:
-        if u.status != "in-review" or not u.code_complete:
-            continue
-        why = (f"PR #{u.pr.number}" if u.pr and u.pr.number else "PR open")
-        waiting_lines.append(f"{u.slug} — {why}")
-
+    # Terminal units emit no move.
     def out(rule, command=None, unit=None, branch=None, moves=None,
             open_items=None, headline="", proposable=None, covered=None,
             design="", active_focus=None, focus_queue=None, stackable=None):
         return Decision(rule=rule, command=command, unit=unit,
                         branch=branch or None, moves=moves or [],
-                        blocked=blocked_lines, waiting=waiting_lines,
+                        blocked=blocked_lines,
                         open_items=open_items or [],
                         headline=headline, proposable=proposable or [],
                         covered=covered or [], design=design,
                         active_focus=active_focus,
                         focus_queue=focus_queue or [],
-                        stackable=stackable,
-                        reconcile_candidates=candidates)
+                        stackable=stackable)
 
     # Everything runnable now, ranked; the leader is the default.
-    moves = enumerate_moves(ws, by_slug, overlay, phase_for=phase_for)
+    moves = enumerate_moves(ws, by_slug, phase_for=phase_for)
     if moves:
         top = moves[0]
-        proposable, covered, design = _proposal_material(ws, by_slug, overlay)
+        proposable, covered, design = _proposal_material(ws, by_slug)
         attach = (_proposal_attachable(moves)
                   and _has_proposal_source(ws, proposable))
         headline = (top.why if top.rule == "resume" and top.why
@@ -2016,17 +1758,7 @@ def decide_next(ws: Workstream,
     # Terminal fork, first match wins: suggest > triage-backlog >
     # waiting > empty > done. `suggest` when no moves exist; terminal
     # moves may carry proposal material alongside (see early return).
-    proposable, covered, design = _proposal_material(ws, by_slug, overlay)
-    if candidates and _has_proposal_source(ws, proposable):
-        n = len(candidates)
-        headline = (f"reconcile before proposing — {n} unit(s) may have "
-                    "shipped elsewhere")
-        return out("reconcile-pending", None, None, open_items=open_items,
-                   headline=headline,
-                   proposable=proposable, covered=covered, design=design,
-                   active_focus=ws.active_focus,
-                   focus_queue=ws.focus_queued,
-                   stackable=_stackable_for(True, design))
+    proposable, covered, design = _proposal_material(ws, by_slug)
     if _has_proposal_source(ws, proposable):
         headline = ("focus: {} — propose the next unit".format(
             ws.active_focus.slug)
@@ -2047,10 +1779,6 @@ def decide_next(ws: Workstream,
                 else "no runnable step — advance a blocker or triage backlog")
         return out("triage-backlog", None, None, open_items=open_items,
                    headline=head)
-
-    if waiting_lines:
-        return out("waiting", None, None,
-                   headline="waiting on review — nothing to advance")
 
     if not ws.units:
         return out("empty", None, None,

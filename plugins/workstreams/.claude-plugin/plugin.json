@@ -1,7 +1,7 @@
 {
   "name": "workstreams",
   "description": "Stacked-PR workstream management with pluggable flavors: init, start, spike, resume, prewalk, critic, restack, drop, block, backlog, next, config, a guide, and a status board across isolated worktree units and store-only research spikes.",
-  "version": "0.35.1",
+  "version": "0.36.0",
   "author": {
     "name": "Caio Ariede"
   }

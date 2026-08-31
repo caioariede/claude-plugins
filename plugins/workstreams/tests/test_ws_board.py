@@ -84,13 +84,15 @@ def moves_of(ws):
 
 
 def three_move_store(store):
-    """One ship, one advance, one planned (no move) -> pr_state map."""
+    """Two in-flight units plus one planned (no move) -> pr_state map."""
     write_ws(store, "2026-01-01-demo",
              units_md=ledger('a  "A"  repo=o/r  branch=feat-a-2',
                              'b  "B"  repo=o/r  branch=b'),
              backlog_md="## Planned units\n- [ ] p  base=b  — do it\n",
              units={"a": {"progress": "## Tasks\n- [x] T1  x\n- [ ] T2  y\n"},
-                    "b": {"progress": "## Tasks\n- [x] T1  x\n"}})
+                    "b": {"progress": (
+                        "## Tasks\n- [x] T1  x\n"
+                        "## Follow-ups\n- [ ] F1  ship gap\n")}})
     return {"feat-a-2": None, "b": None}
 
 
@@ -148,35 +150,44 @@ class CodeComplete(unittest.TestCase):
         self.assertTrue(S.Unit(slug="x", tasks_total=3, tasks_done=3).code_complete)
         self.assertFalse(S.Unit(slug="x", tasks_total=3, tasks_done=2).code_complete)
 
-    def test_merged_implies_complete(self):
-        u = S.Unit(slug="x", tasks_total=0, tasks_done=0, pr=pr(1, "MERGED"))
+    def test_open_followup_not_complete(self):
+        u = S.Unit(slug="x", tasks_total=2, tasks_done=2,
+                   followups=[S.Followup("F1", "x", checked=False)])
+        self.assertFalse(u.code_complete)
+
+    def test_followups_checked_complete(self):
+        u = S.Unit(slug="x", tasks_total=2, tasks_done=2,
+                   followups=[S.Followup("F1", "x", checked=True)])
         self.assertTrue(u.code_complete)
 
 
 class StatusPrecedence(unittest.TestCase):
     def _ws(self, **unit_kw):
+        defaults = dict(tasks_total=1, tasks_done=1)
+        defaults.update(unit_kw)
         ws = S.Workstream(ws_id="w", name="w")
-        ws.units = [S.Unit(slug="u", **unit_kw)]
+        ws.units = [S.Unit(slug="u", **defaults)]
         S.derive_status(ws)
         return ws.units[0].status
 
     def test_dropped_wins(self):
-        u = S.Unit(slug="u", dropped=True, pr=pr(1, "MERGED"))
+        u = S.Unit(slug="u", dropped=True, tasks_total=1, tasks_done=1)
         ws = S.Workstream(ws_id="w", name="w", units=[u])
         S.derive_status(ws)
         self.assertEqual(u.status, "dropped")
 
-    def test_merged(self):
-        self.assertEqual(self._ws(pr=pr(1, "MERGED")), "merged")
+    def test_complete(self):
+        self.assertEqual(self._ws(), "complete")
 
-    def test_in_review_ready_pr(self):
-        self.assertEqual(self._ws(pr=pr(1, "OPEN", is_draft=False)), "in-review")
+    def test_pr_state_does_not_change_status(self):
+        self.assertEqual(
+            self._ws(pr=pr(1, "OPEN", is_draft=False)), "complete")
+        self.assertEqual(
+            self._ws(pr=pr(1, "OPEN", is_draft=True)), "complete")
+        self.assertEqual(self._ws(pr=pr(1, "MERGED")), "complete")
 
-    def test_building_draft_pr(self):
-        self.assertEqual(self._ws(pr=pr(1, "OPEN", is_draft=True)), "building")
-
-    def test_building_no_pr(self):
-        self.assertEqual(self._ws(pr=None), "building")
+    def test_building_incomplete_tasks(self):
+        self.assertEqual(self._ws(tasks_total=2, tasks_done=1), "building")
 
 
 class BlockedDerivation(unittest.TestCase):
@@ -216,7 +227,7 @@ class BlockedDerivation(unittest.TestCase):
             tasks_done=1,
         ))
         S.derive_status(ws)
-        self.assertEqual(ws.units[-1].status, "in-review")
+        self.assertEqual(ws.units[-1].status, "complete")
 
     def test_dropped_target_noted(self):
         ws = self._ws()
@@ -471,12 +482,11 @@ class EnumerateMoves(unittest.TestCase):
                    log=[("t", "created", "base=master")])
         self.assertEqual(moves_of(mkws([u])), [])
 
-    def test_code_complete_draft_pr_still_resumes(self):
+    def test_code_complete_draft_pr_emits_no_move(self):
         u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
                    pr=pr(12, "OPEN", True, "master"),
                    log=[("t", "created", "base=master")])
-        m = moves_of(mkws([u]))[0]
-        self.assertEqual((m.rule, m.why), ("resume", "tasks done, PR #12"))
+        self.assertEqual(moves_of(mkws([u])), [])
 
     def test_in_review_with_tasks_left_still_resumes(self):
         u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=1,
@@ -510,11 +520,10 @@ class EnumerateMoves(unittest.TestCase):
         d = S.decide_next(ws, proposal_repo="o/r")
         self.assertEqual(d.headline, "plan-pause (store incomplete)")
 
-    def test_one_move_per_unit_ship_beats_resume(self):
+    def test_complete_unit_emits_no_move(self):
         u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=2)
         ms = moves_of(mkws([u]))
-        self.assertEqual([(m.unit, m.rule, m.why) for m in ms],
-                         [("a", "ship", "tasks done, no PR")])
+        self.assertEqual(ms, [])
 
     def test_blocked_unit_emits_no_move(self):
         base = S.Unit(slug="base", branch="base", tasks_total=2, tasks_done=1)
@@ -532,11 +541,10 @@ class EnumerateMoves(unittest.TestCase):
                          [("dep", "restack"), ("base", "resume")])
         self.assertEqual(ms[0].why, "base moved off base")
 
-    def test_merged_and_dropped_units_emit_nothing(self):
-        merged = S.Unit(slug="m", branch="m", tasks_total=1, tasks_done=1,
-                        pr=pr(1, "MERGED"))
+    def test_complete_and_dropped_units_emit_nothing(self):
+        done = S.Unit(slug="m", branch="m", tasks_total=1, tasks_done=1)
         gone = S.Unit(slug="g", branch="g", dropped=True)
-        self.assertEqual(moves_of(mkws([merged, gone])), [])
+        self.assertEqual(moves_of(mkws([done, gone])), [])
 
     def test_startable_planned_emits_no_move(self):
         ws = mkws(planned=[S.PlannedUnit(slug="p", base="master", what="x")])
@@ -548,16 +556,15 @@ class EnumerateMoves(unittest.TestCase):
                                                  what="x")])
         self.assertEqual([m.unit for m in moves_of(ws)], ["base"])
 
-    def test_rank_orders_restack_ship_resume_start(self):
+    def test_rank_orders_restack_resume(self):
         drift = S.Unit(slug="d", branch="d", tasks_total=1, tasks_done=1,
                        pr=pr(9, "OPEN", False, "master"),
                        log=[("t", "created", "base=feat-x")])
-        shipit = S.Unit(slug="s", branch="s", tasks_total=1, tasks_done=1)
         going = S.Unit(slug="g", branch="g", tasks_total=4, tasks_done=1)
-        ws = mkws([shipit, going, drift],
+        ws = mkws([going, drift],
                   planned=[S.PlannedUnit(slug="p", base="master", what="x")])
         self.assertEqual([m.rule for m in moves_of(ws)],
-                         ["restack", "ship", "resume"])
+                         ["restack", "resume"])
 
     def test_equal_rule_ranks_by_dependents_then_ledger(self):
         a = S.Unit(slug="a", branch="a", tasks_total=4, tasks_done=1)
@@ -593,11 +600,11 @@ class DecideNext(unittest.TestCase):
                    log=[("t", "created", "base=master")])
         self.assertNotEqual(S.decide_next(self._ws([u])).rule, "restack")
 
-    def test_rule2_ship_before_rule3_resume(self):
+    def test_rule2_resume_prefers_critical_path(self):
         prog = S.Unit(slug="prog", tasks_total=2, tasks_done=1, pr=None)
         done = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
         d = S.decide_next(self._ws([prog, done]))
-        self.assertEqual((d.rule, d.unit), ("ship", "done1"))
+        self.assertEqual((d.rule, d.unit), ("resume", "prog"))
 
     def test_rule3_resume_in_progress(self):
         u = S.Unit(slug="a", tasks_total=2, tasks_done=1, pr=None)
@@ -641,9 +648,9 @@ class DecideNext(unittest.TestCase):
         a = S.Unit(slug="a", branch="feat-a", tasks_total=4, tasks_done=1)
         b = S.Unit(slug="b", branch="feat-b", tasks_total=2, tasks_done=2)
         d = S.decide_next(self._ws([a, b]))
-        self.assertEqual((d.rule, d.unit, d.branch), ("ship", "b", "feat-b"))
+        self.assertEqual((d.rule, d.unit, d.branch), ("resume", "a", "feat-a"))
         self.assertEqual(d.command, d.moves[0].command)
-        self.assertEqual([m.unit for m in d.moves], ["b", "a"])
+        self.assertEqual([m.unit for m in d.moves], ["a"])
 
     def test_terminal_states_carry_no_moves(self):
         merged = S.Unit(slug="m", tasks_total=1, tasks_done=1, pr=pr(1, "MERGED"))
@@ -698,20 +705,13 @@ class DecideNext(unittest.TestCase):
         self.assertIsNone(d.branch)
         self.assertIn("planned: p", d.open_items[0])
 
-    def test_closed_pr_code_complete_gets_resume_move(self):
+    def test_complete_unit_emits_no_decision_move(self):
         u = S.Unit(slug="stale", branch="stale", tasks_total=2, tasks_done=2,
                    pr=pr(9, "CLOSED", False, "main"),
                    log=[("t", "created", "base=main")])
         d = S.decide_next(self._ws([u]))
-        self.assertEqual(d.rule, "resume")
-        self.assertEqual(d.moves[0].unit, "stale")
-        self.assertIn("closed", d.moves[0].why.lower())
-
-    def test_closed_pr_does_not_fall_through_to_done(self):
-        u = S.Unit(slug="stale", branch="stale", tasks_total=1, tasks_done=1,
-                   pr=pr(9, "CLOSED", False, "main"),
-                   log=[("t", "created", "base=main")])
-        self.assertNotEqual(S.decide_next(self._ws([u])).rule, "done")
+        self.assertEqual(d.moves, [])
+        self.assertEqual(d.rule, "done")
 
     def test_branchless_ledger_line_reports_none(self):
         u = S.Unit(slug="a", tasks_total=2, tasks_done=1)
@@ -721,10 +721,9 @@ class DecideNext(unittest.TestCase):
 class TerminalFork(unittest.TestCase):
     """suggest / empty / done — reached only when no move exists."""
 
-    def _merged(self, slug="m", followups=None):
+    def _complete(self, slug="m", followups=None):
         return S.Unit(slug=slug, title=f"did {slug}", tasks_total=1,
-                      tasks_done=1, pr=pr(1, "MERGED"),
-                      followups=followups or [])
+                      tasks_done=1, followups=followups or [])
 
     def test_empty_store_says_no_units_yet(self):
         d = S.decide_next(mkws())
@@ -755,45 +754,35 @@ class TerminalFork(unittest.TestCase):
             self.assertEqual(ws.design, "")
             self.assertEqual(S.decide_next(ws).rule, "empty")
 
-    def test_orphaned_followup_in_a_merged_unit_is_proposable(self):
-        u = self._merged(followups=[S.Followup("F1", "tidy it", checked=False)])
+    def test_open_followup_in_live_unit_gets_resume_move(self):
+        u = self._complete(followups=[S.Followup("F1", "tidy it", checked=False)])
+        u.tasks_done = 1
         d = S.decide_next(mkws([u]))
-        self.assertEqual(d.rule, "suggest")
-        self.assertEqual([(p.fid, p.origin) for p in d.proposable],
-                         [("m:F1", "m")])
+        self.assertEqual(d.rule, "resume")
+        self.assertEqual(d.moves[0].unit, "m")
 
     def test_nothing_open_is_done(self):
-        self.assertEqual(S.decide_next(mkws([self._merged()])).rule, "done")
+        self.assertEqual(S.decide_next(mkws([self._complete()])).rule, "done")
 
-    def test_code_complete_ready_pr_is_waiting_not_done(self):
+    def test_complete_unit_with_pr_is_done_not_waiting(self):
         u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
                    pr=pr(12, "OPEN", False, "master"),
                    log=[("t", "created", "base=master")])
         d = S.decide_next(mkws([u]))
-        self.assertEqual(d.rule, "waiting")
+        self.assertEqual(d.rule, "done")
         self.assertEqual(d.moves, [])
-        self.assertEqual(d.waiting, ["a — PR #12"])
-        self.assertIn("waiting on review", d.headline)
-
-    def test_waiting_with_design_still_suggests(self):
-        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
-                   pr=pr(12, "OPEN", False, "master"),
-                   log=[("t", "created", "base=master")])
-        d = S.decide_next(mkws([u], design="~/specs/x-design.md"))
-        self.assertEqual(d.rule, "suggest")
-        self.assertEqual(d.waiting, ["a — PR #12"])
 
     def test_open_backlog_reaches_both_readers(self):
         # Open backlog is the user's list, Proposable the assistant's —
         # different readers, so an open follow-up belongs to both.
-        ws = mkws([self._merged()],
+        ws = mkws([self._complete()],
                   wfs=[S.Followup("WF1", "later", checked=False)])
         d = S.decide_next(ws)
         self.assertEqual(d.open_items, ["WF1 — later"])
         self.assertEqual([p.fid for p in d.proposable], ["WF1"])
 
-    def test_checked_followup_in_a_merged_unit_is_not_proposable(self):
-        u = self._merged(followups=[S.Followup("F1", "done", checked=True)])
+    def test_checked_followup_in_a_complete_unit_is_not_proposable(self):
+        u = self._complete(followups=[S.Followup("F1", "done", checked=True)])
         self.assertEqual(S.decide_next(mkws([u])).rule, "done")
 
     def test_followup_in_a_live_unit_is_not_proposable(self):
@@ -807,9 +796,9 @@ class TerminalFork(unittest.TestCase):
                                    {"a": live}), [])
 
     def test_blocking_followup_is_flagged(self):
-        merged = self._merged()
+        complete = self._complete()
         dep = S.Unit(slug="dep", needs=[S.Need("N1", "WF4")])
-        ws = mkws([merged, dep],
+        ws = mkws([complete, dep],
                       wfs=[S.Followup("WF4", "harden it", checked=False)])
         d = S.decide_next(ws)
         self.assertEqual(d.rule, "suggest")
@@ -818,19 +807,21 @@ class TerminalFork(unittest.TestCase):
         self.assertTrue(any("dep — needs WF4" in b for b in d.blocked))
 
     def test_qualified_need_target_matches_the_bare_proposal_id(self):
-        merged = self._merged(followups=[S.Followup("F1", "x", checked=False)])
+        live = S.Unit(slug="m", title="did m", tasks_total=1, tasks_done=1,
+                      followups=[S.Followup("F1", "x", checked=False)])
         dep = S.Unit(slug="dep",
                      needs=[S.Need("N1", "2026-01-01-demo:m:F1")])
-        d = S.decide_next(mkws([merged, dep]))
-        self.assertEqual([(p.fid, p.blocks) for p in d.proposable],
-                         [("m:F1", ["dep"])])
+        d = S.decide_next(mkws([live, dep]))
+        self.assertEqual(d.rule, "resume")
+        self.assertEqual(S.proposable_followups(mkws([live, dep]),
+                                                {"m": live, "dep": dep}), [])
 
     def test_covered_scope_lists_ledger_and_planned(self):
-        merged = self._merged()
+        complete = self._complete()
         dropped = S.Unit(slug="gone", title="abandoned idea", dropped=True)
         # p carries an unresolvable need, so it makes no start move and
         # cannot suppress the fork.
-        ws = mkws([merged, dropped],
+        ws = mkws([complete, dropped],
                       planned=[S.PlannedUnit(slug="p", base="master",
                                              what="later work",
                                              needs=["WF9"])],
@@ -850,12 +841,11 @@ class TerminalFork(unittest.TestCase):
         self.assertIn("auth — old auth (superseded by auth-2)", covered)
         self.assertIn("auth-2 — new auth", covered)
 
-    def test_covered_annotates_dropped_with_merged_successor(self):
+    def test_covered_annotates_dropped_with_complete_successor(self):
         dropped = S.Unit(slug="auth", title="old auth", dropped=True)
         successor = S.Unit(slug="auth-2", title="new auth",
                            restart_of="auth", branch="auth-2",
-                           tasks_total=1, tasks_done=1,
-                           pr=pr(1, "MERGED"))
+                           tasks_total=1, tasks_done=1)
         ws = mkws([dropped, successor], design="~/specs/x-design.md")
         d = S.decide_next(ws)
         self.assertIn("auth — old auth (superseded by auth-2)",
@@ -870,8 +860,8 @@ class TerminalFork(unittest.TestCase):
         self.assertNotIn("superseded", " ".join(d.covered))
 
     def test_open_items_list_planned_and_followups_together(self):
-        merged = self._merged()
-        ws = mkws([merged],
+        complete = self._complete()
+        ws = mkws([complete],
                       planned=[S.PlannedUnit(slug="p", base="master",
                                              what="stuck", needs=["WF9"])],
                       wfs=[S.Followup("WF1", "later", checked=False)])
@@ -899,14 +889,13 @@ class TerminalFork(unittest.TestCase):
         self.assertEqual(len(d.moves), 1)
         self.assertEqual(d.design, "~/specs/x-design.md")
 
-    def test_terminal_moves_attach_proposal_material(self):
-        ship = S.Unit(slug="ship-me", tasks_total=1, tasks_done=1, pr=None)
-        advance = S.Unit(slug="adv-me", tasks_total=1, tasks_done=1,
-                         pr=pr(5247, is_draft=True))
-        ws = mkws([ship, advance], design="~/specs/x-design.md")
+    def test_complete_units_suggest_with_design(self):
+        done1 = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+        done2 = S.Unit(slug="done2", tasks_total=1, tasks_done=1,
+                       pr=pr(5247, is_draft=True))
+        ws = mkws([done1, done2], design="~/specs/x-design.md")
         d = S.decide_next(ws)
-        self.assertEqual(d.rule, "ship")
-        self.assertNotEqual(d.rule, "suggest")
+        self.assertEqual(d.rule, "suggest")
         self.assertEqual(d.design, "~/specs/x-design.md")
         self.assertTrue(d.covered)
 
@@ -919,27 +908,27 @@ class TerminalFork(unittest.TestCase):
         self.assertEqual(d.rule, "restack")
         self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
 
-    def test_terminal_moves_no_material_without_source(self):
-        ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
-        d = S.decide_next(mkws([ship]))
-        self.assertEqual(d.rule, "ship")
+    def test_all_complete_no_material_without_source(self):
+        done = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+        d = S.decide_next(mkws([done]))
+        self.assertEqual(d.rule, "done")
         self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
 
-    def test_mixed_terminal_and_mid_flight_attaches_proposal(self):
-        ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+    def test_mixed_complete_and_mid_flight_attaches_proposal(self):
+        done1 = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
         live = S.Unit(slug="a", tasks_total=2, tasks_done=1)
-        ws = mkws([ship, live], design="~/specs/x-design.md")
+        ws = mkws([done1, live], design="~/specs/x-design.md")
         d = S.decide_next(ws)
-        self.assertEqual(d.rule, "ship")
+        self.assertEqual(d.rule, "resume")
         self.assertEqual(d.design, "~/specs/x-design.md")
         self.assertTrue(d.covered)
 
-    def test_terminal_moves_active_focus_only_attaches_material(self):
-        ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
-        ws = mkws([ship])
+    def test_complete_active_focus_only_attaches_material(self):
+        done1 = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)
+        ws = mkws([done1])
         ws.active_focus = S.FocusItem("mvp", "see shell", "active")
         d = S.decide_next(ws)
-        self.assertEqual(d.rule, "ship")
+        self.assertEqual(d.rule, "suggest")
         self.assertEqual(d.design, "")
         self.assertIsNotNone(d.active_focus)
         self.assertTrue(d.covered)
@@ -1075,13 +1064,12 @@ class NextEndToEnd(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
         out = N.generate(store, "2026-01-01-demo", three_move_store(store))
-        self.assertIn("  b — ship it: tasks done, no PR   [default]"
-                      "   run=ws-resume b   branch=b", out)
-        self.assertIn("  a — advance: 1 of 2 tasks left"
+        self.assertIn("  a — advance: 1 of 2 tasks left   [default]"
                       "   run=ws-resume a   branch=feat-a-2", out)
+        self.assertIn("  b — advance: 1 follow-up(s) left"
+                      "   run=ws-resume b   branch=b", out)
         self.assertNotIn("p — start", out)
-        # Rank rides line order now that no ordinal carries it.
-        self.assertLess(out.index("  b — ship it"), out.index("  a — advance"))
+        self.assertLess(out.index("  a — advance"), out.index("  b — advance"))
         self.assertNotIn("Next:", out)
         tmp.cleanup()
 
@@ -1107,7 +1095,7 @@ class NextEndToEnd(unittest.TestCase):
         self.assertNotIn("branch=", out)
         tmp.cleanup()
 
-    def test_waiting_ready_pr_renders_waiting_lines(self):
+    def test_complete_ready_pr_is_done(self):
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
         write_ws(store, "2026-01-01-demo",
@@ -1116,8 +1104,7 @@ class NextEndToEnd(unittest.TestCase):
                               "log": "- t  created base=master\n"}})
         out = N.generate(store, "2026-01-01-demo",
                          {"a": pr(12, "OPEN", False, "master")})
-        self.assertIn("waiting on review — nothing to advance", out)
-        self.assertIn("Waiting: a — PR #12", out)
+        self.assertIn("workstream done", out)
         self.assertNotIn(" — advance:", out)
         tmp.cleanup()
 

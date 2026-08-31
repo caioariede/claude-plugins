@@ -34,8 +34,6 @@ UNIT_PHASES = [
     "plan-pause",
     "loop",
     "critic",
-    "ship-pause",
-    "draft-pr",
     "done",
 ]
 
@@ -49,9 +47,7 @@ SPIKE_PHASES = [
 
 NEXT_TERMINAL_STATES = [
     "moves",
-    "reconcile-pending",
     "suggest",
-    "waiting",
     "open backlog remains",
     "no units yet",
     "workstream done",
@@ -71,23 +67,14 @@ def load_gates_catalog() -> Dict[str, Any]:
 
 def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     gates = gates or {}
-    ship_pause_label = "ship-pause<br/>(ship picker)"
-    draft_pr_label = "draft-pr<br/>(ready picker)"
 
-    if "unit.ship-pause" in gates:
-        prompt = gates["unit.ship-pause"].get("prompt", "How do you want to proceed?")
-        ship_pause_label = f"ship-pause<br/>({prompt})"
-    if "unit.draft-pr" in gates:
-        prompt = gates["unit.draft-pr"].get("prompt", "How do you want to proceed?")
-        draft_pr_label = f"draft-pr<br/>({prompt})"
-
-    return f"""flowchart TD
+    return """flowchart TD
     %% ws-resume unit execution flow
 
-    start([Start / ws-resume unit]) --> check_dropped_merged{{Dropped or merged?}}
+    start([Start / ws-resume unit]) --> check_terminal{{Dropped or complete?}}
     
-    check_dropped_merged -- Yes --> done([done])
-    check_dropped_merged -- No --> check_needs{{Unmet needs?}}
+    check_terminal -- Yes --> done([done])
+    check_terminal -- No --> check_needs{{Unmet needs?}}
     
     check_needs -- Yes --> blocked[blocked]
     blocked --> guard_blocked{{"unit.blocked-override (guard)"}}
@@ -108,26 +95,17 @@ def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     check_prewalk -- No --> plan_pause(["unit.plan-pause (hard stop / action)"])
     plan_pause -- Confirm --> confirm_plan[confirm_plan.py] --> loop
     
-    check_zero_tasks -- No --> check_code_complete{{Code complete?}}
-    check_code_complete -- No --> loop[loop]
-    loop --> execute_task[Execute task] --> check_off_task[Check off task in progress.md] --> check_code_complete
+    check_zero_tasks -- No --> check_tasks{{All tasks checked?}}
+    check_tasks -- No --> loop[loop]
+    loop --> execute_task[Execute task] --> check_off_task[Check off task in progress.md] --> check_tasks
     
-    check_code_complete -- Yes --> check_critic{{Critic review pending?}}
+    check_tasks -- Yes --> check_followups{{All follow-ups checked?}}
+    check_followups -- No --> loop_fu[loop follow-up]
+    loop_fu --> execute_fu[Execute follow-up] --> check_off_fu[Check off F<n>] --> check_followups
+    
+    check_followups -- Yes --> check_critic{{Critic review pending?}}
     check_critic -- Yes --> critic(["unit.critic (hard stop / action)"])
-    check_critic -- No --> overlay_ship_detect{{"unit.ship-detect (overlay if candidate)"}}
-    overlay_ship_detect --> check_pr{{PR exists?}}
-    
-    check_pr -- No --> ship_pause{{"{ship_pause_label}"}}
-    ship_pause -- "1. Not now" --> stop_ship([stop])
-    ship_pause -- "2. Ship" --> ship_action[Run forge ship] --> done
-    ship_pause -- "3. ws-next" --> chain_next([Chain ws-next])
-    
-    check_pr -- Yes --> check_draft{{PR is draft?}}
-    check_draft -- Yes --> draft_pr{{"{draft_pr_label}"}}
-    draft_pr -- "1. Not now" --> stop_draft([stop])
-    draft_pr -- "2. Mark ready" --> ready_action[Run forge pr-ready] --> done
-    draft_pr -- "3. ws-next" --> chain_next
-    check_draft -- No --> done
+    check_critic -- No --> done
 
     classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
     classDef action_stop fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
@@ -136,12 +114,11 @@ def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
     classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
 
-    class ship_pause,draft_pr picker;
     class prewalk,prewalk_config,plan_pause,critic action_stop;
-    class done,stop_ship,stop_draft,stop_blocked,chain_next terminal;
-    class check_dropped_merged,check_needs,check_zero_tasks,check_plan_line,check_prewalk,check_models,check_code_complete,check_critic,check_pr,check_draft condition;
-    class plan,loop,confirm_plan,execute_task,check_off_task,ship_action,ready_action,plan_save,blocked action;
-    class guard_blocked,overlay_ship_detect guard;
+    class done,stop_blocked terminal;
+    class check_terminal,check_needs,check_zero_tasks,check_plan_line,check_prewalk,check_models,check_tasks,check_followups,check_critic condition;
+    class plan,loop,loop_fu,confirm_plan,execute_task,check_off_task,execute_fu,check_off_fu,plan_save,blocked action;
+    class guard_blocked guard;
 """
 
 
@@ -150,9 +127,9 @@ def generate_resume_spike_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     return """flowchart TD
     %% ws-resume spike execution flow
 
-    start([Start / ws-resume spike]) --> check_dropped{Dropped?}
-    check_dropped -- Yes --> done([done])
-    check_dropped -- No --> check_needs{Unmet needs?}
+    start([Start / ws-resume spike]) --> check_terminal{Dropped or complete?}
+    check_terminal -- Yes --> done([done])
+    check_terminal -- No --> check_needs{Unmet needs?}
     
     check_needs -- Yes --> blocked[blocked]
     blocked --> guard_blocked{{"spike.blocked-override (guard)"}}
@@ -184,7 +161,7 @@ def generate_resume_spike_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
 
     class plan_pause picker;
     class done,stop_plan,stop_blocked terminal;
-    class check_dropped,check_needs,check_zero_tasks,check_plan_line,check_complete condition;
+    class check_terminal,check_needs,check_zero_tasks,check_plan_line,check_complete condition;
     class plan,loop,confirm_plan,execute_task,check_off,plan_save,blocked action;
     class guard_blocked guard;
 """
@@ -198,7 +175,7 @@ def generate_next_terminal_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     start([Start / ws-next]) --> derive[Derive status across units & spikes]
     derive --> check_moves{Runnable moves exist?}
     
-    check_moves -- Yes --> rank_moves[Rank moves: restack > ship > resume > start]
+    check_moves -- Yes --> rank_moves[Rank moves: restack > resume > start]
     rank_moves --> moves[Emit move list: default leading + Chain options]
     moves --> chain_pick{User selection in Chain}
     chain_pick -- Run move --> execute_move[Execute ws-resume / restack / start]
@@ -208,13 +185,7 @@ def generate_next_terminal_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     check_moves -- No --> check_triage{Blocker dropped/removed only?}
     check_triage -- Yes --> triage_drop[blocker dropped/removed: route to ws-block]
     
-    check_triage -- No --> check_reconcile{Ship evidence found?}
-    check_reconcile -- "Yes (reconcile candidates)" --> reconcile_pending["reconcile-pending: run ws-resume per candidate"]
-    
-    check_reconcile -- No --> check_waiting{Active units in-review with ready PR?}
-    check_waiting -- Yes --> waiting["waiting: PR in review, nothing to advance"]
-    
-    check_waiting -- No --> check_unresolvable{Open backlog / unresolvable needs?}
+    check_triage -- No --> check_unresolvable{Open backlog / unresolvable needs?}
     check_unresolvable -- Yes --> backlog_remains["open backlog remains / advance a blocker"]
     
     check_unresolvable -- No --> check_propose{Active focus, design, or open follow-ups?}
@@ -232,9 +203,9 @@ def generate_next_terminal_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     classDef state fill:#fef3c7,stroke:#d97706,stroke-width:2px;
 
     class done,stop_moves terminal;
-    class check_moves,check_triage,check_reconcile,check_waiting,check_unresolvable,check_propose,check_empty_store,check_all_terminal,chain_pick condition;
+    class check_moves,check_triage,check_unresolvable,check_propose,check_empty_store,check_all_terminal,chain_pick condition;
     class derive,rank_moves,moves,execute_move,propose_picker action;
-    class triage_drop,reconcile_pending,waiting,backlog_remains,suggest,no_units,ws_done,fallback_suggest state;
+    class triage_drop,backlog_remains,suggest,no_units,ws_done,fallback_suggest state;
 """
 
 
@@ -311,8 +282,8 @@ def generate_drop_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     return """flowchart TD
     %% ws-drop abandonment flow
 
-    start([Start / ws-drop]) --> check_status{Unit merged or spike complete?}
-    check_status -- Yes --> refuse_merged[Refuse: work already finished / merged]
+    start([Start / ws-drop]) --> check_status{Unit complete or spike complete?}
+    check_status -- Yes --> refuse_complete[Refuse: work already finished]
     check_status -- No --> scan_dependents[Scan dependent units, spikes & backlog]
     scan_dependents --> confirm{Confirm teardown with user}
     confirm -- No --> abort([Stop / abort])

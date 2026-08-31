@@ -21,12 +21,9 @@ from test_ws_board import ledger, write_ws  # noqa: E402
 class GateEmitTests(unittest.TestCase):
     def test_load_catalog(self):
         gates = GE.load_catalog()
-        self.assertGreaterEqual(len(gates), 9)
+        self.assertGreaterEqual(len(gates), 7)
         ids = {g["id"] for g in gates}
         self.assertIn("unit.plan-pause", ids)
-        self.assertIn("unit.ship-pause", ids)
-        self.assertIn("unit.draft-pr", ids)
-        self.assertIn("unit.ship-detect", ids)
         self.assertIn("unit.blocked-override", ids)
         self.assertIn("unit.prewalk", ids)
         self.assertIn("unit.critic", ids)
@@ -42,10 +39,6 @@ class GateEmitTests(unittest.TestCase):
         self.assertIsNotNone(g_spike)
         self.assertEqual(g_spike["id"], "spike.plan-pause")
 
-        g_ship_detect = GE.find_gate("ship-detect", kind="unit", overlay="ship-detect")
-        self.assertIsNotNone(g_ship_detect)
-        self.assertEqual(g_ship_detect["id"], "unit.ship-detect")
-
         g_none = GE.find_gate("nonexistent", kind="unit")
         self.assertIsNone(g_none)
 
@@ -55,28 +48,6 @@ class GateEmitTests(unittest.TestCase):
         self.assertEqual(g["kind"], "action")
         self.assertTrue(g["stop"])
         self.assertNotIn("options", g)
-
-    def test_format_gate_block_picker(self):
-        gate = {
-            "id": "unit.ship-pause",
-            "kind": "picker",
-            "prompt": "How do you want to proceed?",
-            "options": [
-                {"n": 1, "label": "Not now (default)"},
-                {"n": 2, "label": "Ship"},
-            ],
-        }
-        block = GE.format_gate_block(gate)
-        expected = "\n".join([
-            "--- GATE: unit.ship-pause ---",
-            "kind: picker",
-            "prompt: How do you want to proceed?",
-            "options:",
-            "  1. Not now (default)",
-            "  2. Ship",
-            "--- END GATE ---",
-        ])
-        self.assertEqual(block, expected)
 
     def test_format_gate_block_with_context(self):
         gate = {
@@ -94,12 +65,6 @@ class GateEmitTests(unittest.TestCase):
         }
         block = GE.format_gate_block(gate, context=context)
         self.assertIn("context:\n  plan: /tmp/plan.md\n  tasks:\n    - T1 title\n    - T2 title", block)
-
-    def test_emit_gate_helper(self):
-        block = GE.emit_gate("ship-pause", kind="unit")
-        self.assertIsNotNone(block)
-        self.assertTrue(block.startswith("--- GATE: unit.ship-pause ---"))
-        self.assertTrue(block.endswith("--- END GATE ---"))
 
     def test_phase_cli_emit_gate(self):
         with tempfile.TemporaryDirectory() as td:

@@ -1,9 +1,9 @@
 flowchart TD
     %% ws-resume spike execution flow
 
-    start([Start / ws-resume spike]) --> check_dropped{Dropped?}
-    check_dropped -- Yes --> done([done])
-    check_dropped -- No --> check_needs{Unmet needs?}
+    start([Start / ws-resume spike]) --> check_terminal{Dropped or complete?}
+    check_terminal -- Yes --> done([done])
+    check_terminal -- No --> check_needs{Unmet needs?}
     
     check_needs -- Yes --> blocked[blocked]
     blocked --> guard_blocked{{"spike.blocked-override (guard)"}}
@@ -35,6 +35,6 @@ flowchart TD
 
     class plan_pause picker;
     class done,stop_plan,stop_blocked terminal;
-    class check_dropped,check_needs,check_zero_tasks,check_plan_line,check_complete condition;
+    class check_terminal,check_needs,check_zero_tasks,check_plan_line,check_complete condition;
     class plan,loop,confirm_plan,execute_task,check_off,plan_save,blocked action;
     class guard_blocked guard;

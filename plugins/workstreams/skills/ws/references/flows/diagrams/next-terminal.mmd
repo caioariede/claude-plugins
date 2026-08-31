@@ -4,7 +4,7 @@ flowchart TD
     start([Start / ws-next]) --> derive[Derive status across units & spikes]
     derive --> check_moves{Runnable moves exist?}
     
-    check_moves -- Yes --> rank_moves[Rank moves: restack > ship > resume > start]
+    check_moves -- Yes --> rank_moves[Rank moves: restack > resume > start]
     rank_moves --> moves[Emit move list: default leading + Chain options]
     moves --> chain_pick{User selection in Chain}
     chain_pick -- Run move --> execute_move[Execute ws-resume / restack / start]
@@ -14,13 +14,7 @@ flowchart TD
     check_moves -- No --> check_triage{Blocker dropped/removed only?}
     check_triage -- Yes --> triage_drop[blocker dropped/removed: route to ws-block]
     
-    check_triage -- No --> check_reconcile{Ship evidence found?}
-    check_reconcile -- "Yes (reconcile candidates)" --> reconcile_pending["reconcile-pending: run ws-resume per candidate"]
-    
-    check_reconcile -- No --> check_waiting{Active units in-review with ready PR?}
-    check_waiting -- Yes --> waiting["waiting: PR in review, nothing to advance"]
-    
-    check_waiting -- No --> check_unresolvable{Open backlog / unresolvable needs?}
+    check_triage -- No --> check_unresolvable{Open backlog / unresolvable needs?}
     check_unresolvable -- Yes --> backlog_remains["open backlog remains / advance a blocker"]
     
     check_unresolvable -- No --> check_propose{Active focus, design, or open follow-ups?}
@@ -38,6 +32,6 @@ flowchart TD
     classDef state fill:#fef3c7,stroke:#d97706,stroke-width:2px;
 
     class done,stop_moves terminal;
-    class check_moves,check_triage,check_reconcile,check_waiting,check_unresolvable,check_propose,check_empty_store,check_all_terminal,chain_pick condition;
+    class check_moves,check_triage,check_unresolvable,check_propose,check_empty_store,check_all_terminal,chain_pick condition;
     class derive,rank_moves,moves,execute_move,propose_picker action;
-    class triage_drop,reconcile_pending,waiting,backlog_remains,suggest,no_units,ws_done,fallback_suggest state;
+    class triage_drop,backlog_remains,suggest,no_units,ws_done,fallback_suggest state;

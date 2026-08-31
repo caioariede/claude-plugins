@@ -27,9 +27,8 @@ import phase as P      # noqa: E402
 from chain_summary import chain_offers_propose, propose_source_summary  # noqa: E402
 
 
-# Display verbs for the four move rules; the ws-* command itself rides
-# the machine tail, which the skill strips before showing the list.
-_VERB = {"restack": "restack", "ship": "ship it", "resume": "advance"}
+# Display verbs for move rules; the ws-* command rides the machine tail.
+_VERB = {"restack": "restack", "resume": "advance"}
 
 
 def render_decision(d: S.Decision) -> str:
@@ -55,13 +54,9 @@ def render_decision(d: S.Decision) -> str:
     if d.open_items:
         lines.append("Open backlog:")
         lines += [f"- {it}" for it in d.open_items]
-    # `suggest` material — for the assistant composing the proposal, not
-    # for the user; the skill consumes these blocks instead of relaying
-    # them, the same way it strips each move's run= tail.
     if d.proposable:
         lines.append("Proposable:")
         for p in d.proposable:
-            # A unit-scoped id already carries its origin as the prefix.
             origin = ("" if p.fid.startswith(f"{p.origin}:")
                       else f"  from={p.origin}")
             blocks = f"  blocks={','.join(p.blocks)}" if p.blocks else ""
@@ -84,13 +79,6 @@ def render_decision(d: S.Decision) -> str:
             if sb.readiness:
                 line += f"  readiness={sb.readiness}"
             lines.append(line)
-    if d.reconcile_candidates:
-        lines.append("ReconcileCandidates:")
-        for rc in d.reconcile_candidates:
-            line = f"- {rc.slug}  outcome={rc.outcome}"
-            if rc.record:
-                line += f"  {S.format_merged_via_payload(rc.record)}"
-            lines.append(line)
     if chain_offers_propose(d):
         summary = propose_source_summary(d)
         if summary:
@@ -99,24 +87,20 @@ def render_decision(d: S.Decision) -> str:
 
 
 def _render(ws: S.Workstream, proposal_repo: Optional[str] = None,
-            overlay: Optional[Dict[str, S.ReconcileOverlay]] = None,
             store: Optional[Path] = None) -> str:
-    if proposal_repo is None:
-        proposal_repo = C.current_repo()
     phase_for = P.phase_for_unit(store, ws) if store else None
     return render_decision(
-        S.decide_next(ws, proposal_repo=proposal_repo, overlay=overlay,
+        S.decide_next(ws, proposal_repo=proposal_repo,
                       phase_for=phase_for))
 
 
 def generate(store: Path, ws_id: str,
              pr_state: Dict[str, Optional[S.PR]],
-             proposal_repo: Optional[str] = None,
-             overlay: Optional[Dict[str, S.ReconcileOverlay]] = None) -> str:
+             proposal_repo: Optional[str] = None) -> str:
     """Pure path used by both main() and the tests."""
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, pr_state)
-    return _render(ws, proposal_repo, overlay, store=store)
+    return _render(ws, proposal_repo, store=store)
 
 
 def main(argv: List[str]) -> int:
@@ -128,8 +112,7 @@ def main(argv: List[str]) -> int:
         return 2
     ws = S.load_workstream(store / ws_id)
     S.apply_pr_state(ws, C.gather_pr_state(ws, store))
-    overlay = C.scan_reconcile_overlay(ws, store)
-    print(_render(ws, overlay=overlay, store=store))
+    print(_render(ws, store=store))
     return 0
 
 

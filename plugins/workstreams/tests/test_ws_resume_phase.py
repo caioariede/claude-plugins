@@ -15,10 +15,11 @@ import ws_store as S  # noqa: E402
 from test_ws_board import ledger, write_ws  # noqa: E402
 
 
-def u(slug, *, done=0, total=0, pr=None, stacked_on=None, needs=None,
-      dropped=False):
+def u(slug, *, done=0, total=0, followups=None, pr=None, stacked_on=None,
+      needs=None, dropped=False):
     unit = S.Unit(slug=slug, branch=slug, repo="o/r", stacked_on=stacked_on)
     unit.tasks_done, unit.tasks_total = done, total
+    unit.followups = followups or []
     unit.pr = pr
     unit.dropped = dropped
     unit.needs = needs or []
@@ -41,23 +42,18 @@ class ResumePhaseTests(unittest.TestCase):
         a = u("a", done=2, total=5)
         self.assertEqual(self.phase([a], "a"), "loop")
 
-    def test_code_complete_no_pr_is_ship_pause(self):
+    def test_unit_complete_is_done(self):
         a = u("a", done=3, total=3)
-        self.assertEqual(self.phase([a], "a"), "ship-pause")
-
-    def test_code_complete_draft_pr_is_draft_pr(self):
-        a = u("a", done=2, total=2,
-              pr=S.PR(number=1, state="OPEN", is_draft=True, base="master"))
-        self.assertEqual(self.phase([a], "a"), "draft-pr")
-
-    def test_code_complete_ready_pr_is_done(self):
-        a = u("a", done=1, total=1,
-              pr=S.PR(number=2, state="OPEN", is_draft=False, base="master"))
         self.assertEqual(self.phase([a], "a"), "done")
 
-    def test_merged_is_done(self):
-        a = u("a", done=1, total=1,
-              pr=S.PR(number=3, state="MERGED", is_draft=False, base="master"))
+    def test_tasks_done_open_followup_is_loop(self):
+        a = u("a", done=2, total=2,
+              followups=[S.Followup("F1", "fix", checked=False)])
+        self.assertEqual(self.phase([a], "a"), "loop")
+
+    def test_unit_complete_with_followups_is_done(self):
+        a = u("a", done=2, total=2,
+              followups=[S.Followup("F1", "fix", checked=True)])
         self.assertEqual(self.phase([a], "a"), "done")
 
     def test_unmet_need_is_blocked_even_with_partial_tasks(self):
@@ -116,13 +112,13 @@ class ResumePhaseTests(unittest.TestCase):
         a = u("a", done=0, total=3)
         self.assertEqual(self.phase([a], "a"), "loop")
 
-    def test_external_mode_all_checked_ship_pause(self):
+    def test_external_mode_all_checked_is_done(self):
         a = u("a", done=2, total=2)
         a.log = [
             ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
             ("2026-01-01T00:01Z", "decision", "execute-mode=external"),
         ]
-        self.assertEqual(self.phase([a], "a"), "ship-pause")
+        self.assertEqual(self.phase([a], "a"), "done")
 
     def test_external_mode_partial_tasks_is_loop(self):
         a = u("a", done=1, total=3)
@@ -154,15 +150,10 @@ class PhaseCliTests(unittest.TestCase):
             )
 
 
-class PhaseCliMergedTests(unittest.TestCase):
-    def test_merged_partial_tasks_returns_done(self):
+class PhaseCliCompleteTests(unittest.TestCase):
+    def test_complete_unit_returns_done(self):
         with tempfile.TemporaryDirectory() as td:
             store = Path(td)
-            pr_state = {
-                "spike": S.PR(number=1, state="MERGED", is_draft=False,
-                              base="main"),
-                "dep": None,
-            }
             write_ws(
                 store,
                 "2026-01-01-demo",
@@ -171,28 +162,23 @@ class PhaseCliMergedTests(unittest.TestCase):
                     'dep  "D"  repo=o/r  branch=dep  stacked-on=spike'),
                 units={
                     "spike": {
-                        "progress": "## Tasks\n- [x] T1\n- [ ] T2\n",
+                        "progress": "## Tasks\n- [x] T1\n- [x] T2\n",
                     },
                     "dep": {"progress": "## Tasks\n- [ ] T1\n"},
                 },
             )
             self.assertEqual(
-                P.generate(store, "2026-01-01-demo", "spike", pr_state),
+                P.generate(store, "2026-01-01-demo", "spike", {}),
                 "done",
             )
             self.assertEqual(
-                P.generate(store, "2026-01-01-demo", "dep", pr_state),
+                P.generate(store, "2026-01-01-demo", "dep", {}),
                 "loop",
             )
 
-    def test_merged_base_unblocks_dependent(self):
+    def test_complete_base_unblocks_dependent(self):
         with tempfile.TemporaryDirectory() as td:
             store = Path(td)
-            pr_state = {
-                "spike": S.PR(number=1, state="MERGED", is_draft=False,
-                              base="main"),
-                "dep": None,
-            }
             write_ws(
                 store,
                 "2026-01-01-demo",
@@ -201,7 +187,7 @@ class PhaseCliMergedTests(unittest.TestCase):
                     'dep  "D"  repo=o/r  branch=dep  stacked-on=spike'),
                 units={
                     "spike": {
-                        "progress": "## Tasks\n- [x] T1\n- [ ] T2\n",
+                        "progress": "## Tasks\n- [x] T1\n- [x] T2\n",
                     },
                     "dep": {
                         "progress": "## Tasks\n- [ ] T1\n",
@@ -215,17 +201,9 @@ class PhaseCliMergedTests(unittest.TestCase):
                 },
             )
             self.assertNotEqual(
-                P.generate(store, "2026-01-01-demo", "dep", pr_state),
+                P.generate(store, "2026-01-01-demo", "dep", {}),
                 "blocked",
             )
-
-    def test_merged_partial_without_pr_state_is_loop(self):
-        a = u("a", done=1, total=2,
-              pr=S.PR(number=1, state="MERGED", is_draft=False, base="main"))
-        w = ws([a])
-        by = {x.slug: x for x in w.units}
-        a.pr = None
-        self.assertEqual(S.resume_phase(a, w, by), "loop")
 
 
 class ResumeSpikePhaseCliTests(unittest.TestCase):

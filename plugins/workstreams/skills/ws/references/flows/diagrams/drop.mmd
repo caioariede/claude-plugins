@@ -1,8 +1,8 @@
 flowchart TD
     %% ws-drop abandonment flow
 
-    start([Start / ws-drop]) --> check_status{Unit merged or spike complete?}
-    check_status -- Yes --> refuse_merged[Refuse: work already finished / merged]
+    start([Start / ws-drop]) --> check_status{Unit complete or spike complete?}
+    check_status -- Yes --> refuse_complete[Refuse: work already finished]
     check_status -- No --> scan_dependents[Scan dependent units, spikes & backlog]
     scan_dependents --> confirm{Confirm teardown with user}
     confirm -- No --> abort([Stop / abort])

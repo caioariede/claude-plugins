@@ -39,7 +39,7 @@ class CriticPhaseTest(unittest.TestCase):
         self.assertEqual(
             S.resume_phase(unit, _ws(unit), {"u": unit},
                            review_enabled=True, critic_digest="deadbeef"),
-            "ship-pause")
+            "done")
 
     def test_changed_digest_reopens_critic(self):
         unit = _unit(log=[
@@ -56,21 +56,21 @@ class CriticPhaseTest(unittest.TestCase):
         self.assertEqual(
             S.resume_phase(unit, _ws(unit), {"u": unit},
                            review_enabled=True, skip_critic=True),
-            "ship-pause")
+            "done")
 
     def test_grandfather_critic_bypasses_phase(self):
         unit = _unit()
         self.assertEqual(
             S.resume_phase(unit, _ws(unit), {"u": unit},
                            review_enabled=True, grandfather_critic=True),
-            "ship-pause")
+            "done")
 
     def test_review_disabled_bypasses_phase(self):
         unit = _unit()
         self.assertEqual(
             S.resume_phase(unit, _ws(unit), {"u": unit},
                            critic_digest="deadbeef"),
-            "ship-pause")
+            "done")
 
     def test_readiness_suffix_for_critic(self):
         self.assertEqual(S.unit_readiness(_unit(), phase="critic"),
@@ -86,4 +86,4 @@ class CriticPhaseTest(unittest.TestCase):
         self.assertEqual(
             S.resume_phase(unit, _ws(unit), {"u": unit},
                            review_enabled=True, critic_digest=None),
-            "ship-pause")
+            "done")

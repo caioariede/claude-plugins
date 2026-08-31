@@ -11,42 +11,6 @@
       "stop": true
     },
     {
-      "id": "unit.ship-pause",
-      "kind": "picker",
-      "trigger": { "phase": "ship-pause", "kind": "unit" },
-      "prompt": "How do you want to proceed?",
-      "default_option": 1,
-      "options": [
-        { "n": 1, "label": "Not now (default)" },
-        { "n": 2, "label": "Ship — open PR and run review checks" },
-        { "n": 3, "label": "ws-next — recommend next action across workstream" }
-      ]
-    },
-    {
-      "id": "unit.draft-pr",
-      "kind": "picker",
-      "trigger": { "phase": "draft-pr", "kind": "unit" },
-      "prompt": "How do you want to proceed?",
-      "default_option": 1,
-      "options": [
-        { "n": 1, "label": "Not now (default)" },
-        { "n": 2, "label": "Mark ready — promote draft to ready for review" },
-        { "n": 3, "label": "ws-next — recommend next action across workstream" }
-      ]
-    },
-    {
-      "id": "unit.ship-detect",
-      "kind": "picker",
-      "trigger": { "overlay": "ship-detect", "kind": "unit" },
-      "prompt": "Work may already be on the default branch (ledger tip is behind default).",
-      "default_option": 1,
-      "options": [
-        { "n": 1, "label": "Not now (default)" },
-        { "n": 2, "label": "Record merged-via and reconcile tasks" },
-        { "n": 3, "label": "Continue resume — not shipped yet" }
-      ]
-    },
-    {
       "id": "unit.blocked-override",
       "kind": "guard",
       "trigger": { "phase": "blocked", "kind": "unit" },

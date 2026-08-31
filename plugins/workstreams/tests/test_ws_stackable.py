@@ -44,10 +44,10 @@ class TestUnitReadiness(unittest.TestCase):
         self.assertEqual(S.unit_readiness(unit),
                          "plan-pause (store incomplete)")
 
-    def test_in_review_code_complete_returns_none(self):
+    def test_complete_code_complete_returns_none(self):
         unit = u("a", done=2, total=2, pr_obj=pr(42, "OPEN", False))
         S.derive_status(S.Workstream(ws_id="w", name="w", units=[unit]))
-        self.assertEqual(unit.status, "in-review")
+        self.assertEqual(unit.status, "complete")
         self.assertIsNone(S.unit_readiness(unit))
 
 
@@ -57,16 +57,16 @@ class TestStackableBases(unittest.TestCase):
         S.derive_status(ws)
         return ws, {u.slug: u for u in units}
 
-    def test_excludes_dropped_merged_blocked_drifted(self):
+    def test_excludes_dropped_complete_blocked_drifted(self):
         base = u("base", done=1, total=2)
         dropped = u("gone", repo="o/r")
         dropped.dropped = True
-        merged = u("m", done=1, total=1, pr_obj=pr(1, "MERGED"))
+        complete = u("m", done=1, total=1, pr_obj=pr(1, "MERGED"))
         blocked = u("dep", repo="o/r")
         blocked.needs = [S.Need("N1", "base")]
         drifted = u("d", done=1, total=2, pr_obj=pr(2, "OPEN", True, "master"),
                     log=[("t", "created", "base=feat-d")])
-        ws, by = self._ws([base, dropped, merged, blocked, drifted])
+        ws, by = self._ws([base, dropped, complete, blocked, drifted])
         got = S.stackable_bases(ws, "o/r")
         self.assertEqual([b.slug for b in got], ["base"])
 
