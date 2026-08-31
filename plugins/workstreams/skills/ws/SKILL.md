@@ -396,8 +396,9 @@ loop (`critic`) are entered only when the active flavor enables them
 (`prewalk = on`, `review = ws-critic`, etc.). `phase.py` derives them;
 `ws-resume` relays the matching gate and fires flavor hooks — it does
 not embed flavor-specific skill names. Bypass once with
-`--skip-prewalk` or `--skip-critic`; headless runs fall through and
-record `decision …=skipped reason=headless` when appropriate.
+`--skip-extension <phase>` (repeatable; see `gates.json`). Headless runs
+fall through and record `decision …=skipped reason=headless` when
+appropriate.
 
 **Gate actions** — `references/flows/gates.json` pairs phases with
 gates. `phase.py --emit-gate` prints the block; `ws-resume` relays it

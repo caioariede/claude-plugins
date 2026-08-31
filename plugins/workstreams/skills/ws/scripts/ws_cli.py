@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import configparser
+import hashlib
 import json
 import os
 import re
@@ -18,7 +19,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 import ws_store as S
 
@@ -378,6 +379,68 @@ def review_enabled(store: Path) -> bool:
 
 def ws_critic_activated_at(store: Path) -> Optional[str]:
     return config_value(store, "ws-critic-activated-at")
+
+
+_SKIP_EXTENSION_ALIASES: Dict[str, FrozenSet[str]] = {
+    "prewalk": frozenset({"prewalk", "prewalk-config"}),
+}
+
+
+def normalize_skip_extensions(phases: Set[str]) -> Set[str]:
+    out: Set[str] = set()
+    for phase in phases:
+        out |= _SKIP_EXTENSION_ALIASES.get(phase, frozenset({phase}))
+    return out
+
+
+def collect_skip_extensions(
+        skip_extension: Optional[List[str]] = None) -> Set[str]:
+    """CLI ``--skip-extension`` values → phase names for resume kwargs."""
+    return normalize_skip_extensions(set(skip_extension or []))
+
+
+def unit_tree_digest(store: Path, u: S.Unit) -> Optional[str]:
+    """Short git diff digest for extension-phase receipts (e.g. critic)."""
+    if not u.branch or not u.repo:
+        return None
+    wt = locate_worktree(store, u.branch, u.repo)
+    if wt is None:
+        return None
+    base = S.recorded_base(u) or "main"
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(wt), "diff", f"{base}...HEAD"],
+            capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return hashlib.sha256(result.stdout).hexdigest()[:8]
+
+
+def unit_resume_phase_kwargs(
+        store: Path, u: S.Unit, *,
+        headless: bool = False,
+        skip_extensions: Optional[Set[str]] = None) -> dict:
+    """Flavor-aware kwargs for ``ws_store.resume_phase``."""
+    skip = skip_extensions or set()
+    prewalk_on = prewalk_enabled(store)
+    review_on = review_enabled(store)
+    activated = superpowers_prewalk_activated_at(store)
+    skip_prewalk = bool(skip & {"prewalk", "prewalk-config"})
+    return {
+        "prewalk_enabled": prewalk_on,
+        "skip_prewalk": skip_prewalk,
+        "headless": headless,
+        "grandfather": prewalk_on and S._should_grandfather_prewalk(
+            u, activated),
+        "models_ready": prewalk_models_ready(store),
+        "review_enabled": review_on,
+        "skip_critic": "critic" in skip,
+        "grandfather_critic": (
+            review_on
+            and S._should_grandfather_prewalk(
+                u, ws_critic_activated_at(store))),
+        "critic_digest": unit_tree_digest(store, u),
+    }
 
 
 def flavor_has_extends(store: Path, group: str, flavor: str) -> bool:

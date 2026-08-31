@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, finish scoped work, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.22.0"
+  version: "0.23.0"
   author: Caio Ariede
 ---
 
@@ -32,7 +32,7 @@ python3 <this-skill-dir>/scripts/phase.py [target-id] --emit-gate [--headless]
 
 `phase.py` owns ordering, including optional flavor extension gates before
 plan-pause (units only, when enabled) and after scoped work (units only).
-Bypass flags: `phase.py --help`.
+Bypass flags: `phase.py --help` (`--skip-extension <phase>`).
 
 When `phase.py` prints a gate block (`--- GATE: ... ---`), relay it, run
 the gate `action` (SPEC §Gate actions), fire flavor hooks for that phase,

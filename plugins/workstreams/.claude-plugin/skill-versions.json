@@ -15,7 +15,7 @@
     "ws-oneshot": "0.2.2",
     "ws-prewalk": "0.1.2",
     "ws-restack": "0.3.0",
-    "ws-resume": "0.22.0",
+    "ws-resume": "0.23.0",
     "ws-spike": "0.1.1",
     "ws-start": "0.7.1"
   }

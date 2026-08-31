@@ -15,7 +15,10 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import ws_store as S
 
 GATES_PATH = Path(__file__).resolve().parents[1] / "references" / "flows" / "gates.json"
 
@@ -81,6 +84,31 @@ def emit_gate(phase: str, kind: str = "unit", overlay: Optional[str] = None,
     if not gate:
         return None
     return format_gate_block(gate, context=context)
+
+
+def gate_context(phase: str, ws: "S.Workstream", slug: str,
+                 kind: str) -> Optional[Dict[str, Any]]:
+    """Per-phase context slots for ``emit_gate`` (from ``context_slots``)."""
+    if phase != "plan-pause":
+        return None
+    import ws_store as S  # noqa: E402 — lazy; gate_emit stays import-light
+
+    if kind == "spike":
+        sp = next((s for s in ws.spikes if s.slug == slug), None)
+        plan_path = S.latest_plan_from_log(sp.log) if sp else None
+    else:
+        unit = next((u for u in ws.units if u.slug == slug), None)
+        plan_path = S.latest_plan_log_path(unit) if unit else None
+    if not plan_path or not Path(plan_path).exists():
+        return None
+    ctx: Dict[str, Any] = {"plan": plan_path}
+    try:
+        with open(plan_path, "r", encoding="utf-8") as f:
+            tasks = S.derive_tasks_from_plan(f.read())
+            ctx["tasks"] = [title for _, title in tasks]
+    except Exception:
+        pass
+    return ctx
 
 
 def main(argv: Optional[List[str]] = None) -> int:
