@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ws" / "scripts"))
 import ws_store as S   # noqa: E402
 import ws_cli as C     # noqa: E402
 import gate_emit       # noqa: E402
+import extension_runner as ER  # noqa: E402
 
 
 def _store() -> Path:
@@ -47,9 +48,10 @@ def _unit_resume_phase(ws: S.Workstream, u: S.Unit, store: Path, *,
                        headless: bool = False,
                        skip_extensions: Optional[Set[str]] = None) -> str:
     by_slug = {x.slug: x for x in ws.units}
-    kwargs = C.unit_resume_phase_kwargs(
+    ctx = C.build_extension_ctx(
         store, u, headless=headless, skip_extensions=skip_extensions)
-    return S.resume_phase(u, ws, by_slug, **kwargs)
+    pending = lambda slot: ER.pending_for_slot(slot, ctx, store, kind="unit")
+    return S.resume_phase(u, ws, by_slug, extension_pending=pending)
 
 
 def unit_phase(store: Path, ws: S.Workstream, u: S.Unit) -> str:

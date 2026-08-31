@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Prewalk extension handler — post_plan slot."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _protocol import run_pending, unit_log  # noqa: E402
+
+
+def _has_skipped(log: List[List[str]], reason: str) -> bool:
+    needle = f"prewalk=skipped reason={reason}"
+    return any(
+        len(row) >= 3 and row[1] == "decision" and needle in row[2]
+        for row in log
+    )
+
+
+def _has_done(log: List[List[str]], plan_path: str, digest: str) -> bool:
+    for row in reversed(log):
+        if len(row) < 3 or row[1] != "decision":
+            continue
+        payload = row[2]
+        if not payload.startswith("prewalk=done"):
+            continue
+        if f"plan={plan_path}" not in payload:
+            continue
+        if f"digest={digest}" not in payload:
+            continue
+        return True
+    return False
+
+
+def _phase_in_skip(ctx: Dict[str, Any]) -> bool:
+    skip = set(ctx.get("skip") or [])
+    return bool(skip & {"prewalk", "prewalk-config"})
+
+
+def pending(ctx: Dict[str, Any]) -> Optional[str]:
+    if _phase_in_skip(ctx):
+        return None
+    artifacts = ctx.get("artifacts") or {}
+    plan_path = artifacts.get("plan_path")
+    digest = artifacts.get("plan_digest")
+    if not plan_path or not digest:
+        return None
+    log = unit_log(ctx)
+    if _has_done(log, plan_path, digest):
+        return None
+    if _has_skipped(log, "headless"):
+        return None
+    if _has_skipped(log, "grandfather") or _has_skipped(log, "split"):
+        return None
+    if not artifacts.get("models_ready", True):
+        return "prewalk-config"
+    return "prewalk"
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_pending(pending))

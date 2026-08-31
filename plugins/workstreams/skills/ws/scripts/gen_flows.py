@@ -19,31 +19,40 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 
+import extension_runner as ER
+
 FLOWS_DIR = Path(__file__).resolve().parents[1] / "references" / "flows"
 DIAGRAMS_DIR = FLOWS_DIR / "diagrams"
 GATES_FILE = FLOWS_DIR / "gates.json"
+EXTENSIONS_FILE = FLOWS_DIR / "extensions.json"
 EVALS_DIR = Path(__file__).resolve().parents[3] / "skills" / "ws-resume" / "evals"
 SCENARIOS_MD = EVALS_DIR / "pressure-scenarios.md"
 EVALS_JSON = EVALS_DIR / "evals.json"
 
-UNIT_PHASES = [
-    "blocked",
-    "plan",
-    "prewalk-config",
-    "prewalk",
-    "plan-pause",
-    "loop",
-    "critic",
-    "done",
-]
 
-# Phases injected by active flavors; the diagram shows a generic gate loop
-# instead of naming each extension (see gates.json).
-EXTENSION_UNIT_PHASES = [
-    "prewalk-config",
-    "prewalk",
-    "critic",
-]
+def _extension_phases_for_slot(slot: str) -> List[str]:
+    phases: List[str] = []
+    rows = sorted(
+        [e for e in ER.load_extensions() if e.get("slot") == slot],
+        key=lambda e: int(e.get("order") or 0),
+    )
+    for row in rows:
+        phases.extend(row.get("phases") or [])
+    return phases
+
+
+EXTENSION_UNIT_PHASES = (
+    _extension_phases_for_slot("post_plan")
+    + _extension_phases_for_slot("post_scoped_work")
+)
+
+UNIT_PHASES = (
+    ["blocked", "plan"]
+    + _extension_phases_for_slot("post_plan")
+    + ["plan-pause", "loop"]
+    + _extension_phases_for_slot("post_scoped_work")
+    + ["done"]
+)
 
 CORE_UNIT_PHASES = [
     p for p in UNIT_PHASES if p not in EXTENSION_UNIT_PHASES
@@ -468,6 +477,37 @@ def check_evals_clean() -> bool:
     return True
 
 
+def check_extensions_parity() -> bool:
+    if not EXTENSIONS_FILE.exists():
+        print(f"MISSING: {EXTENSIONS_FILE} does not exist", file=sys.stderr)
+        return False
+    try:
+        with open(EXTENSIONS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"INVALID JSON: {EXTENSIONS_FILE}: {e}", file=sys.stderr)
+        return False
+    gates = load_gates_catalog()
+    gate_phases = {
+        (g.get("trigger", {}).get("phase"),
+         g.get("trigger", {}).get("kind", "unit"))
+        for g in gates.values()
+        if g.get("trigger", {}).get("phase")
+    }
+    clean = True
+    for ext in data.get("extensions") or []:
+        kind = ext.get("kind", "unit")
+        for phase in ext.get("phases") or []:
+            if (phase, kind) not in gate_phases:
+                print(
+                    f"EXTENSION PARITY: phase {phase!r} ({kind}) "
+                    f"from {ext.get('id')!r} missing in gates.json",
+                    file=sys.stderr,
+                )
+                clean = False
+    return clean
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="gen_flows.py")
     parser.add_argument("--check", action="store_true", help="Check contract: diagrams, schema, lint, parity, evals")
@@ -478,9 +518,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         ok_schema = check_catalog_schema()
         ok_lint = check_presence_lint()
         ok_parity = check_scenario_parity()
+        ok_extensions = check_extensions_parity()
         ok_evals = check_evals_clean()
 
-        if not (ok_diag and ok_schema and ok_lint and ok_parity and ok_evals):
+        if not (ok_diag and ok_schema and ok_lint and ok_parity
+                and ok_extensions and ok_evals):
             print("check-flows: FAILED — flow checks failed", file=sys.stderr)
             return 1
         print("check-flows: OK")

@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.25.1"
+  version: "0.26.0"
   author: Caio Ariede
 ---
 
@@ -390,15 +390,15 @@ Reserved flavor keys: `extends`, `prewalk`, `cheap-model-handoff`, `cheap-model-
 The `review` group is evaluated after `forge` when active flavor hooks
 run. Its `hook-ws-resume-critic` hook invokes the post-complete review.
 
-**Flavor extension phases** — optional unit phases between plan and
-plan-pause (`prewalk-config`, `prewalk`) and after the task/follow-up
-loop (`critic`) are entered only when the active flavor enables them
-(`prewalk = on`, `review = ws-critic`, etc.). `phase.py` derives them;
-`ws-resume` relays the matching gate and fires flavor hooks — it does
-not embed flavor-specific skill names. Bypass once with
-`--skip-extension <phase>` (repeatable; see `gates.json`). Headless runs
-fall through and record `decision …=skipped reason=headless` when
-appropriate.
+**Flavor extension phases** — optional unit phases in `post_plan`
+(after plan saved, before plan-pause) and `post_scoped_work` (after
+scoped work, before `done`). Catalog:
+`references/flows/extensions.json` (slot, enable rule, handler).
+Each extension is a subprocess implementing the v1 JSON `pending` op;
+handlers own receipt/skip parsing. `resume_phase()` walks enabled
+extensions per slot; `gates.json` relays the returned phase.
+`phase.py --skip-extension <id>` bypasses one extension. Headless runs
+and grandfather timestamps skip extensions in the runner.
 
 **Gate actions** — `references/flows/gates.json` pairs phases with
 gates. `phase.py --emit-gate` prints the block; `ws-resume` relays it

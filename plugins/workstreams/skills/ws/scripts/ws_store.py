@@ -950,73 +950,6 @@ def _first_plan_log_ts(u: Unit) -> Optional[str]:
     return None
 
 
-def _has_prewalk_skipped(u: Unit, reason: str) -> bool:
-    needle = f"prewalk=skipped reason={reason}"
-    return any(
-        kind == "decision" and needle in payload
-        for _ts, kind, payload in u.log
-    )
-
-
-def _has_valid_prewalk_done(u: Unit, plan_path: str,
-                            digest: str) -> bool:
-    for _ts, kind, payload in reversed(u.log):
-        if kind != "decision" or not payload.startswith("prewalk=done"):
-            continue
-        if f"plan={plan_path}" not in payload:
-            continue
-        if f"digest={digest}" not in payload:
-            continue
-        return True
-    return False
-
-
-def _has_critic_skipped(u: Unit, reason: str) -> bool:
-    needle = f"critic=skipped reason={reason}"
-    return any(
-        kind == "decision" and needle in payload
-        for _ts, kind, payload in u.log
-    )
-
-
-def _has_valid_critic_done(u: Unit, digest: Optional[str]) -> bool:
-    if not digest:
-        return False
-    for _ts, kind, payload in reversed(u.log):
-        if kind != "decision" or not payload.startswith("critic=done"):
-            continue
-        if f"digest={digest}" in payload:
-            return True
-    return False
-
-
-def _pending_prewalk_phase(u: Unit, plan_path: Optional[str],
-                           digest: Optional[str], *,
-                           models_ready: bool) -> Optional[str]:
-    if not plan_path or not digest:
-        return None
-    if _has_valid_prewalk_done(u, plan_path, digest):
-        return None
-    if _has_prewalk_skipped(u, "headless"):
-        return None
-    if (_has_prewalk_skipped(u, "grandfather")
-            or _has_prewalk_skipped(u, "split")):
-        return None
-    return "prewalk-config" if not models_ready else "prewalk"
-
-
-def _pending_critic_phase(u: Unit, digest: Optional[str]) -> Optional[str]:
-    if not digest:
-        return None
-    if _has_valid_critic_done(u, digest):
-        return None
-    if (_has_critic_skipped(u, "headless")
-            or _has_critic_skipped(u, "grandfather")
-            or _has_critic_skipped(u, "flag")):
-        return None
-    return "critic"
-
-
 def _should_grandfather_prewalk(u: Unit, activated_at: Optional[str]) -> bool:
     if not activated_at:
         return False
@@ -1028,19 +961,12 @@ def _should_grandfather_prewalk(u: Unit, activated_at: Optional[str]) -> bool:
 
 def resume_phase(u: Unit, ws: Workstream,
                  by_slug: Dict[str, Unit], *,
-                 prewalk_enabled: bool = False,
-                 skip_prewalk: bool = False,
-                 headless: bool = False,
-                 grandfather: bool = False,
-                 models_ready: bool = True,
-                 review_enabled: bool = False,
-                 skip_critic: bool = False,
-                 grandfather_critic: bool = False,
-                 critic_digest: Optional[str] = None) -> str:
+                 extension_pending: Optional[Callable[[str], Optional[str]]]
+                 = None) -> str:
     """Phase for ws-resume loop control.
 
-    First match: blocked > plan > prewalk-config > prewalk > plan-pause >
-    loop (tasks, then follow-ups) > critic > done.
+    First match: blocked > plan > post_plan extensions > plan-pause >
+    loop (tasks, then follow-ups) > post_scoped_work extensions > done.
     """
     if u.dropped:
         return "done"
@@ -1049,24 +975,18 @@ def resume_phase(u: Unit, ws: Workstream,
         return "blocked"
     if u.tasks_total == 0:
         if _has_plan_line(u):
-            if (prewalk_enabled and not skip_prewalk and not headless
-                    and not grandfather):
-                plan_path = latest_plan_log_path(u)
-                digest = (plan_file_digest(plan_path)
-                          if plan_path else None)
-                prewalk = _pending_prewalk_phase(
-                    u, plan_path, digest, models_ready=models_ready)
-                if prewalk:
-                    return prewalk
+            if extension_pending:
+                ext = extension_pending("post_plan")
+                if ext:
+                    return ext
             return "plan-pause"
         return "plan"
     if not u.tasks_complete or not u.followups_complete:
         return "loop"
-    if (review_enabled and not skip_critic and not headless
-            and not grandfather_critic):
-        critic = _pending_critic_phase(u, critic_digest)
-        if critic:
-            return critic
+    if extension_pending:
+        ext = extension_pending("post_scoped_work")
+        if ext:
+            return ext
     return "done"
 
 

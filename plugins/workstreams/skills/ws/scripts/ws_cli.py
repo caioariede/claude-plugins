@@ -19,7 +19,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import ws_store as S
 
@@ -381,22 +381,12 @@ def ws_critic_activated_at(store: Path) -> Optional[str]:
     return config_value(store, "ws-critic-activated-at")
 
 
-_SKIP_EXTENSION_ALIASES: Dict[str, FrozenSet[str]] = {
-    "prewalk": frozenset({"prewalk", "prewalk-config"}),
-}
-
-
-def normalize_skip_extensions(phases: Set[str]) -> Set[str]:
-    out: Set[str] = set()
-    for phase in phases:
-        out |= _SKIP_EXTENSION_ALIASES.get(phase, frozenset({phase}))
-    return out
-
-
 def collect_skip_extensions(
         skip_extension: Optional[List[str]] = None) -> Set[str]:
-    """CLI ``--skip-extension`` values → phase names for resume kwargs."""
-    return normalize_skip_extensions(set(skip_extension or []))
+    """CLI ``--skip-extension`` values → phase names for resume ctx."""
+    import extension_runner as ER  # noqa: E402
+
+    return ER.expand_skip_tokens(set(skip_extension or []))
 
 
 def unit_tree_digest(store: Path, u: S.Unit) -> Optional[str]:
@@ -416,30 +406,49 @@ def unit_tree_digest(store: Path, u: S.Unit) -> Optional[str]:
     return hashlib.sha256(result.stdout).hexdigest()[:8]
 
 
-def unit_resume_phase_kwargs(
+def _extension_meta(store: Path, u: S.Unit) -> Dict[str, Dict[str, object]]:
+    import extension_runner as ER  # noqa: E402
+
+    meta: Dict[str, Dict[str, object]] = {}
+    for ext in ER.load_extensions():
+        key = ext.get("activated_at_key")
+        if not key:
+            continue
+        activated = config_value(store, key)
+        meta[ext["id"]] = {
+            "activated_at": activated,
+            "grandfather": S._should_grandfather_prewalk(u, activated),
+        }
+    return meta
+
+
+def build_extension_ctx(
         store: Path, u: S.Unit, *,
         headless: bool = False,
         skip_extensions: Optional[Set[str]] = None) -> dict:
-    """Flavor-aware kwargs for ``ws_store.resume_phase``."""
+    """Read-only context for extension handler subprocesses."""
     skip = skip_extensions or set()
-    prewalk_on = prewalk_enabled(store)
-    review_on = review_enabled(store)
-    activated = superpowers_prewalk_activated_at(store)
-    skip_prewalk = bool(skip & {"prewalk", "prewalk-config"})
+    plan_path = S.latest_plan_log_path(u)
+    plan_digest = S.plan_file_digest(plan_path) if plan_path else None
     return {
-        "prewalk_enabled": prewalk_on,
-        "skip_prewalk": skip_prewalk,
+        "kind": "unit",
         "headless": headless,
-        "grandfather": prewalk_on and S._should_grandfather_prewalk(
-            u, activated),
-        "models_ready": prewalk_models_ready(store),
-        "review_enabled": review_on,
-        "skip_critic": "critic" in skip,
-        "grandfather_critic": (
-            review_on
-            and S._should_grandfather_prewalk(
-                u, ws_critic_activated_at(store))),
-        "critic_digest": unit_tree_digest(store, u),
+        "skip": sorted(skip),
+        "unit": {
+            "slug": u.slug,
+            "tasks_total": u.tasks_total,
+            "tasks_done": u.tasks_done,
+            "followups_complete": u.followups_complete,
+            "log": [[ts, kind, payload]
+                    for ts, kind, payload in u.log],
+        },
+        "artifacts": {
+            "plan_path": plan_path,
+            "plan_digest": plan_digest,
+            "tree_digest": unit_tree_digest(store, u),
+            "models_ready": prewalk_models_ready(store),
+        },
+        "extensions": _extension_meta(store, u),
     }
 
 

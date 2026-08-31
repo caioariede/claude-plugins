@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "extensions": [
+    {
+      "id": "prewalk",
+      "slot": "post_plan",
+      "order": 10,
+      "kind": "unit",
+      "enable": {
+        "group": "spec-driven-development",
+        "op": "prewalk",
+        "eq": "on"
+      },
+      "handler": ["python3", "skills/ws/extensions/prewalk"],
+      "phases": ["prewalk-config", "prewalk"],
+      "activated_at_key": "superpowers-prewalk-activated-at"
+    },
+    {
+      "id": "critic",
+      "slot": "post_scoped_work",
+      "order": 10,
+      "kind": "unit",
+      "enable": {
+        "group": "review",
+        "op": "review",
+        "eq": "ws-critic"
+      },
+      "handler": ["python3", "skills/ws/extensions/critic"],
+      "phases": ["critic"],
+      "activated_at_key": "ws-critic-activated-at"
+    }
+  ]
+}
