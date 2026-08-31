@@ -27,19 +27,12 @@ flowchart TD
     check_plan_line -- No --> plan[plan]
     plan --> plan_save[Save plan] --> check_plan_line
 
-    check_plan_line -- Yes --> kind_plan{kind?}
-    kind_plan -- unit --> pre_plan_ext{{Extension gate before plan-pause?}}
+    check_plan_line -- Yes --> pre_plan_ext{{Extension gate before plan-pause?}}
     pre_plan_ext -- Yes --> pre_plan_gate(["Flavor extension gate — gates.json"])
     pre_plan_gate --> pre_plan_ext
-    pre_plan_ext -- No --> unit_plan_pause(["unit.plan-pause (action)"])
-    unit_plan_pause -- Confirm --> confirm_plan[confirm_plan.py]
-
-    kind_plan -- spike --> spike_plan_pause{{"spike.plan-pause (picker)"}}
-    spike_plan_pause -- "1. Not now" --> stop_plan([stop])
-    spike_plan_pause -- "2. Execute" --> confirm_spike[confirm_plan.py --kind spike]
-
+    pre_plan_ext -- No --> plan_pause(["plan-pause action gate"])
+    plan_pause -- Confirm --> confirm_plan["confirm_plan.py --kind unit|spike"]
     confirm_plan --> loop
-    confirm_spike --> loop
 
     check_zero_tasks -- No --> kind_loop{kind?}
 
@@ -67,9 +60,8 @@ flowchart TD
     classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
     classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
 
-    class spike_plan_pause picker;
-    class pre_plan_gate,post_loop_gate,unit_plan_pause action_stop;
-    class ws_next,stop_blocked,stop_plan terminal;
-    class kind,kind_plan,kind_loop,check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_tasks,check_followups,post_loop_ext,check_spike_complete condition;
-    class resolve,unit_prep,spike_prep,blocked_guard,phase_py,plan,plan_save,confirm_plan,confirm_spike,loop,unit_exec,spike_exec,check_off,spike_check_off,blocked action;
+    class pre_plan_gate,post_loop_gate,plan_pause action_stop;
+    class ws_next,stop_blocked terminal;
+    class kind,kind_loop,check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_tasks,check_followups,post_loop_ext,check_spike_complete condition;
+    class resolve,unit_prep,spike_prep,blocked_guard,phase_py,plan,plan_save,confirm_plan,loop,unit_exec,spike_exec,check_off,spike_check_off,blocked action;
     class guard_blocked guard;

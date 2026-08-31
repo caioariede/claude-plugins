@@ -147,6 +147,26 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def _plan_pause_context(ws: S.Workstream, slug: str, kind: str
+                        ) -> Optional[dict]:
+    if kind == "spike":
+        sp = next((s for s in ws.spikes if s.slug == slug), None)
+        plan_path = S.latest_plan_from_log(sp.log) if sp else None
+    else:
+        unit = next((u for u in ws.units if u.slug == slug), None)
+        plan_path = S.latest_plan_log_path(unit) if unit else None
+    if not plan_path or not Path(plan_path).exists():
+        return None
+    ctx: dict = {"plan": plan_path}
+    try:
+        with open(plan_path, "r", encoding="utf-8") as f:
+            tasks = S.derive_tasks_from_plan(f.read())
+            ctx["tasks"] = [title for _, title in tasks]
+    except Exception:
+        pass
+    return ctx
+
+
 def main(argv: List[str]) -> int:
     store = _store()
     ns = _parse_args(argv)
@@ -162,19 +182,8 @@ def main(argv: List[str]) -> int:
                            headless=ns.headless)
         print(ph)
         if ns.emit_gate:
-            ctx = None
-            if target.kind == "unit" and ph == "plan-pause":
-                unit = next((u for u in ws.units if u.slug == target.slug), None)
-                if unit:
-                    plan_path = S.latest_plan_log_path(unit)
-                    if plan_path and Path(plan_path).exists():
-                        ctx = {"plan": plan_path}
-                        try:
-                            with open(plan_path, "r", encoding="utf-8") as f:
-                                tasks = S.derive_tasks_from_plan(f.read())
-                                ctx["tasks"] = [title for _, title in tasks]
-                        except Exception:
-                            pass
+            ctx = (_plan_pause_context(ws, target.slug, target.kind)
+                   if ph == "plan-pause" else None)
             gate_block = gate_emit.emit_gate(ph, kind=target.kind, context=ctx)
             if gate_block:
                 print(gate_block)

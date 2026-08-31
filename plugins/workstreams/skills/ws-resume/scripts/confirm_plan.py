@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ws-resume confirm_plan — derive tasks and append plan=done.
 
-Usage: confirm_plan.py [target-id] [--kind unit|spike]
+Usage: confirm_plan.py [target-id] [--kind unit|spike] [--type unit|spike]
        [--reason headless] [--context <group>=<value>] [--migrate]
 
 Prints: confirmed T1,T2,... | already-has-tasks | migrated T1,...
@@ -42,7 +42,8 @@ def main(argv: List[str]) -> int:
     store = _store()
     p = argparse.ArgumentParser(prog="confirm_plan.py")
     p.add_argument("target_id", nargs="?", default="")
-    p.add_argument("--kind", choices=("unit", "spike"), default="unit")
+    p.add_argument("--kind", "--type", choices=("unit", "spike"), default="unit",
+                   dest="kind")
     p.add_argument("--reason", default="")
     p.add_argument("--context", default="")
     p.add_argument("--migrate", action="store_true",

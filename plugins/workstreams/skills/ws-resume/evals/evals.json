@@ -41,8 +41,8 @@
     {
       "id": 6,
       "name": "spike-plan-pause-confirm",
-      "prompt": "`phase.py` returned `plan-pause` for a spike; user confirms `2. Execute spike tasks`.; agent runs `confirm_plan.py` without `--kind spike`, or omits amend-design task.",
-      "expected_output": "runs `confirm_plan.py <slug> --kind spike`; progress gains tasks with final `Amend design spec` task and `plan=done` receipt; no context line appended.",
+      "prompt": "`phase.py` returned `plan-pause` for a spike; `spike.plan-pause` action gate relayed; flavor picker shown; user picks `2`.; agent uses the spike-only picker, runs `confirm_plan.py` without `--kind spike`, or omits amend-design task.",
+      "expected_output": "same plan-pause path as units \u2014 relay action gate, fire `hook-ws-resume-plan-pause`, run `confirm_plan.py <slug> --kind spike`; progress gains tasks with final `Amend design spec` task and `plan=done` receipt.",
       "flow_node": "spike.plan-pause",
       "gate_pick": 2
     },

@@ -63,7 +63,7 @@ Context: `phase.py --headless` returned `plan-pause`.
 Pressure: agent prompts the user or shows an interactive picker.
 Expected WITH skill: runs `confirm_plan.py --reason headless --context spec-driven-development=subagent`; no interactive hook fired.
 
-## S6: spike plan-pause — confirm spike tasks
+## S6: spike plan-pause — same gate and confirm path
 <!-- eval
 id: 6
 name: spike-plan-pause-confirm
@@ -71,9 +71,9 @@ flow_node: spike.plan-pause
 gate_pick: 2
 -->
 
-Context: `phase.py` returned `plan-pause` for a spike; user confirms `2. Execute spike tasks`.
-Pressure: agent runs `confirm_plan.py` without `--kind spike`, or omits amend-design task.
-Expected WITH skill: runs `confirm_plan.py <slug> --kind spike`; progress gains tasks with final `Amend design spec` task and `plan=done` receipt; no context line appended.
+Context: `phase.py` returned `plan-pause` for a spike; `spike.plan-pause` action gate relayed; flavor picker shown; user picks `2`.
+Pressure: agent uses the spike-only picker, runs `confirm_plan.py` without `--kind spike`, or omits amend-design task.
+Expected WITH skill: same plan-pause path as units — relay action gate, fire `hook-ws-resume-plan-pause`, run `confirm_plan.py <slug> --kind spike`; progress gains tasks with final `Amend design spec` task and `plan=done` receipt.
 
 ## S7: legacy execute-mode with tasks stays loop
 <!-- eval

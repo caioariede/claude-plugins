@@ -43,14 +43,12 @@
     },
     {
       "id": "spike.plan-pause",
-      "kind": "picker",
+      "kind": "action",
       "trigger": { "phase": "plan-pause", "kind": "spike" },
-      "prompt": "Execute spike tasks?",
-      "default_option": 1,
-      "options": [
-        { "n": 1, "label": "Not now (default)" },
-        { "n": 2, "label": "Execute spike tasks" }
-      ]
+      "context_slots": ["plan_path", "task_titles"],
+      "prompt": "Plan saved. Confirm to derive tasks and continue.",
+      "action": "await_plan_confirm",
+      "stop": true
     },
     {
       "id": "spike.blocked-override",
