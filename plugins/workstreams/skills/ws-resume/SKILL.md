@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, finish scoped work, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.19.0"
+  version: "0.20.0"
   author: Caio Ariede
 ---
 
@@ -13,7 +13,7 @@ metadata:
 
 **Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
-**Flow reference:** see visual decision diagrams in `skills/ws/references/flows/diagrams/resume-unit.mmd` and `resume-spike.mmd`.
+**Flow reference:** see `skills/ws/references/flows/diagrams/resume.mmd`.
 
 **Input:** `$ARGUMENTS` = `[unit-id|spike-id]`. Resolve via the SPEC bare-slug resolver → `(ws_id, slug, kind)`. If omitted, infer a **unit** from the current worktree's branch by scanning `<store>/*/units.md` — **spikes always require an explicit id** (zero-arg cannot reach a spike).
 

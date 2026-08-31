@@ -77,46 +77,70 @@ def load_gates_catalog() -> Dict[str, Any]:
     return {}
 
 
-def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
+def generate_resume_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     gates = gates or {}
 
     return """flowchart TD
-    %% ws-resume unit execution flow
+    %% ws-resume — unit and spike execution flow
 
-    start([Start / ws-resume unit]) --> check_terminal{{Dropped or complete?}}
-    
-    check_terminal -- Yes --> done([done])
+    start([Start / ws-resume]) --> resolve[Resolve ws_id, slug, kind]
+    resolve --> kind{kind?}
+
+    kind -- unit --> unit_prep[Ensure worktree, restack base, load state]
+    kind -- spike --> spike_prep[Load spike store files + umbrella design]
+
+    unit_prep --> blocked_guard[Blocked-awareness guard]
+    spike_prep --> blocked_guard
+
+    blocked_guard --> phase_py[phase.py --emit-gate]
+
+    phase_py --> check_terminal{{Dropped or complete?}}
+    check_terminal -- Yes --> ws_next([done → chain ws-next])
     check_terminal -- No --> check_needs{{Unmet needs?}}
-    
+
     check_needs -- Yes --> blocked[blocked]
-    blocked --> guard_blocked{{"unit.blocked-override (guard)"}}
+    blocked --> guard_blocked{{"blocked-override guard (unit or spike)"}}
     guard_blocked -- Confirm override --> check_zero_tasks
     guard_blocked -- Stop --> stop_blocked([stop])
-    
+
     check_needs -- No --> check_zero_tasks{{Tasks total == 0?}}
-    
+
     check_zero_tasks -- Yes --> check_plan_line{{Has plan line in log?}}
     check_plan_line -- No --> plan[plan]
     plan --> plan_save[Save plan] --> check_plan_line
-    
-    check_plan_line -- Yes --> pre_plan_ext{{Extension gate before plan-pause?}}
+
+    check_plan_line -- Yes --> kind_plan{kind?}
+    kind_plan -- unit --> pre_plan_ext{{Extension gate before plan-pause?}}
     pre_plan_ext -- Yes --> pre_plan_gate(["Flavor extension gate — gates.json"])
     pre_plan_gate --> pre_plan_ext
-    pre_plan_ext -- No --> plan_pause(["unit.plan-pause (hard stop / action)"])
-    plan_pause -- Confirm --> confirm_plan[confirm_plan.py] --> loop
-    
-    check_zero_tasks -- No --> check_tasks{{All tasks checked?}}
+    pre_plan_ext -- No --> unit_plan_pause(["unit.plan-pause (action)"])
+    unit_plan_pause -- Confirm --> confirm_plan[confirm_plan.py]
+
+    kind_plan -- spike --> spike_plan_pause{{"spike.plan-pause (picker)"}}
+    spike_plan_pause -- "1. Not now" --> stop_plan([stop])
+    spike_plan_pause -- "2. Execute" --> confirm_spike[confirm_plan.py --kind spike]
+
+    confirm_plan --> loop
+    confirm_spike --> loop
+
+    check_zero_tasks -- No --> kind_loop{kind?}
+
+    kind_loop -- unit --> check_tasks{{All tasks checked?}}
     check_tasks -- No --> loop[loop]
-    loop --> execute_task[Execute task] --> check_off_task[Check off task in progress.md] --> check_tasks
-    
+    loop --> unit_exec[Flavor execute task or follow-up]
+    unit_exec --> check_off[Check off in progress.md] --> check_tasks
     check_tasks -- Yes --> check_followups{{All follow-ups checked?}}
-    check_followups -- No --> loop_fu[loop follow-up]
-    loop_fu --> execute_fu[Execute follow-up] --> check_off_fu[Check off F<n>] --> check_followups
-    
+    check_followups -- No --> loop
     check_followups -- Yes --> post_loop_ext{{Extension gate before done?}}
     post_loop_ext -- Yes --> post_loop_gate(["Flavor extension gate — gates.json"])
     post_loop_gate --> post_loop_ext
-    post_loop_ext -- No --> done
+    post_loop_ext -- No --> ws_next
+
+    kind_loop -- spike --> check_spike_complete{{Spike complete?}}
+    check_spike_complete -- No --> loop
+    loop --> spike_exec[Intrinsic research loop / spec amend on final task]
+    spike_exec --> spike_check_off[Check off in progress.md] --> check_spike_complete
+    check_spike_complete -- Yes --> ws_next
 
     classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
     classDef action_stop fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
@@ -125,57 +149,17 @@ def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
     classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
 
-    class pre_plan_gate,post_loop_gate,plan_pause action_stop;
-    class done,stop_blocked terminal;
-    class check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_tasks,check_followups,post_loop_ext condition;
-    class plan,loop,loop_fu,confirm_plan,execute_task,check_off_task,execute_fu,check_off_fu,plan_save,blocked action;
+    class spike_plan_pause picker;
+    class pre_plan_gate,post_loop_gate,unit_plan_pause action_stop;
+    class ws_next,stop_blocked,stop_plan terminal;
+    class kind,kind_plan,kind_loop,check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_tasks,check_followups,post_loop_ext,check_spike_complete condition;
+    class resolve,unit_prep,spike_prep,blocked_guard,phase_py,plan,plan_save,confirm_plan,confirm_spike,loop,unit_exec,spike_exec,check_off,spike_check_off,blocked action;
     class guard_blocked guard;
 """
 
 
-def generate_resume_spike_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
-    gates = gates or {}
-    return """flowchart TD
-    %% ws-resume spike execution flow
-
-    start([Start / ws-resume spike]) --> check_terminal{Dropped or complete?}
-    check_terminal -- Yes --> done([done])
-    check_terminal -- No --> check_needs{Unmet needs?}
-    
-    check_needs -- Yes --> blocked[blocked]
-    blocked --> guard_blocked{{"spike.blocked-override (guard)"}}
-    guard_blocked -- Confirm override --> check_zero_tasks
-    guard_blocked -- Stop --> stop_blocked([stop])
-    
-    check_needs -- No --> check_zero_tasks{Tasks total == 0?}
-    
-    check_zero_tasks -- Yes --> check_plan_line{Has plan line in log?}
-    check_plan_line -- No --> plan[plan]
-    plan --> plan_save[Save plan] --> check_plan_line
-    check_plan_line -- Yes --> plan_pause{{"spike.plan-pause (picker)"}}
-    
-    plan_pause -- "1. Not now" --> stop_plan([stop])
-    plan_pause -- "2. Execute" --> confirm_plan[confirm_plan.py --kind spike] --> loop
-    
-    check_zero_tasks -- No --> check_complete{Spike complete?}
-    check_complete -- No --> loop[loop]
-    loop --> execute_task[Execute research task] --> check_off[Check off in progress.md] --> check_complete
-    
-    check_complete -- Yes --> done
-
-    classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
-    classDef action_stop fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
-    classDef terminal fill:#f3f4f6,stroke:#4b5563,stroke-width:2px;
-    classDef condition fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px;
-    classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
-    classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
-
-    class plan_pause picker;
-    class done,stop_plan,stop_blocked terminal;
-    class check_terminal,check_needs,check_zero_tasks,check_plan_line,check_complete condition;
-    class plan,loop,confirm_plan,execute_task,check_off,plan_save,blocked action;
-    class guard_blocked guard;
-"""
+def _deprecated_resume_diagrams() -> Set[str]:
+    return {"resume-unit.mmd", "resume-spike.mmd"}
 
 
 def generate_next_terminal_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
@@ -328,8 +312,7 @@ def generate_focus_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
 def get_all_diagrams() -> Dict[str, str]:
     gates = load_gates_catalog()
     return {
-        "resume-unit.mmd": generate_resume_unit_mmd(gates),
-        "resume-spike.mmd": generate_resume_spike_mmd(gates),
+        "resume.mmd": generate_resume_mmd(gates),
         "next-terminal.mmd": generate_next_terminal_mmd(gates),
         "oneshot.mmd": generate_oneshot_mmd(gates),
         "start.mmd": generate_start_mmd(gates),
@@ -343,6 +326,11 @@ def get_all_diagrams() -> Dict[str, str]:
 def write_diagrams() -> None:
     DIAGRAMS_DIR.mkdir(parents=True, exist_ok=True)
     diagrams = get_all_diagrams()
+    for stale in _deprecated_resume_diagrams():
+        path = DIAGRAMS_DIR / stale
+        if path.exists():
+            path.unlink()
+            print(f"removed {path}")
     for filename, content in diagrams.items():
         out_path = DIAGRAMS_DIR / filename
         with open(out_path, "w", encoding="utf-8") as f:
@@ -446,7 +434,7 @@ def check_presence_lint() -> bool:
         phase = g.get("trigger", {}).get("phase")
         overlay = g.get("trigger", {}).get("overlay")
         if phase in EXTENSION_UNIT_PHASES:
-            if "Flavor extension gate" in diagrams.get("resume-unit.mmd", ""):
+            if "Flavor extension gate" in diagrams.get("resume.mmd", ""):
                 continue
         if gid not in all_mmd and (not phase or phase not in all_mmd) and (not overlay or overlay not in all_mmd):
             print(f"PRESENCE LINT: Gate {gid!r} not referenced in any .mmd flow", file=sys.stderr)

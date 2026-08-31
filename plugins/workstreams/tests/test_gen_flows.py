@@ -14,23 +14,30 @@ import gen_flows as GF  # noqa: E402
 class GenFlowsTests(unittest.TestCase):
     def test_core_unit_phases_in_diagram(self):
         diagrams = GF.get_all_diagrams()
-        unit_mmd = diagrams["resume-unit.mmd"]
+        resume_mmd = diagrams["resume.mmd"]
         for phase in GF.CORE_UNIT_PHASES:
             self.assertIn(
                 phase,
-                unit_mmd,
-                f"Expected phase {phase!r} to appear in resume-unit.mmd",
+                resume_mmd,
+                f"Expected phase {phase!r} to appear in resume.mmd",
             )
 
     def test_all_spike_phases_in_diagram(self):
         diagrams = GF.get_all_diagrams()
-        spike_mmd = diagrams["resume-spike.mmd"]
+        resume_mmd = diagrams["resume.mmd"]
         for phase in GF.SPIKE_PHASES:
             self.assertIn(
                 phase,
-                spike_mmd,
-                f"Expected phase {phase!r} to appear in resume-spike.mmd",
+                resume_mmd,
+                f"Expected phase {phase!r} to appear in resume.mmd",
             )
+
+    def test_resume_diagram_covers_both_kinds(self):
+        resume_mmd = GF.get_all_diagrams()["resume.mmd"]
+        self.assertIn("unit_prep", resume_mmd)
+        self.assertIn("spike_prep", resume_mmd)
+        self.assertNotIn("resume-unit.mmd", resume_mmd)
+        self.assertNotIn("resume-spike.mmd", resume_mmd)
 
     def test_next_terminal_states_in_diagram(self):
         diagrams = GF.get_all_diagrams()
@@ -45,8 +52,7 @@ class GenFlowsTests(unittest.TestCase):
     def test_all_diagrams_generated(self):
         diagrams = GF.get_all_diagrams()
         expected_diagrams = {
-            "resume-unit.mmd",
-            "resume-spike.mmd",
+            "resume.mmd",
             "next-terminal.mmd",
             "oneshot.mmd",
             "start.mmd",
