@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, finish scoped work, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.18.0"
+  version: "0.19.0"
   author: Caio Ariede
 ---
 
@@ -46,21 +46,25 @@ After resolving `(ws_id, slug, kind)`:
 6. Derive phase — do not infer planning or execute boundaries from `progress.md` alone:
 
 ```
-python3 <this-skill-dir>/scripts/phase.py [unit-id] --emit-gate [--skip-prewalk] [--skip-critic] [--headless]
+python3 <this-skill-dir>/scripts/phase.py [unit-id] --emit-gate [--headless]
 ```
 
-`phase.py` owns phase ordering (including optional flavor extension phases before plan-pause and after the task/follow-up loop). Bypass flags are per-flavor escape hatches — see SPEC §Flavor extension phases.
+`phase.py` owns phase ordering, including optional flavor extension gates
+before plan-pause and after the task/follow-up loop (SPEC §Flavor
+extension phases). Optional bypass flags live on `phase.py --help`, not
+here.
 
-When `phase.py` outputs a structured gate block (`--- GATE: ... ---`), relay its prompt and options (§Pause gates), run the gate `action` (SPEC §Gate actions), fire any flavor hooks listed below, and **hard stop** when the gate sets `stop: true`.
+When `phase.py` outputs a structured gate block (`--- GATE: ... ---`),
+relay its prompt and options (§Pause gates), run the gate `action` (SPEC
+§Gate actions), fire any flavor hooks for that gate, and **hard stop**
+when the gate sets `stop: true`.
 
 | Phase | Flavor hooks | Action |
 |-------|--------------|--------|
 | `plan` | `hook-ws-resume-unplanned-before`, `hook-ws-resume-unplanned-after` | **Plan only — no code, no tasks.** Read `charter.md` and its `design:` spec; note what the base branch already ships. Resolve the unit plan path via SPEC §Plan path (`<design-dir>/<bare-slug>-plan.md` — not the design-basename swap). If **that** path already exists and `log.md` lacks a `plan` line → append `plan` only, re-run phase.py, stop at the next gate-bearing phase. Else: fire unplanned hooks (interactive); run the flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**; plan-pause owns that gate); fire unplanned-after. Append `plan <absolute-path>` to `log.md` when absent. Do **not** derive `T1..`, do **not** touch source files. Re-run phase.py. **`none` flavor:** its `plan` op writes `T1..` inline and skips plan-pause. **Headless** (hooks skip): resolve plan path, run `plan` if no file yet, append `plan`, run `confirm_plan.py --reason headless --context spec-driven-development=subagent`, enter execute. |
-| `prewalk-config` | — | Relay gate; run `print_required_config` action; stop. |
-| `prewalk` | `hook-ws-resume-prewalk` | Relay gate; run `run_prewalk` action (hook carries the skill invocation); stop. |
+| *extension* | per gate / active flavor (SPEC §Flavor hooks) | Any other `phase.py` token with a matching gate in `gates.json`: relay the gate block, run its `action`, fire defined `hook-ws-resume-*` hooks, stop when `stop: true`, re-run phase.py on resume. |
 | `plan-pause` | `hook-ws-resume-plan-pause` | Relay gate; on confirmation run `confirm_plan.py` per `await_plan_confirm` action; re-run phase.py (enters `loop`). Never derive tasks or start T1 without user confirmation. Colloquial proceed words (`/go`, etc.): re-show the picker. **Headless:** `confirm_plan.py [unit-id] --reason headless --context spec-driven-development=subagent`. |
 | `loop` | `hook-ws-resume-loop-before` (once per invocation, when not just cleared plan-pause) | Run execute for the first unchecked task or follow-up per the active flavor's execute policy (see `<ws-skill-dir>/references/superpowers-execute.md` for superpowers). Enter the execute loop (below). |
-| `critic` | `hook-ws-resume-critic` | Relay gate; run `run_critic` action (hook carries the skill invocation); stop; re-run phase.py on resume. |
 | `blocked` | — | Blocked-awareness guard; stop. |
 | `done` | — | Chain to `ws-next` (below). |
 
