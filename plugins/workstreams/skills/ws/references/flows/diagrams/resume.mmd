@@ -34,24 +34,14 @@ flowchart TD
     plan_pause -- Confirm --> confirm_plan["confirm_plan.py --kind unit|spike"]
     confirm_plan --> loop
 
-    check_zero_tasks -- No --> kind_loop{kind?}
-
-    kind_loop -- unit --> check_tasks{{All tasks checked?}}
-    check_tasks -- No --> loop[loop]
-    loop --> unit_exec[Flavor execute task or follow-up]
-    unit_exec --> check_off[Check off in progress.md] --> check_tasks
-    check_tasks -- Yes --> check_followups{{All follow-ups checked?}}
-    check_followups -- No --> loop
-    check_followups -- Yes --> post_loop_ext{{Extension gate before done?}}
+    check_zero_tasks -- No --> check_scope{{Scoped work complete?}}
+    check_scope -- No --> loop[loop]
+    loop --> work[Work first unchecked task per plan]
+    work --> check_off[Check off in progress.md] --> check_scope
+    check_scope -- Yes --> post_loop_ext{{Extension gate before done?}}
     post_loop_ext -- Yes --> post_loop_gate(["Flavor extension gate — gates.json"])
     post_loop_gate --> post_loop_ext
     post_loop_ext -- No --> ws_next
-
-    kind_loop -- spike --> check_spike_complete{{Spike complete?}}
-    check_spike_complete -- No --> loop
-    loop --> spike_exec[Intrinsic research loop / spec amend on final task]
-    spike_exec --> spike_check_off[Check off in progress.md] --> check_spike_complete
-    check_spike_complete -- Yes --> ws_next
 
     classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
     classDef action_stop fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
@@ -62,6 +52,6 @@ flowchart TD
 
     class pre_plan_gate,post_loop_gate,plan_pause action_stop;
     class ws_next,stop_blocked terminal;
-    class kind,kind_loop,check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_tasks,check_followups,post_loop_ext,check_spike_complete condition;
-    class resolve,unit_prep,spike_prep,blocked_guard,phase_py,plan,plan_save,confirm_plan,loop,unit_exec,spike_exec,check_off,spike_check_off,blocked action;
+    class kind,check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_scope,post_loop_ext condition;
+    class resolve,unit_prep,spike_prep,blocked_guard,phase_py,plan,plan_save,confirm_plan,loop,work,check_off,blocked action;
     class guard_blocked guard;

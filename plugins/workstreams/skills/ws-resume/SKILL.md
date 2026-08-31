@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, finish scoped work, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.21.0"
+  version: "0.22.0"
   author: Caio Ariede
 ---
 
@@ -66,7 +66,20 @@ task previews in the relay.
 
 After each loop action, check off the completed item in `progress.md`
 before re-running `phase.py`. Gate phases stop for the user; `loop`
-repeats until `done`.
+repeats until scoped work is complete.
+
+### Scoped work
+
+One loop path for both kinds (`resume.mmd` → **Scoped work complete?**).
+`phase.py` owns the check — no kind fork in the execute loop.
+
+| Kind | Scoped work complete when |
+|------|---------------------------|
+| unit | All tasks and in-unit follow-ups checked |
+| spike | All tasks checked |
+
+When scoped work is complete, `phase.py` may emit post-loop extension
+gates (units only, per flavor / `gates.json`), then `done`.
 
 ## Next
 
