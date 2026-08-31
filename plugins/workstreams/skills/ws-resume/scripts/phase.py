@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """ws-resume phase — print loop boundary for one unit or spike.
 
-Usage: phase.py [unit-id] [--skip-prewalk] [--headless]
+Usage: phase.py [unit-id] [--skip-prewalk] [--skip-critic] [--headless]
 
 Prints one line: blocked | plan | prewalk-config | prewalk | plan-pause |
-loop | critic | ship-pause | draft-pr | done  (unit)
+loop | critic | done  (unit)
   or blocked | plan | plan-pause | loop | done  (spike)
 Exit 2 when the caller must pick (same tokens as ws-board).
 """

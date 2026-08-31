@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.25.0"
+  version: "0.25.1"
   author: Caio Ariede
 ---
 
@@ -389,6 +389,28 @@ Reserved flavor keys: `extends`, `prewalk`, `cheap-model-handoff`, `cheap-model-
 
 The `review` group is evaluated after `forge` when active flavor hooks
 run. Its `hook-ws-resume-critic` hook invokes the post-complete review.
+
+**Flavor extension phases** — optional unit phases between plan and
+plan-pause (`prewalk-config`, `prewalk`) and after the task/follow-up
+loop (`critic`) are entered only when the active flavor enables them
+(`prewalk = on`, `review = ws-critic`, etc.). `phase.py` derives them;
+`ws-resume` relays the matching gate and fires flavor hooks — it does
+not embed flavor-specific skill names. Bypass once with
+`--skip-prewalk` or `--skip-critic`; headless runs fall through and
+record `decision …=skipped reason=headless` when appropriate.
+
+**Gate actions** — `references/flows/gates.json` pairs phases with
+gates. `phase.py --emit-gate` prints the block; `ws-resume` relays it
+and runs the `action` token:
+
+| action | behavior |
+|--------|----------|
+| `await_plan_confirm` | run `confirm_plan.py` after user confirms |
+| `print_required_config` | run `ws-config show`; print `required:` lines |
+| `run_prewalk` | fire `hook-ws-resume-prewalk` (flavor names the skill) |
+| `run_critic` | fire `hook-ws-resume-critic` (flavor names the skill) |
+
+When `stop: true`, hard stop after the action.
 
 **Spec-watch (runtime hook)** — when a written path matches the active `spec-driven-development` flavor's `spec-glob` and no workstream's `design:` claims that spec, the runtime injects a one-line nudge to offer `ws-init` with it as the design (naming a design-less workstream as the attach-instead alternative when one exists). Mechanics: the runtime wiring (`hooks/hooks.json`) saves PostToolUse stdin and runs `<store>/hooks/spec-watch-<flavor>.sh`, emitting the first non-empty stdout; the installed script is the runtime flag. `ws-config` reconciles it on every run from the bundled template (`hooks/spec-watch.sh`), baking in the flavor's `spec-glob`; a flavor without one gets no script for that watcher. Ownership matches the spec's basename against `design:` lines — spellings vary (`~`/absolute/symlink), dated filenames don't. Distinct from §Flavor hooks (those fire *from* `ws-*` skills; this fires when an upstream tool — e.g. superpowers brainstorming — writes a spec before any workstream exists). Suggestion only: no store write, and no command runs without the user.
 
