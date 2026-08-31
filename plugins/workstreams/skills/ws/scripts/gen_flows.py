@@ -37,6 +37,18 @@ UNIT_PHASES = [
     "done",
 ]
 
+# Phases injected by active flavors; the diagram shows a generic gate loop
+# instead of naming each extension (see gates.json).
+EXTENSION_UNIT_PHASES = [
+    "prewalk-config",
+    "prewalk",
+    "critic",
+]
+
+CORE_UNIT_PHASES = [
+    p for p in UNIT_PHASES if p not in EXTENSION_UNIT_PHASES
+]
+
 SPIKE_PHASES = [
     "blocked",
     "plan",
@@ -87,12 +99,10 @@ def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     check_plan_line -- No --> plan[plan]
     plan --> plan_save[Save plan] --> check_plan_line
     
-    check_plan_line -- Yes --> check_prewalk{{Prewalk enabled & pending?}}
-    check_prewalk -- Yes --> check_models{{Models ready?}}
-    check_models -- No --> prewalk_config(["unit.prewalk-config (hard stop)"])
-    check_models -- Yes --> prewalk(["unit.prewalk (hard stop / action)"])
-    
-    check_prewalk -- No --> plan_pause(["unit.plan-pause (hard stop / action)"])
+    check_plan_line -- Yes --> pre_plan_ext{{Extension gate before plan-pause?}}
+    pre_plan_ext -- Yes --> pre_plan_gate(["Flavor extension gate — gates.json"])
+    pre_plan_gate --> pre_plan_ext
+    pre_plan_ext -- No --> plan_pause(["unit.plan-pause (hard stop / action)"])
     plan_pause -- Confirm --> confirm_plan[confirm_plan.py] --> loop
     
     check_zero_tasks -- No --> check_tasks{{All tasks checked?}}
@@ -103,9 +113,10 @@ def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     check_followups -- No --> loop_fu[loop follow-up]
     loop_fu --> execute_fu[Execute follow-up] --> check_off_fu[Check off F<n>] --> check_followups
     
-    check_followups -- Yes --> check_critic{{Critic review pending?}}
-    check_critic -- Yes --> critic(["unit.critic (hard stop / action)"])
-    check_critic -- No --> done
+    check_followups -- Yes --> post_loop_ext{{Extension gate before done?}}
+    post_loop_ext -- Yes --> post_loop_gate(["Flavor extension gate — gates.json"])
+    post_loop_gate --> post_loop_ext
+    post_loop_ext -- No --> done
 
     classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
     classDef action_stop fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
@@ -114,9 +125,9 @@ def generate_resume_unit_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
     classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
 
-    class prewalk,prewalk_config,plan_pause,critic action_stop;
+    class pre_plan_gate,post_loop_gate,plan_pause action_stop;
     class done,stop_blocked terminal;
-    class check_terminal,check_needs,check_zero_tasks,check_plan_line,check_prewalk,check_models,check_tasks,check_followups,check_critic condition;
+    class check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_tasks,check_followups,post_loop_ext condition;
     class plan,loop,loop_fu,confirm_plan,execute_task,check_off_task,execute_fu,check_off_fu,plan_save,blocked action;
     class guard_blocked guard;
 """
@@ -434,6 +445,9 @@ def check_presence_lint() -> bool:
         # Check that gate id or phase appears in diagrams
         phase = g.get("trigger", {}).get("phase")
         overlay = g.get("trigger", {}).get("overlay")
+        if phase in EXTENSION_UNIT_PHASES:
+            if "Flavor extension gate" in diagrams.get("resume-unit.mmd", ""):
+                continue
         if gid not in all_mmd and (not phase or phase not in all_mmd) and (not overlay or overlay not in all_mmd):
             print(f"PRESENCE LINT: Gate {gid!r} not referenced in any .mmd flow", file=sys.stderr)
             clean = False

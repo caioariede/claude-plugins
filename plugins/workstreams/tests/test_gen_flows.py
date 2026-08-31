@@ -12,10 +12,10 @@ import gen_flows as GF  # noqa: E402
 
 
 class GenFlowsTests(unittest.TestCase):
-    def test_all_unit_phases_in_diagram(self):
+    def test_core_unit_phases_in_diagram(self):
         diagrams = GF.get_all_diagrams()
         unit_mmd = diagrams["resume-unit.mmd"]
-        for phase in GF.UNIT_PHASES:
+        for phase in GF.CORE_UNIT_PHASES:
             self.assertIn(
                 phase,
                 unit_mmd,
