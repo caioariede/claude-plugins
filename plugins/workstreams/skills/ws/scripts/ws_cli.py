@@ -814,7 +814,7 @@ def resolve_args(store: Path, args: List[str]) -> Tuple[str, Optional[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Worktree locate + git drift helpers (ws-resume detect_split)
+# Worktree locate + git helpers
 # ---------------------------------------------------------------------------
 
 def _parse_git_worktree_porcelain(text: str, branch: str) -> Optional[Path]:
@@ -886,17 +886,6 @@ def _git_in(worktree: Path, *args: str, timeout: int = 15) -> Optional[str]:
     if out.returncode != 0:
         return None
     return (out.stdout or "").strip()
-
-
-def commits_ahead(worktree: Path, base: str) -> Optional[int]:
-    """Commits on HEAD not in ``origin/<base>``; None when git fails."""
-    raw = _git_in(worktree, "rev-list", "--count", f"origin/{base}..HEAD")
-    if raw is None:
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return None
 
 
 def head_sha(worktree: Path) -> str:

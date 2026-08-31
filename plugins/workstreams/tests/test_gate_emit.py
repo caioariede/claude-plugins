@@ -26,7 +26,6 @@ class GateEmitTests(unittest.TestCase):
         self.assertIn("unit.plan-pause", ids)
         self.assertIn("unit.ship-pause", ids)
         self.assertIn("unit.draft-pr", ids)
-        self.assertIn("unit.drift", ids)
         self.assertIn("unit.ship-detect", ids)
         self.assertIn("unit.blocked-override", ids)
         self.assertIn("unit.prewalk", ids)
@@ -43,16 +42,19 @@ class GateEmitTests(unittest.TestCase):
         self.assertIsNotNone(g_spike)
         self.assertEqual(g_spike["id"], "spike.plan-pause")
 
-        g_drift = GE.find_gate("plan-pause", kind="unit", overlay="drift")
-        self.assertIsNotNone(g_drift)
-        self.assertEqual(g_drift["id"], "unit.drift")
-
         g_ship_detect = GE.find_gate("ship-detect", kind="unit", overlay="ship-detect")
         self.assertIsNotNone(g_ship_detect)
         self.assertEqual(g_ship_detect["id"], "unit.ship-detect")
 
         g_none = GE.find_gate("nonexistent", kind="unit")
         self.assertIsNone(g_none)
+
+    def test_plan_pause_is_action_gate(self):
+        g = GE.find_gate("plan-pause", kind="unit")
+        self.assertIsNotNone(g)
+        self.assertEqual(g["kind"], "action")
+        self.assertTrue(g["stop"])
+        self.assertNotIn("options", g)
 
     def test_format_gate_block_picker(self):
         gate = {
@@ -129,30 +131,12 @@ class GateEmitTests(unittest.TestCase):
             lines = res.stdout.strip().splitlines()
             self.assertEqual(lines[0], "plan-pause")
             self.assertIn("--- GATE: unit.plan-pause ---", res.stdout)
-            self.assertIn("kind: picker", res.stdout)
-            self.assertIn("1. Not now (default)", res.stdout)
-            self.assertIn("2. Subagent-driven", res.stdout)
+            self.assertIn("kind: action", res.stdout)
+            self.assertIn("prompt: Plan saved", res.stdout)
+            self.assertIn("action: await_plan_confirm", res.stdout)
+            self.assertIn("stop: true", res.stdout)
             self.assertIn("Setup", res.stdout)
-
-    def test_detect_split_cli_no_split(self):
-        with tempfile.TemporaryDirectory() as td:
-            store = Path(td)
-            write_ws(
-                store,
-                "2026-01-01-demo",
-                units_md=ledger('u1  "Unit 1"  repo=o/r'),
-                units={"u1": {"progress": "## Tasks\n", "log": ""}},
-            )
-            cmd = [
-                sys.executable,
-                str(ROOT / "skills" / "ws-resume" / "scripts" / "detect_split.py"),
-                "u1",
-                "--emit-gate",
-            ]
-            env = dict(os.environ, WS_STORE=td)
-            res = subprocess.run(cmd, env=env, capture_output=True, text=True)
-            self.assertEqual(res.returncode, 0)
-            self.assertEqual(res.stdout.strip(), "no-split")
+            self.assertIn("Build", res.stdout)
 
 
 if __name__ == "__main__":

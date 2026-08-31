@@ -44,15 +44,13 @@ Dismissal or multi-unit signals → use `ws-init` at spec time instead.
 3. **ws-resume** — run immediately; suppress intermediate opt-in
    handoffs from steps 1–2. **Stop at the first pause gate:** prewalk
    hard stop (when `superpowers-prewalk` is active), else `plan-pause`
-   (superpowers) or execute entry (`none`). Do not skip execute-mode
-   choice.
+   (superpowers) or execute entry (`none`). Do not skip plan
+   confirmation.
 
 After `plan-pause`: normal `ws-resume` behavior — no special oneshot
-rules. Option **4** (execute outside ws-resume) or drift backfill on
-return apply the same as any session. Scope growth → `ws-backlog`
-during work, `ws-next` after ship.
+rules. Scope growth → `ws-backlog` during work, `ws-next` after ship.
 
 ## Chain
 
-At `plan-pause`, offer execute-mode choice per ws-resume. Do not offer
-`ws-next` until the unit reaches `done`.
+At `plan-pause`, confirm plan per ws-resume. Do not offer `ws-next` until
+the unit reaches `done`.

@@ -227,20 +227,19 @@ kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>
 squash-gap fix). Latest line wins; append-only.
 
 `plan` records the unit implementation plan path (superpowers flavor);
-append once at first save. `decision execute-mode=subagent-driven` or
-`execute-mode=inline` records which execute path ws-resume uses — append
-only at **plan-pause** when the user picks Subagent-driven or Inline,
-never when the plan file is first saved. `execute-mode=external` records
-that implementation will happen (or did happen) outside the ws-resume
-loop — append at plan-pause when the user picks Execute outside
-ws-resume, or after confirmed backfill from drift detection. External
-mode does not dispatch the flavor execute op; unchecked tasks after
-external re-enter the normal execute picker on return.
+append once at first save. `decision plan=done plan=<abs-path> digest=<8-hex> [reason=<reason>]`
+records the confirmed task derivation receipt. Written atomically by `confirm_plan.py`
+when deriving `T1..` into `progress.md`. `decision context <group>=<value>`
+(e.g. `context spec-driven-development=subagent|inline`) records flavor-owned
+resume metadata.
+
+**Flavors contract:** Any plan-producing `spec-driven-development` flavor must
+define `hook-ws-resume-plan-pause` or extend `superpowers`.
 
 **Task derivation (superpowers):** one `## Tasks` line per `### Task N:`
 heading in the unit plan file — `- [ ] T<n>  <Task N title>`,
 monotonic `T1..`. Last task owns verification (ws-resume plan convention).
-Derive at plan-pause confirmation, not at plan save.
+Derive at plan-pause confirmation via `confirm_plan.py`, not at plan save.
 
 **Plan path (superpowers):** resolve via `resolve_plan_path(design,
 slug)` in `ws_store.py` — `<design-dir>/<bare-slug>-plan.md` where

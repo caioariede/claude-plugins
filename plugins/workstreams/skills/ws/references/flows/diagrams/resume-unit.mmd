@@ -8,32 +8,24 @@ flowchart TD
     
     check_needs -- Yes --> blocked[blocked]
     blocked --> guard_blocked{"unit.blocked-override (guard)"}
-    guard_blocked -- Confirm override --> check_exec_mode
+    guard_blocked -- Confirm override --> check_zero_tasks
     guard_blocked -- Stop --> stop_blocked([stop])
     
-    check_needs -- No --> check_exec_mode{Has execute-mode?}
+    check_needs -- No --> check_zero_tasks{Tasks total == 0?}
     
-    check_exec_mode -- No --> check_plan_line{Has plan line in log?}
+    check_zero_tasks -- Yes --> check_plan_line{Has plan line in log?}
+    check_plan_line -- No --> plan[plan]
+    plan --> plan_save[Save plan] --> check_plan_line
     
     check_plan_line -- Yes --> check_prewalk{Prewalk enabled & pending?}
     check_prewalk -- Yes --> check_models{Models ready?}
     check_models -- No --> prewalk_config(["unit.prewalk-config (hard stop)"])
     check_models -- Yes --> prewalk(["unit.prewalk (hard stop / action)"])
     
-    check_prewalk -- No --> overlay_drift{"unit.drift (overlay if split)"}
-    overlay_drift --> plan_pause{"plan-pause<br/>(How do you want to execute?)"}
+    check_prewalk -- No --> plan_pause(["unit.plan-pause (hard stop / action)"])
+    plan_pause -- Confirm --> confirm_plan[confirm_plan.py] --> loop
     
-    check_plan_line -- No --> check_zero_tasks{Tasks total == 0?}
-    check_zero_tasks -- Yes --> plan[plan]
-    plan --> plan_save[Save plan] --> plan_pause
-    check_zero_tasks -- No --> check_code_complete_early{Code complete?}
-    check_code_complete_early -- No --> loop[loop]
-    
-    plan_pause -- "1. Not now" --> stop_plan([stop])
-    plan_pause -- "2. Subagent / 3. Inline" --> derive_tasks[Derive T1.. & set execute-mode] --> loop
-    plan_pause -- "4. External" --> prepare_external[prepare_external.py] --> stop_ext([stop])
-    
-    check_exec_mode -- Yes --> check_code_complete{Code complete?}
+    check_zero_tasks -- No --> check_code_complete{Code complete?}
     check_code_complete -- No --> loop[loop]
     loop --> execute_task[Execute task] --> check_off_task[Check off task in progress.md] --> check_code_complete
     
@@ -61,9 +53,9 @@ flowchart TD
     classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
     classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
 
-    class plan_pause,ship_pause,draft_pr picker;
-    class prewalk,prewalk_config,critic action_stop;
-    class done,stop_plan,stop_ship,stop_draft,stop_blocked,stop_ext,chain_next terminal;
-    class check_dropped_merged,check_needs,check_exec_mode,check_plan_line,check_prewalk,check_models,check_zero_tasks,check_code_complete_early,check_code_complete,check_critic,check_pr,check_draft condition;
-    class plan,loop,derive_tasks,prepare_external,execute_task,check_off_task,ship_action,ready_action,plan_save,blocked action;
-    class guard_blocked,overlay_drift,overlay_ship_detect guard;
+    class ship_pause,draft_pr picker;
+    class prewalk,prewalk_config,plan_pause,critic action_stop;
+    class done,stop_ship,stop_draft,stop_blocked,chain_next terminal;
+    class check_dropped_merged,check_needs,check_zero_tasks,check_plan_line,check_prewalk,check_models,check_code_complete,check_critic,check_pr,check_draft condition;
+    class plan,loop,confirm_plan,execute_task,check_off_task,ship_action,ready_action,plan_save,blocked action;
+    class guard_blocked,overlay_ship_detect guard;

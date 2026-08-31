@@ -140,7 +140,7 @@ class ResumeSpikePhaseTests(unittest.TestCase):
     def test_zero_tasks_is_plan(self):
         self.assertEqual(self._phase([S.Spike(slug="audit")], "audit"), "plan")
 
-    def test_plan_line_no_execute_mode_is_plan_pause(self):
+    def test_plan_line_no_tasks_is_plan_pause(self):
         sp = S.Spike(slug="audit")
         sp.log = [("2026-01-01T00:00Z", "plan", "/tmp/plan.md")]
         self.assertEqual(self._phase([sp], "audit"), "plan-pause")
@@ -149,7 +149,8 @@ class ResumeSpikePhaseTests(unittest.TestCase):
         sp = S.Spike(slug="audit", tasks_total=2, tasks_done=1)
         sp.log = [
             ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
-            ("2026-01-01T00:01Z", "decision", "execute-mode=subagent-driven"),
+            ("2026-01-01T00:01Z", "decision",
+             "plan=done plan=/tmp/plan.md digest=deadbeef"),
         ]
         self.assertEqual(self._phase([sp], "audit"), "loop")
 
@@ -157,7 +158,8 @@ class ResumeSpikePhaseTests(unittest.TestCase):
         sp = S.Spike(slug="audit", tasks_total=1, tasks_done=1)
         sp.log = [
             ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
-            ("2026-01-01T00:01Z", "decision", "execute-mode=subagent-driven"),
+            ("2026-01-01T00:01Z", "decision",
+             "plan=done plan=/tmp/plan.md digest=deadbeef"),
         ]
         self.assertEqual(self._phase([sp], "audit"), "done")
 

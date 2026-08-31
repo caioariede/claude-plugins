@@ -678,6 +678,7 @@ class SuperpowersHooksTest(unittest.TestCase):
         for key in (
             "hook-ws-resume-unplanned-before",
             "hook-ws-resume-unplanned-after",
+            "hook-ws-resume-plan-pause",
             "hook-ws-resume-loop-before",
         ):
             self.assertIn(key, text, f"missing {key} in bundled flavors.ini")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ws-resume phase — print loop boundary for one unit or spike.
 
-Usage: phase.py [unit-id] [--skip-prewalk] [--headless] [--split-skip]
+Usage: phase.py [unit-id] [--skip-prewalk] [--headless]
 
 Prints one line: blocked | plan | prewalk-config | prewalk | plan-pause |
 loop | critic | ship-pause | draft-pr | done  (unit)
@@ -47,8 +47,7 @@ def _resolve_target(store: Path, args: List[str]) -> C.ResolvedTarget:
 
 
 def _prewalk_flags(store: Path, u: S.Unit, *,
-                   skip_prewalk: bool, headless: bool,
-                   split_skip: bool) -> dict:
+                   skip_prewalk: bool, headless: bool) -> dict:
     enabled = C.prewalk_enabled(store)
     activated = C.superpowers_prewalk_activated_at(store)
     grandfather = enabled and S._should_grandfather_prewalk(u, activated)
@@ -56,7 +55,6 @@ def _prewalk_flags(store: Path, u: S.Unit, *,
         "prewalk_enabled": enabled,
         "skip_prewalk": skip_prewalk,
         "headless": headless,
-        "split_skip": split_skip,
         "grandfather": grandfather,
         "models_ready": C.prewalk_models_ready(store),
     }
@@ -80,11 +78,10 @@ def _tree_digest(store: Path, u: S.Unit) -> Optional[str]:
 
 def _unit_resume_phase(ws: S.Workstream, u: S.Unit, store: Path, *,
                        skip_prewalk: bool = False, headless: bool = False,
-                       split_skip: bool = False,
                        skip_critic: bool = False) -> str:
     by_slug = {x.slug: x for x in ws.units}
     flags = _prewalk_flags(store, u, skip_prewalk=skip_prewalk,
-                           headless=headless, split_skip=split_skip)
+                           headless=headless)
     review_enabled = C.review_enabled(store)
     flags.update({
         "review_enabled": review_enabled,
@@ -108,9 +105,8 @@ def phase_for_unit(store: Path, ws: S.Workstream):
     return partial(unit_phase, store, ws)
 
 
-def phase_for_ws(ws: S.Workstream, slug: str, kind: str, store: Path,
-                 *, skip_prewalk: bool = False, headless: bool = False,
-                 split_skip: bool = False,
+def phase_for_ws(ws: S.Workstream, slug: str, kind: str, store: Path, *,
+                 skip_prewalk: bool = False, headless: bool = False,
                  skip_critic: bool = False) -> str:
     by_spike = {s.slug: s for s in ws.spikes}
     if kind == "spike":
@@ -123,15 +119,13 @@ def phase_for_ws(ws: S.Workstream, slug: str, kind: str, store: Path,
     if unit is None:
         raise C.Pick(f"NO_MATCH no unit {slug!r} in {ws.ws_id}")
     return _unit_resume_phase(ws, unit, store, skip_prewalk=skip_prewalk,
-                              headless=headless, split_skip=split_skip,
-                              skip_critic=skip_critic)
+                              headless=headless, skip_critic=skip_critic)
 
 
 def generate(store: Path, ws_id: str, slug: str,
              pr_by_branch: Dict[str, Optional[S.PR]],
              kind: Optional[str] = None, *,
              skip_prewalk: bool = False, headless: bool = False,
-             split_skip: bool = False,
              skip_critic: bool = False) -> str:
     """Pure path used by both main() and the tests."""
     ws = S.load_workstream(store / ws_id)
@@ -139,8 +133,7 @@ def generate(store: Path, ws_id: str, slug: str,
     if kind is None:
         kind = C.resolve_kind_in_ws(store, ws_id, slug)
     return phase_for_ws(ws, slug, kind, store, skip_prewalk=skip_prewalk,
-                        headless=headless, split_skip=split_skip,
-                        skip_critic=skip_critic)
+                        headless=headless, skip_critic=skip_critic)
 
 
 def _parse_args(argv: List[str]) -> argparse.Namespace:
@@ -149,7 +142,6 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     p.add_argument("--skip-prewalk", action="store_true")
     p.add_argument("--skip-critic", action="store_true")
     p.add_argument("--headless", action="store_true")
-    p.add_argument("--split-skip", action="store_true")
     p.add_argument("--emit-gate", action="store_true",
                    help="Emit structured gate definition after phase token")
     return p.parse_args(argv)
@@ -167,8 +159,7 @@ def main(argv: List[str]) -> int:
         ph = phase_for_ws(ws, target.slug, target.kind, store,
                            skip_prewalk=ns.skip_prewalk,
                            skip_critic=ns.skip_critic,
-                           headless=ns.headless,
-                           split_skip=ns.split_skip)
+                           headless=ns.headless)
         print(ph)
         if ns.emit_gate:
             ctx = None

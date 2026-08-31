@@ -458,16 +458,15 @@ def plan_log_path(u: Unit) -> Optional[str]:
 
 
 def latest_plan_log_path(u: Unit) -> Optional[str]:
+    return latest_plan_from_log(u.log)
+
+
+def latest_plan_from_log(log: List[Tuple[str, str, str]]) -> Optional[str]:
     path: Optional[str] = None
-    for _ts, kind, payload in u.log:
+    for _ts, kind, payload in log:
         if kind == "plan":
             path = payload.strip()
     return path
-
-
-def store_split_eligible(u: Unit) -> bool:
-    """Store can lag git when a plan exists but the unit is not complete."""
-    return (not u.dropped and not u.code_complete and _has_plan_line(u))
 
 
 def reconcile_tasks_on_merge(text: str) -> Tuple[str, List[str]]:
@@ -553,28 +552,68 @@ def _append_log_lines(log_path: Path,
         log_path.write_text(f"# log\n{block}", encoding="utf-8")
 
 
-def apply_external_backfill(ws_dir: Path, slug: str, plan_path: Path,
-                            pr: PR, *, head_sha: str = "") -> Tuple[str, List[str]]:
-    """Confirm-only backfill: checked tasks + execute-mode=external."""
-    return _apply_external_tasks(
-        ws_dir, slug, plan_path, checked=True, pr=pr, head_sha=head_sha)
+SPIKE_AMEND_TASK = "Amend design spec"
 
 
-def apply_external_execute_mode(ws_dir: Path, slug: str,
-                                plan_path: Path) -> Tuple[str, List[str]]:
-    """Plan-pause option 4: unchecked tasks + execute-mode=external."""
-    return _apply_external_tasks(ws_dir, slug, plan_path, checked=False)
+def _entity_dir(ws_dir: Path, slug: str, *, kind: str) -> Path:
+    sub = "spikes" if kind == "spike" else "units"
+    return ws_dir / sub / slug
 
 
-def _apply_external_tasks(ws_dir: Path, slug: str, plan_path: Path, *,
-                          checked: bool,
-                          pr: Optional[PR] = None,
-                          head_sha: str = "") -> Tuple[str, List[str]]:
-    udir = ws_dir / "units" / slug
-    prog_path = udir / "progress.md"
-    log_path = udir / "log.md"
+def _has_execute_mode_log(log: List[Tuple[str, str, str]]) -> bool:
+    return any(
+        entry_kind == "decision" and payload.startswith("execute-mode=")
+        for _ts, entry_kind, payload in log
+    )
+
+
+def _has_valid_plan_done_log(log: List[Tuple[str, str, str]], plan_path: str,
+                             digest: str) -> bool:
+    for _ts, entry_kind, payload in reversed(log):
+        if entry_kind != "decision" or not payload.startswith("plan=done"):
+            continue
+        if f"plan={plan_path}" not in payload:
+            continue
+        if f"digest={digest}" not in payload:
+            continue
+        return True
+    return False
+
+
+def _plan_done_payload(plan_path: str, digest: str, *,
+                       reason: Optional[str] = None) -> str:
+    bits = [f"plan=done plan={plan_path} digest={digest}"]
+    if reason:
+        bits.append(f"reason={reason}")
+    return " ".join(bits)
+
+
+def apply_confirm_plan(ws_dir: Path, slug: str, plan_path: Path, *,
+                       kind: str = "unit",
+                       reason: Optional[str] = None,
+                       context: Optional[Tuple[str, str]] = None,
+                       migrate_only: bool = False) -> Tuple[str, List[str]]:
+    """Derive tasks from plan, append plan=done (and optional context)."""
+    edir = _entity_dir(ws_dir, slug, kind=kind)
+    prog_path = edir / "progress.md"
+    log_path = edir / "log.md"
     raw = _read(prog_path)
     _, total, _, _ = parse_progress(raw)
+    digest = plan_file_digest(str(plan_path))
+    if not digest:
+        return "refused no-plan", []
+    plan_str = str(plan_path)
+    if migrate_only:
+        if total == 0:
+            return "refused no-tasks", []
+        if not _has_execute_mode_log(_read_log_entries(log_path)):
+            return "refused no-execute-mode", []
+        if _has_valid_plan_done_log(_read_log_entries(log_path),
+                                    plan_str, digest):
+            return "already-has-tasks", []
+        _append_log_lines(log_path, [
+            ("decision", _plan_done_payload(plan_str, digest))])
+        return "migrated", [f"T{n}" for n in range(1, total + 1)]
     if total > 0:
         return "already-has-tasks", []
     try:
@@ -585,23 +624,37 @@ def _apply_external_tasks(ws_dir: Path, slug: str, plan_path: Path, *,
         tasks = derive_tasks_from_plan(plan_text)
     except PlanParseError:
         return "refused bad-plan", []
-    new_text, wrote = write_tasks_to_progress(raw, tasks, checked=checked)
+    if kind == "spike" and not any(
+            title == SPIKE_AMEND_TASK for _, title in tasks):
+        next_n = max((n for n, _ in tasks), default=0) + 1
+        tasks.append((next_n, SPIKE_AMEND_TASK))
+    new_text, wrote = write_tasks_to_progress(raw, tasks, checked=False)
     if not wrote:
         return "already-has-tasks", []
     prog_path.write_text(new_text, encoding="utf-8")
     ids = [f"T{n}" for n, _ in tasks]
     log_entries: List[Tuple[str, str]] = [
-        ("decision", "execute-mode=external")]
-    if checked and pr is not None:
-        sha_bit = f", sha={head_sha[:7]}" if head_sha else ""
-        pr_n = pr.number if pr.number is not None else "?"
-        log_entries.append((
-            "decision",
-            "reconciled tasks from external implement "
-            f"(PR #{pr_n}{sha_bit}): {', '.join(ids)}"))
+        ("decision", _plan_done_payload(plan_str, digest, reason=reason))]
+    if context:
+        group, value = context
+        log_entries.append(("decision", f"context {group}={value}"))
     _append_log_lines(log_path, log_entries)
-    status = "backfilled" if checked else "prepared"
-    return status, ids
+    return "confirmed", ids
+
+
+def _read_log_entries(log_path: Path) -> List[Tuple[str, str, str]]:
+    if not log_path.is_file():
+        return []
+    entries: List[Tuple[str, str, str]] = []
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("- "):
+            continue
+        parts = line[2:].split("  ", 2)
+        if len(parts) < 3:
+            continue
+        entries.append((parts[0], parts[1], parts[2]))
+    return entries
 
 
 def _split_dash(text: str) -> Tuple[str, str]:
@@ -1054,10 +1107,7 @@ def _has_plan_line(u: Unit) -> bool:
 
 
 def _has_execute_mode(u: Unit) -> bool:
-    return any(
-        kind == "decision" and payload.startswith("execute-mode=")
-        for _ts, kind, payload in u.log
-    )
+    return _has_execute_mode_log(u.log)
 
 
 def plan_file_digest(path: str) -> Optional[str]:
@@ -1155,7 +1205,6 @@ def resume_phase(u: Unit, ws: Workstream,
                  prewalk_enabled: bool = False,
                  skip_prewalk: bool = False,
                  headless: bool = False,
-                 split_skip: bool = False,
                  grandfather: bool = False,
                  models_ready: bool = True,
                  review_enabled: bool = False,
@@ -1165,18 +1214,18 @@ def resume_phase(u: Unit, ws: Workstream,
     """Phase for ws-resume loop control.
 
     First match: blocked > plan > prewalk-config > prewalk > plan-pause >
-    loop > ship-pause > draft-pr > done. Planning gates on a ``plan`` log
-    line plus an ``execute-mode`` decision — not on empty tasks alone.
+    loop > ship-pause > draft-pr > done. ``plan-pause`` when a plan exists
+    and ``tasks_total == 0``.
     """
     if u.dropped or is_merged(u):
         return "done"
     by_spike = _by_spike(ws)
     if _has_unmet_need(u, ws, by_slug, by_spike):
         return "blocked"
-    if not _has_execute_mode(u):
+    if u.tasks_total == 0:
         if _has_plan_line(u):
             if (prewalk_enabled and not skip_prewalk and not headless
-                    and not split_skip and not grandfather):
+                    and not grandfather):
                 plan_path = latest_plan_log_path(u)
                 digest = (plan_file_digest(plan_path)
                           if plan_path else None)
@@ -1185,10 +1234,7 @@ def resume_phase(u: Unit, ws: Workstream,
                 if prewalk:
                     return prewalk
             return "plan-pause"
-        if u.tasks_total == 0:
-            return "plan"
-        if not u.code_complete:
-            return "loop"
+        return "plan"
     if not u.code_complete:
         return "loop"
     if (review_enabled and not skip_critic and not headless
@@ -1207,13 +1253,6 @@ def _spike_has_plan_line(sp: Spike) -> bool:
     return any(kind == "plan" for _ts, kind, _p in sp.log)
 
 
-def _spike_has_execute_mode(sp: Spike) -> bool:
-    return any(
-        kind == "decision" and payload.startswith("execute-mode=")
-        for _ts, kind, payload in sp.log
-    )
-
-
 def resume_spike_phase(sp: Spike, ws: Workstream,
                        by_slug: Dict[str, Unit],
                        by_spike: Dict[str, Spike]) -> str:
@@ -1222,11 +1261,10 @@ def resume_spike_phase(sp: Spike, ws: Workstream,
         return "done"
     if _has_unmet_spike_need(sp, ws, by_slug, by_spike):
         return "blocked"
-    if not _spike_has_execute_mode(sp):
+    if sp.tasks_total == 0:
         if _spike_has_plan_line(sp):
             return "plan-pause"
-        if sp.tasks_total == 0:
-            return "plan"
+        return "plan"
     if not sp.spike_complete:
         return "loop"
     return "done"
@@ -1490,7 +1528,7 @@ def _spike_readiness(sp: Spike) -> Optional[str]:
     if sp.tasks_total:
         left = sp.tasks_total - sp.tasks_done
         return f"{left} of {sp.tasks_total} tasks left"
-    if _spike_has_plan_line(sp) and not _spike_has_execute_mode(sp):
+    if _spike_has_plan_line(sp) and sp.tasks_total == 0:
         return "plan-pause (store incomplete)"
     return "no tasks planned yet"
 
@@ -1517,7 +1555,7 @@ def unit_readiness(u: Unit, *, phase: Optional[str] = None) -> Optional[str]:
     if u.tasks_total:
         left = u.tasks_total - u.tasks_done
         return f"{left} of {u.tasks_total} tasks left"
-    if _has_plan_line(u) and not _has_execute_mode(u):
+    if _has_plan_line(u) and u.tasks_total == 0:
         return "plan-pause (store incomplete)"
     return "no tasks planned yet"
 

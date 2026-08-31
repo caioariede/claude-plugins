@@ -3,17 +3,12 @@
   "gates": [
     {
       "id": "unit.plan-pause",
-      "kind": "picker",
+      "kind": "action",
       "trigger": { "phase": "plan-pause", "kind": "unit" },
       "context_slots": ["plan_path", "task_titles"],
-      "prompt": "How do you want to execute?",
-      "default_option": 1,
-      "options": [
-        { "n": 1, "label": "Not now (default)" },
-        { "n": 2, "label": "Subagent-driven — fresh subagent per task" },
-        { "n": 3, "label": "Inline — execute in this session with checkpoints" },
-        { "n": 4, "label": "Execute outside ws-resume — derive unchecked T1.., execute-mode=external; you will backfill or check off tasks yourself before dependents unblock" }
-      ]
+      "prompt": "Plan saved. Confirm to derive tasks and continue.",
+      "action": "await_plan_confirm",
+      "stop": true
     },
     {
       "id": "unit.ship-pause",
@@ -37,18 +32,6 @@
         { "n": 1, "label": "Not now (default)" },
         { "n": 2, "label": "Mark ready — promote draft to ready for review" },
         { "n": 3, "label": "ws-next — recommend next action across workstream" }
-      ]
-    },
-    {
-      "id": "unit.drift",
-      "kind": "picker",
-      "trigger": { "overlay": "drift", "kind": "unit" },
-      "prompt": "External commits detected on branch. How do you want to proceed?",
-      "default_option": 1,
-      "options": [
-        { "n": 1, "label": "Not now (default)" },
-        { "n": 2, "label": "Mark external work complete and backfill tasks" },
-        { "n": 3, "label": "Ignore — show execute picker" }
       ]
     },
     {

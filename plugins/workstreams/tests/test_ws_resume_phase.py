@@ -69,10 +69,40 @@ class ResumePhaseTests(unittest.TestCase):
         a = u("a")
         self.assertEqual(self.phase([a], "a"), "plan")
 
-    def test_plan_line_no_execute_mode_is_plan_pause(self):
+    def test_plan_line_no_tasks_is_plan_pause(self):
         a = u("a")
         a.log = [("2026-01-01T00:00Z", "plan", "/tmp/plan.md")]
         self.assertEqual(self.phase([a], "a"), "plan-pause")
+
+    def test_plan_done_receipt_without_tasks_still_plan_pause(self):
+        a = u("a")
+        a.log = [
+            ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
+            ("2026-01-01T00:01Z", "decision",
+             "plan=done plan=/tmp/plan.md digest=deadbeef"),
+        ]
+        self.assertEqual(self.phase([a], "a"), "plan-pause")
+
+    def test_execute_mode_no_tasks_still_plan_pause(self):
+        a = u("a")
+        a.log = [
+            ("2026-01-01T00:00Z", "plan", "/tmp/plan.md"),
+            ("2026-01-01T00:01Z", "decision", "execute-mode=subagent-driven"),
+        ]
+        self.assertEqual(self.phase([a], "a"), "plan-pause")
+
+    def test_tasks_without_plan_is_loop(self):
+        a = u("a", done=0, total=3)
+        self.assertEqual(self.phase([a], "a"), "loop")
+
+    def test_stale_digest_with_tasks_stays_loop(self):
+        a = u("a", done=1, total=4)
+        a.log = [
+            ("2026-01-01T00:00Z", "plan", "/tmp/old-plan.md"),
+            ("2026-01-01T00:01Z", "decision",
+             "plan=done plan=/tmp/old-plan.md digest=aaaa0000"),
+        ]
+        self.assertEqual(self.phase([a], "a"), "loop")
 
     def test_execute_mode_partial_tasks_is_loop(self):
         a = u("a", done=1, total=4)

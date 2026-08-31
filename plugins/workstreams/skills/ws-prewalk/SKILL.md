@@ -1,6 +1,6 @@
 ---
 name: ws-prewalk
-description: Run read-only codebase exploration for a workstream unit after planning and before execute-mode selection. Invoked by ws-resume when spec-driven-development/superpowers-prewalk is active.
+description: Run read-only codebase exploration for a workstream unit after planning and before plan-pause confirmation. Invoked by ws-resume when spec-driven-development/superpowers-prewalk is active.
 metadata:
   version: "0.1.2"
   author: Caio Ariede
@@ -12,7 +12,7 @@ metadata:
 
 ## When this runs
 
-After a unit plan is saved (`plan` log line exists) and before plan-pause execute-mode selection, when the active flavor has `prewalk = on` (typically `superpowers-prewalk`).
+After a unit plan is saved (`plan` log line exists) and before plan-pause confirmation, when the active flavor has `prewalk = on` (typically `superpowers-prewalk`).
 
 ## Steps
 
