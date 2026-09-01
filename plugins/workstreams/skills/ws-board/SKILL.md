@@ -3,20 +3,20 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.7.1"
+  version: "0.7.2"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
 
 # ws-board — workstream board
 
-**Required first:** load the `ws` skill (the SPEC).
+**Required first:** load the `ws` skill.
 
-Read-only. A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives status per the SPEC, and prints a terminal-ready board (or one unit's detail). Run it and relay its output — **derive nothing by hand.**
+Read-only. A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, derives status per SPEC §Source of truth, and prints a terminal-ready board (or one unit's detail). Run it and relay its output — **derive nothing by hand.**
 
 ## Run it
 
-`scripts/board.py`, relative to this skill's directory (`${CLAUDE_PLUGIN_ROOT}/skills/ws-board/scripts/board.py` when set). Pass `$ARGUMENTS` through — `[ws-id] [unit-id]`, both optional; a bare workstream slug works (date prefix optional). With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC Command scope); otherwise `MANY_WORKSTREAMS`:
+`scripts/board.py`, relative to this skill's directory (`${CLAUDE_PLUGIN_ROOT}/skills/ws-board/scripts/board.py` when set). Pass `$ARGUMENTS` through — `[ws-id] [unit-id]`, both optional; a bare workstream slug works (date prefix optional). With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC §Command scope); otherwise `MANY_WORKSTREAMS`:
 
 ```
 python3 <this-skill-dir>/scripts/board.py [ws-id] [unit-id]
@@ -34,4 +34,4 @@ The first stderr token says why: `MANY_WORKSTREAMS <list>` (no cwd-branch match 
 
 ## Next step
 
-Per §Next-step chaining, offer `ws-next` — read-only. It is the only command this skill names: the board reports, the router decides which unit moves and what that takes. Offer it bare, in board and unit-detail mode alike; never name `ws-resume` here, not even for an in-progress or blocked unit.
+Per SPEC §Next-step chaining, offer `ws-next` — read-only. It is the only command this skill names: the board reports, the router decides which unit moves and what that takes. Offer it bare, in board and unit-detail mode alike; never name `ws-resume` here, not even for an in-progress or blocked unit.

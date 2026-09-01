@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, finish scoped work, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.26.0"
+  version: "0.27.0"
   author: Caio Ariede
 ---
 
@@ -11,15 +11,15 @@ metadata:
 
 **Subagent guard:** if invoked from a subagent context, refuse and direct the parent session to run `/ws-resume`.
 
-**Load `ws` skill first** (SPEC).
+**Required first:** load the `ws` skill.
 
-**Input:** `$ARGUMENTS` = `[unit-id|spike-id]`. Resolve via the SPEC bare-slug resolver → `(ws_id, slug, kind)`. If omitted, infer a **unit** from the current worktree's branch by scanning `<store>/*/units.md` — **spikes always require an explicit id** (zero-arg cannot reach a spike).
+**Input:** `$ARGUMENTS` = `[unit-id|spike-id]`. Resolve via SPEC §IDs & conventions (bare-slug resolver) → `(ws_id, slug, kind)`. If omitted, infer a **unit** from the current worktree's branch by scanning `<store>/*/units.md` — **spikes always require an explicit id** (zero-arg cannot reach a spike).
 
 ## Steps
 
 1. Resolve `(ws_id, slug, kind)`.
 2. **Prepare by kind**
-   - **unit:** ensure worktree, restack base (SPEC), load `charter.md` / `progress.md` / `log.md`, `git log -5`, run verification.
+   - **unit:** ensure worktree, restack base (SPEC §Restack reconciliation), load `charter.md` / `progress.md` / `log.md`, `git log -5`, run verification.
    - **spike:** load `spikes/<slug>/charter.md`, `progress.md`, `log.md`, and umbrella `design:` from `workstream.md` (store-scoped; no worktree).
 3. **Blocked-awareness guard:** derive needs (SPEC §Dependencies). Surface unmet targets; require explicit confirmation to override.
 4. Derive phase — do not infer boundaries from `progress.md` alone:

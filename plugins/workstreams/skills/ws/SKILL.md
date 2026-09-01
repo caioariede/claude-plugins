@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.26.0"
+  version: "0.27.0"
   author: Caio Ariede
 ---
 
@@ -36,7 +36,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | datum | source of truth | how |
 |---|---|---|
 | current branch | git (the worktree) | `git rev-parse --abbrev-ref HEAD` |
-| base / did GitHub retarget | GitHub | active `forge` flavor `pr-status` (SPEC §Flavors) |
+| base / did GitHub retarget | GitHub | active `forge` flavor `pr-status` (§Flavors) |
 | PR number + draft/ready/merged | GitHub | active `forge` flavor `pr-status` |
 | status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. `merged-via` log or PR merged → `merged` · 3. has an unmet need (§Dependencies) → `blocked` · 4. PR ready → `in-review` · 5. PR draft or no PR → `building` |
 | unit ↔ repo/branch | `units.md` ledger | set once at `ws-start` |
@@ -48,15 +48,16 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | is a follow-up claimed (being closed by a unit) | **derived** | a non-dropped ledger unit's `claims=` names it (§Follow-up units) |
 | decisions / notes / drop / restack history | `log.md` | append-only |
 
-**Invariants:** log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a ledger slug matches it (dedup vs ledger) — "not started" is not a derived unit *status*, it is a backlog item without a ledger line yet.
+**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** no spike is **active** (`researching` or `blocked`) — every ledger spike is terminal (`complete` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>` — an unchecked follow-up a live unit **claims** is that unit's work, not an open item (§Follow-up units). Any open item ⇒ **not done**. Dropped units and dropped spikes are terminal, not blockers.
+
+This predicate reads the store only, so it cannot know whether the `design:` spec still holds unbuilt scope. A workstream can therefore be **done** here while `ws-next` still proposes a unit from the design — the judgment layers on top of the derived answer rather than contradicting it, which is why `ws-next` says "no store work left" instead of claiming done.
+
+## Invariants
+Log never stores current state; progress never stores history; `charter.md` is static intent (never volatile, never history); nothing volatile (branch/base/PR/status) is stored — derive it live. A planned unit shows as "not started" only until a ledger slug matches it (dedup vs ledger) — "not started" is not a derived unit *status*, it is a backlog item without a ledger line yet.
 
 **`ws-start` is the sole creator of `units/<unit-id>/`.** No other skill and no ad-hoc write creates a unit directory or any file in it — not while seeding a backlog, not while capturing a follow-up, not to "get ahead" of a unit that is about to exist. A unit directory with no matching `units.md` ledger line is malformed. Anything that wants a unit runs `ws-start`; anything that wants to *record* a future unit writes `backlog.md` via `ws-backlog`.
 
 **`ws-spike` is the sole creator of `spikes/<slug>/`.** Same store-only rule — no worktree, no branch. A spike directory with no matching `spikes.md` ledger line is malformed.
-
-**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** no spike is **active** (`researching` or `blocked`) — every ledger spike is terminal (`complete` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>` — an unchecked follow-up a live unit **claims** is that unit's work, not an open item (§Follow-up units). Any open item ⇒ **not done**. Dropped units and dropped spikes are terminal, not blockers.
-
-This predicate reads the store only, so it cannot know whether the `design:` spec still holds unbuilt scope. A workstream can therefore be **done** here while `ws-next` still proposes a unit from the design — the judgment layers on top of the derived answer rather than contradicting it, which is why `ws-next` says "no store work left" instead of claiming done.
 
 ## Dependencies (needs / blocked)
 A unit's **needs** = `{ base, when base is a unit-id }` ∪ `{ explicit needs }`. base is the **implicit** need — `ws-start --base <unit-id>` declares the dependency; explicit needs are added later via `ws-block`.
@@ -114,7 +115,7 @@ Merge ordering (a stacked unit cannot merge before its base) stays owned by git/
   target repo (local or remote) — including when the slug matches the base
   branch — disambiguate with `-N`, a repo-scoped git check separate from
   unit-id uniqueness.
-- **base** = the repo's default branch — the active `forge` flavor's `default-branch` (SPEC §Flavors) — unless a base is supplied. A supplied base may be a unit-id → that unit's branch (stacking).
+- **base** = the repo's default branch — the active `forge` flavor's `default-branch` (§Flavors) — unless a base is supplied. A supplied base may be a unit-id → that unit's branch (stacking).
 - **repo** (`ws-start`) = resolved by precedence: (1) explicit `--repo org/repo`;
   (2) if `--base` is a unit-id, that unit's repo (stacking requires the same repo);
   (3) else the git repo `ws-start` runs in (cwd). Error only when an explicit
@@ -170,7 +171,7 @@ Planned units are **dependency reservations** — they record `base=`/`needs=` f
 - [ ] <slug>  — <outcome>
 - [x] <slug>  — <outcome>
 ```
-`[ ]` queued · `[>]` active (at most one among non-done lines) · `[x]` done (history, last three kept). Line order under `## Focus` is authoritative — open items keep insertion order unless `ws-focus move` changes it; active is not hoisted on write. `<slug>` = `slug(<outcome>)` per SPEC ids; text after ` — ` is opaque intent — no structured fields. Focus is steering, not execution — no ledger slug, no branch, no PR. **Workstream done** (above) is unchanged.
+`[ ]` queued · `[>]` active (at most one among non-done lines) · `[x]` done (history, last three kept). Line order under `## Focus` is authoritative — open items keep insertion order unless `ws-focus move` changes it; active is not hoisted on write. `<slug>` = `slug(<outcome>)` per §IDs & conventions; text after ` — ` is opaque intent — no structured fields. Focus is steering, not execution — no ledger slug, no branch, no PR. **Workstream done** (above) is unchanged.
 
 **Parse contract (machine-read).** `ws-board` and `ws-next` parse the store deterministically via `scripts/ws_store.py`, bundled with this skill, and `ws-config` drives the flavors INI through the same bundled engine (`scripts/ws_cli.py` plus its own `config.py`), so these formats are a machine contract — keep fields structured. Parsing is deliberately tolerant. In `backlog.md` only `## Planned units` and `## Follow-ups` are read, by exact heading; any other `##` section (e.g. a stray `## Not tracked here`) is ignored wholesale. In `focus.md` only `## Focus` is read, by exact heading; items use `- [ ]`/`- [>]`/`- [x]` with the same comment/blank-line tolerance as `backlog.md`. Within a read section an item is a single-line `- [ ]`/`- [x]` bullet; comments, single-`#` sub-headers, and blank lines are skipped, so humans keep them freely. A planned line keeps its structured fields (`base=`, `needs=`) **before** the ` — ` separator; everything after is opaque display text and never carries them. A follow-up's origin is the `(from <origin>, <ts>)` parenthetical, found by the `(from ` marker — the description itself may contain parens — and any resolution text trailing it (`→ done in X`) is ignored. In `log.md`, `dropped` is the line **kind** (the token after the timestamp), distinct from the word appearing inside a `decision`/`note` payload. A ledger line's `key=value` tokens are read by name and unknown keys are ignored, so a new field is additive. `workstream.md`'s `design:` is parsed (an em-dash placeholder reads as absent); `charter.md` is not — it is prose for `ws-resume`, never a machine input.
 
@@ -241,18 +242,18 @@ heading in the unit plan file — `- [ ] T<n>  <Task N title>`,
 monotonic `T1..`. Last task owns verification (ws-resume plan convention).
 Derive at plan-pause confirmation via `confirm_plan.py`, not at plan save.
 
-**Plan path (superpowers):** resolve via `resolve_plan_path(design,
-slug)` in `ws_store.py` — `<design-dir>/<bare-slug>-plan.md` where
-`design-dir` is the directory of charter `design:` (tilde-expanded).
-Slug must exist (`ws-start` before `writing-plans`). No
-`-design.md` → `-plan.md` swap. Headless runs inline this rule when
-hooks skip.
+**`ws-resume` is idempotent:** its actions are conditioned on the state it finds, and it appends a log line only on a *genuine* transition (plan / restack / decision / work note) — a no-op resume writes nothing. Never append a bare "resumed" line; the append-only log must not grow per invocation.
 
-**Plan path migration:** units with a `plan` log line pointing at a
+## Plan path
+Resolve via `resolve_plan_path(design, slug)` in `ws_store.py` —
+`<design-dir>/<bare-slug>-plan.md` where `design-dir` is the directory
+of charter `design:` (tilde-expanded). Slug must exist (`ws-start`
+before `writing-plans`). No `-design.md` → `-plan.md` swap. Headless
+runs inline this rule when hooks skip.
+
+**Migration:** units with a `plan` log line pointing at a
 design-basename `-plan.md` — delete that line and re-run `ws-resume`.
 Each unit gets its own `<slug>-plan.md` on next plan.
-
-**`ws-resume` is idempotent:** its actions are conditioned on the state it finds, and it appends a log line only on a *genuine* transition (plan / restack / decision / work note) — a no-op resume writes nothing. Never append a bare "resumed" line; the append-only log must not grow per invocation.
 
 ## Follow-up placement
 When you note a follow-up, ask: will it be resolved before **this** unit's PR merges?
@@ -357,7 +358,7 @@ provisioned the unit (`ws-start`) or the router that picked one
 (`ws-next`).
 
 ## Worktree = code only
-Never write store files into a worktree. Find a unit's worktree via the ledger branch, using the active `worktree-management` flavor's `locate` (SPEC §Flavors). Drop and recreate worktrees freely — progress survives in the store.
+Never write store files into a worktree. Find a unit's worktree via the ledger branch, using the active `worktree-management` flavor's `locate` (§Flavors). Drop and recreate worktrees freely — progress survives in the store.
 
 ## Flavors
 External tools are pluggable via **flavors** — skills never hardwire wmx / superpowers / gh. A **group** is a fixed behavior category (defined by the skills); a **flavor** is one implementation; an **operation** is a named slot a flavor fills with a one-line instruction (a shell command, or a `skill:id` to invoke). Exactly one flavor per group is **active** (global). Skills resolve an operation at each coupling point and follow it — read here, never restated in skills. A flavor swaps only mechanism/methodology; ws bookkeeping (progress/log/ledger/PR-ready) is intrinsic and stays in the skills.
@@ -385,14 +386,18 @@ Reserved flavor keys: `extends`, `prewalk`, `cheap-model-handoff`, `cheap-model-
 
 **Availability (detection)** — judge **effective** merged ops (layers + `extends`). A flavor whose `extends` target is missing is stub/unavailable.
 
-**Flavor hooks** — optional `hook-<skill>-<event>` operations (e.g. `hook-ws-start-after`); each skill documents the events it fires. `ws-resume`: `unplanned-before` / `unplanned-after` around the plan op, `prewalk` when `prewalk = on`, `loop-before` once on in-progress units — headless fallback when hooks skip (see ws-resume). At an event, and **only in an interactive session** (never a subagent/headless run), the skill fires that hook from every **active** flavor — across all groups, in group order (`worktree-management`, `spec-driven-development`, `forge`) — that defines it. `<hook>.prompt` (a question; its presence makes the hook interactive) · `<hook>.choices.<name>` (an option's instruction; empty = skip) · `<hook>.choices.<name>.desc` (its picker description — label is `<name>`). **Modes:** no `.prompt` → run the base instruction unconditionally · `.prompt` without `.choices` → binary (Yes runs the base instruction, No skips) · `.prompt` with `.choices` → present the 2–4 options and run the chosen one (base ignored; a choices-mode hook may omit the base key entirely). Choices display in merged-key order — a key a later layer overrides keeps its built-in position — and the first choice is the preselected, safe one. A dismissed prompt skips. Base and `.choices` values resolve as any instruction (rule 4). An instruction naming a placeholder the firing skill has no value for — e.g. `<branch>` for a unit whose worktree does not exist yet — is **unfillable**: drop that choice, and drop the whole hook when the unfillable one is the base in a `.choices`-less mode or when fewer than two choices survive (falls back to the default offer, §Next-step chaining). `hook-`, `.prompt` and `.choices.` are reserved on operation keys, and an option `<name>` may not be `prompt`.
+**Spec-watch (runtime hook)** — when a written path matches the active `spec-driven-development` flavor's `spec-glob` and no workstream's `design:` claims that spec, the runtime injects a one-line nudge to offer `ws-init` with it as the design (naming a design-less workstream as the attach-instead alternative when one exists). Mechanics: the runtime wiring (`hooks/hooks.json`) saves PostToolUse stdin and runs `<store>/hooks/spec-watch-<flavor>.sh`, emitting the first non-empty stdout; the installed script is the runtime flag. `ws-config` reconciles it on every run from the bundled template (`hooks/spec-watch.sh`), baking in the flavor's `spec-glob`; a flavor without one gets no script for that watcher. Ownership matches the spec's basename against `design:` lines — spellings vary (`~`/absolute/symlink), dated filenames don't. Distinct from §Flavor hooks (those fire *from* `ws-*` skills; this fires when an upstream tool — e.g. superpowers brainstorming — writes a spec before any workstream exists). Suggestion only: no store write, and no command runs without the user.
 
-The `review` group is evaluated after `forge` when active flavor hooks
-run. Its `hook-ws-resume-critic` hook invokes the post-complete review.
+`overrides-file` set but unreadable → warn, skip that layer. `gh` is the assumed baseline — there is no git-only forge; a non-GitHub user adds a custom forge flavor via the overrides file. Configure with `/ws-config`.
 
-**Flavor extension phases** — optional unit phases in `post_plan`
-(after plan saved, before plan-pause) and `post_scoped_work` (after
-scoped work, before `done`). Catalog:
+## Flavor hooks
+Optional `hook-<skill>-<event>` operations (e.g. `hook-ws-start-after`); each skill documents the events it fires. `ws-resume`: `unplanned-before` / `unplanned-after` around the plan op, `prewalk` when `prewalk = on`, `loop-before` once on in-progress units — headless fallback when hooks skip (see ws-resume). At an event, and **only in an interactive session** (never a subagent/headless run), the skill fires that hook from every **active** flavor — across all groups, in group order (`worktree-management`, `spec-driven-development`, `forge`) — that defines it. `<hook>.prompt` (a question; its presence makes the hook interactive) · `<hook>.choices.<name>` (an option's instruction; empty = skip) · `<hook>.choices.<name>.desc` (its picker description — label is `<name>`). **Modes:** no `.prompt` → run the base instruction unconditionally · `.prompt` without `.choices` → binary (Yes runs the base instruction, No skips) · `.prompt` with `.choices` → present the 2–4 options and run the chosen one (base ignored; a choices-mode hook may omit the base key entirely). Choices display in merged-key order — a key a later layer overrides keeps its built-in position — and the first choice is the preselected, safe one. A dismissed prompt skips. Base and `.choices` values resolve as any instruction (§Flavors rule 4). An instruction naming a placeholder the firing skill has no value for — e.g. `<branch>` for a unit whose worktree does not exist yet — is **unfillable**: drop that choice, and drop the whole hook when the unfillable one is the base in a `.choices`-less mode or when fewer than two choices survive (falls back to the default offer, §Next-step chaining). `hook-`, `.prompt` and `.choices.` are reserved on operation keys, and an option `<name>` may not be `prompt`.
+
+The `review` group is evaluated after `forge` when active flavor hooks run. Its `hook-ws-resume-critic` hook invokes the post-complete review.
+
+## Flavor extension phases
+Optional unit phases in `post_plan` (after plan saved, before plan-pause)
+and `post_scoped_work` (after scoped work, before `done`). Catalog:
 `references/flows/extensions.json` (slot, enable rule, handler).
 Each extension is a subprocess implementing the v1 JSON `pending` op;
 handlers own receipt/skip parsing. `resume_phase()` walks enabled
@@ -400,9 +405,10 @@ extensions per slot; `gates.json` relays the returned phase.
 `phase.py --skip-extension <id>` bypasses one extension. Headless runs
 and grandfather timestamps skip extensions in the runner.
 
-**Gate actions** — `references/flows/gates.json` pairs phases with
-gates. `phase.py --emit-gate` prints the block; `ws-resume` relays it
-and runs the `action` token:
+## Gate actions
+`references/flows/gates.json` pairs phases with gates.
+`phase.py --emit-gate` prints the block; `ws-resume` relays it and runs
+the `action` token:
 
 | action | behavior |
 |--------|----------|
@@ -412,7 +418,3 @@ and runs the `action` token:
 | `run_critic` | fire `hook-ws-resume-critic` (flavor names the skill) |
 
 When `stop: true`, hard stop after the action.
-
-**Spec-watch (runtime hook)** — when a written path matches the active `spec-driven-development` flavor's `spec-glob` and no workstream's `design:` claims that spec, the runtime injects a one-line nudge to offer `ws-init` with it as the design (naming a design-less workstream as the attach-instead alternative when one exists). Mechanics: the runtime wiring (`hooks/hooks.json`) saves PostToolUse stdin and runs `<store>/hooks/spec-watch-<flavor>.sh`, emitting the first non-empty stdout; the installed script is the runtime flag. `ws-config` reconciles it on every run from the bundled template (`hooks/spec-watch.sh`), baking in the flavor's `spec-glob`; a flavor without one gets no script for that watcher. Ownership matches the spec's basename against `design:` lines — spellings vary (`~`/absolute/symlink), dated filenames don't. Distinct from §Flavor hooks (those fire *from* `ws-*` skills; this fires when an upstream tool — e.g. superpowers brainstorming — writes a spec before any workstream exists). Suggestion only: no store write, and no command runs without the user.
-
-`overrides-file` set but unreadable → warn, skip that layer. `gh` is the assumed baseline — there is no git-only forge; a non-GitHub user adds a custom forge flavor via the overrides file. Configure with `/ws-config`.

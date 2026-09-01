@@ -56,7 +56,7 @@ class Fail(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Availability (SPEC §Flavors, Availability)
+# Availability (SPEC §Flavors)
 # ---------------------------------------------------------------------------
 
 def flavor_state(ops: Dict[str, str], group: str):

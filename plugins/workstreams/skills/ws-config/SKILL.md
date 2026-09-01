@@ -4,13 +4,13 @@ description: Use to view or change workstream flavors — which external tool ba
 argument-hint: "[show | set <group> <flavor> | set-config <key> <value> | add <group> <flavor> | set-overrides <path> | list [group]]"
 compatibility: requires python3
 metadata:
-  version: "0.7.2"
+  version: "0.7.3"
   author: Caio Ariede
 ---
 
 # ws-config — configure flavors
 
-**Required first:** load the `ws` skill — the shared contract (SPEC); its §Flavors defines the groups, operations, file layers, resolution, and Availability this skill works with.
+**Required first:** load the `ws` skill — SPEC §Flavors defines the groups, operations, file layers, resolution, and Availability this skill works with.
 
 Every verb runs through the bundled engine (relative to this skill's directory; `${CLAUDE_PLUGIN_ROOT}/skills/ws-config/scripts/config.py` when set):
 
@@ -25,7 +25,7 @@ No arguments = `show`. The script renders the output, performs all store writes 
 ## Settle `?` marks (show / list / set)
 The script resolves every shell dep itself (`command -v`) and prints `?` where session knowledge is needed:
 - `? requires skill <id> (verify in session)` — installed in this session → available; not installed → missing.
-- `? unresolved head "<w>" (prose or missing tool)` — SPEC rule 4 judgment: a prose methodology instruction (the `none` flavor) carries no dep → available; otherwise the tool is missing.
+- `? unresolved head "<w>" (prose or missing tool)` — SPEC §Flavors (Resolution rule 4): a prose methodology instruction (the `none` flavor) carries no dep → available; otherwise the tool is missing.
 Present the settled result. An **active** flavor left with a missing dep is broken — name the missing tool and the remedy (install it, or `ws-config set <group> <other-flavor>`).
 
 ## The offer (show; interactive sessions only — never a subagent/headless run)

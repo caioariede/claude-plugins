@@ -508,6 +508,89 @@ def check_extensions_parity() -> bool:
     return clean
 
 
+SKILLS_DIR = Path(__file__).resolve().parents[3] / "skills"
+WS_SPEC_FILE = SKILLS_DIR / "ws" / "SKILL.md"
+
+SPEC_SECTION_REF_RE = re.compile(
+    r"SPEC §(.+?)(?=\)|,|\.(?:\s|$)| — | \(|\s\(|;|:|$)"
+)
+
+_FORBIDDEN_VERB_PATTERNS = [
+    (re.compile(r"\(SPEC\)"), "(SPEC)"),
+    (re.compile(r"per SPEC(?! §)"), "per SPEC without §"),
+    (re.compile(r"(?<!SPEC )§"), "bare §"),
+    (re.compile(r"\bsee SPEC(?! §)"), "see SPEC"),
+    (re.compile(r'SPEC "[^"]+"'), 'SPEC "section"'),
+    (re.compile(r"\bSPEC (?!§)[A-Za-z]"), "SPEC without §"),
+]
+
+
+def _spec_section_prefixes() -> Set[str]:
+    sections: Set[str] = set()
+    with open(WS_SPEC_FILE, encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("## "):
+                title = line[3:].strip()
+                prefix = re.split(r" [(—]", title, maxsplit=1)[0]
+                sections.add(prefix)
+    return sections
+
+
+def _valid_section_ref(name: str, sections: Set[str]) -> bool:
+    name = name.strip()
+    if name in sections:
+        return True
+    return any(
+        name.startswith(s + " ") or name.startswith(s + "(")
+        for s in sections
+    )
+
+
+def _skill_body(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            return text[end + 4 :]
+    return text
+
+
+def check_spec_refs() -> bool:
+    sections = _spec_section_prefixes()
+    clean = True
+
+    spec_body = _skill_body(WS_SPEC_FILE)
+    if "SPEC §" in spec_body:
+        print(
+            "SPEC REF: ws/SKILL.md body uses SPEC § (use § only)",
+            file=sys.stderr,
+        )
+        clean = False
+
+    for skill_dir in sorted(SKILLS_DIR.glob("ws-*/")):
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        rel = skill_md.relative_to(SKILLS_DIR)
+        body = _skill_body(skill_md)
+        for pattern, label in _FORBIDDEN_VERB_PATTERNS:
+            if pattern.search(body):
+                print(
+                    f"SPEC REF: {rel} forbidden pattern {label!r}",
+                    file=sys.stderr,
+                )
+                clean = False
+        for match in SPEC_SECTION_REF_RE.finditer(body):
+            ref = match.group(1).strip()
+            if not _valid_section_ref(ref, sections):
+                print(
+                    f"SPEC REF: {rel} unknown section SPEC §{ref!r}",
+                    file=sys.stderr,
+                )
+                clean = False
+    return clean
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="gen_flows.py")
     parser.add_argument("--check", action="store_true", help="Check contract: diagrams, schema, lint, parity, evals")
@@ -520,9 +603,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         ok_parity = check_scenario_parity()
         ok_extensions = check_extensions_parity()
         ok_evals = check_evals_clean()
+        ok_spec_refs = check_spec_refs()
 
         if not (ok_diag and ok_schema and ok_lint and ok_parity
-                and ok_extensions and ok_evals):
+                and ok_extensions and ok_evals and ok_spec_refs):
             print("check-flows: FAILED — flow checks failed", file=sys.stderr)
             return 1
         print("check-flows: OK")

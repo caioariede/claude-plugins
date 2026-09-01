@@ -579,7 +579,7 @@ _SLUG_MAX_CHARS = 32
 
 
 def make_slug(text: str) -> str:
-    """SPEC §IDs slug: sanitize, drop filler, cap words then chars."""
+    """SPEC §IDs & conventions slug: sanitize, drop filler, cap words then chars."""
     words = [w for w in re.split(r'[^a-z0-9]+', text.lower()) if w]
     if not words:
         return "focus"

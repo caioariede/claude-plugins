@@ -3,14 +3,14 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.22.0"
+  version: "0.22.1"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
 
 # ws-next — what can move next in a workstream
 
-**Required first:** load the `ws` skill — the shared contract (SPEC).
+**Required first:** load the `ws` skill.
 
 **Flow reference:** see visual decision diagrams and terminal states in `skills/ws/references/flows/diagrams/next-terminal.mmd`.
 
@@ -20,7 +20,7 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 
 ## Run the script
 
-Bundled at `scripts/next.py` relative to this skill's directory (when set, `${CLAUDE_PLUGIN_ROOT}/skills/ws-next/scripts/next.py`). Pass `$ARGUMENTS` — `[ws-id]`, optional; a bare workstream slug works, the date prefix is optional. With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC Command scope):
+Bundled at `scripts/next.py` relative to this skill's directory (when set, `${CLAUDE_PLUGIN_ROOT}/skills/ws-next/scripts/next.py`). Pass `$ARGUMENTS` — `[ws-id]`, optional; a bare workstream slug works, the date prefix is optional. With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC §Command scope):
 
 ```
 python3 <this-skill-dir>/scripts/next.py [ws-id]
@@ -107,7 +107,7 @@ After a lane, compose up to 3 candidates:
 - When `Stackable:` is present but empty: propose unstacked only; if design implies stacking, say no same-repo in-flight base is available.
 - If design implies stacking on another repo's unit: say so; offer unstacked or same-repo alternative — never cross-repo `--base`.
 
-Present with `Not now` first (opt-in, §Next-step chaining). Pick → `ws-start <ws-id> "<what>"`, plus `--claims` when closing follow-ups, plus `--base <slug>` when stacking per the rules above. Nothing is written until that runs.
+Present with `Not now` first (opt-in, SPEC §Next-step chaining). Pick → `ws-start <ws-id> "<what>"`, plus `--claims` when closing follow-ups, plus `--base <slug>` when stacking per the rules above. Nothing is written until that runs.
 
 Declining at any proposal step leaves the store untouched. During Chain, also print the default move's resolved command — same as dismissing the unit question.
 
@@ -127,4 +127,4 @@ Settle the unit first. Two or more moves, **or** one move with proposal material
 
 With the unit settled, fire the `hook-ws-next-after` flavor hook (SPEC §Flavor hooks) for that move — `<unit>`, `<branch>` and `<command>` come from its line. A move with no `branch=` leaves `<branch>` unfillable, so choices naming it drop out (SPEC §Flavor hooks) — a `start` move has no worktree yet, and `ws-start` fires its own `hook-ws-start-after` once it does.
 
-The active flavor owns what the choices offer; run the chosen instruction per SPEC Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). The named command starts code work, so it is never what a dismissal does: the safe choice comes first and running it here is an explicit pick. Whatever the outcome, end by printing the picked unit's resolved command, so it can run in another session. No active flavor defines the hook → offer "not now / run here" (opt-in — Not now first). A no-move state has no move to hook — skip it, present what the state calls for, and stop; the exception is Propose a unit (full `suggest` or an accepted **Propose from …** pick), which fires the hook as a `start` move would. Name the unit for a unit-scoped command so a parallel-session user knows which one.
+The active flavor owns what the choices offer; run the chosen instruction per SPEC §Next-step chaining (`<command>` → run it in this session; anything else → the flavor's own handoff: run it, re-emit the command, stop). The named command starts code work, so it is never what a dismissal does: the safe choice comes first and running it here is an explicit pick. Whatever the outcome, end by printing the picked unit's resolved command, so it can run in another session. No active flavor defines the hook → offer "not now / run here" (opt-in — Not now first). A no-move state has no move to hook — skip it, present what the state calls for, and stop; the exception is Propose a unit (full `suggest` or an accepted **Propose from …** pick), which fires the hook as a `start` move would. Name the unit for a unit-scoped command so a parallel-session user knows which one.
