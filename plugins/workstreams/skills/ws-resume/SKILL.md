@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, finish scoped work, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.24.0"
+  version: "0.25.0"
   author: Caio Ariede
 ---
 
@@ -13,7 +13,7 @@ metadata:
 
 **Required first:** load the `ws` skill — it is the shared contract (SPEC) this skill references throughout.
 
-**Flow reference:** see `skills/ws/references/flows/diagrams/resume.mmd`.
+**Flow map:** `skills/ws/references/flows/diagrams/resume.mmd` (routing only — actions below).
 
 **Input:** `$ARGUMENTS` = `[unit-id|spike-id]`. Resolve via the SPEC bare-slug resolver → `(ws_id, slug, kind)`. If omitted, infer a **unit** from the current worktree's branch by scanning `<store>/*/units.md` — **spikes always require an explicit id** (zero-arg cannot reach a spike).
 
@@ -30,22 +30,25 @@ metadata:
 python3 <this-skill-dir>/scripts/phase.py [target-id] --emit-gate [--headless]
 ```
 
-`phase.py` owns ordering, including optional flavor extension gates before
-plan-pause (units only, when enabled) and after scoped work (units only).
-Bypass flags: `phase.py --help` (`--skip-extension <phase>`).
+`phase.py` owns phase ordering (including extension slots — SPEC
+§Flavor extension phases). Bypass: `phase.py --help` (`--skip-extension
+<id>`).
 
-When `phase.py` prints a gate block (`--- GATE: ... ---`), relay it, run
-the gate `action` (SPEC §Gate actions), fire flavor hooks for that phase,
-and **hard stop** when `stop: true`.
+When `phase.py` prints a gate block (`--- GATE: ... ---`), relay it,
+run the gate `action` (SPEC §Gate actions), fire flavor hooks for that
+phase, and **hard stop** when `stop: true`.
 
-## Phases
+## Phase actions
+
+What to do for each `phase.py` token. Extension routing and catalog:
+SPEC §Flavor extension phases (`extensions.json`).
 
 | Phase | Flavor hooks | Action |
 |-------|--------------|--------|
 | `plan` | `hook-ws-resume-unplanned-before`, `hook-ws-resume-unplanned-after` | **Plan only — no code, no tasks.** Read charter + design (unit: `charter.md` + its `design:`; spike: `charter.md` + umbrella `design:`). Resolve plan path via SPEC §Plan path. Append `plan <absolute-path>` when absent. Run flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**). Re-run `phase.py`. **`none` flavor (units):** writes `T1..` inline and skips plan-pause. **Headless:** append `plan`, run `confirm_plan.py --kind <kind> --reason headless --context spec-driven-development=subagent`. |
-| *extension* | per gate / active flavor (SPEC §Flavor hooks) | Any other `phase.py` token with a matching gate in `gates.json`: relay, run `action`, fire hooks, stop, re-run on resume. |
+| *extension* | per gate / active flavor (SPEC §Flavor hooks) | Relay gate, run `action`, fire hooks, stop when `stop: true`, re-run `phase.py` on resume. |
 | `plan-pause` | `hook-ws-resume-plan-pause` | Relay `<kind>.plan-pause` gate. On confirmation run `confirm_plan.py <slug> --kind <kind>` (`--type` alias). Re-run `phase.py` → `loop`. The plan defines what loop will do (implementation tasks for units; research tasks and artifact output for spikes). Never derive tasks without confirmation. **Headless:** `confirm_plan.py --kind <kind> --reason headless --context spec-driven-development=subagent`. |
-| `loop` | `hook-ws-resume-loop-before` (once per invocation, when not just cleared plan-pause) | Work the first unchecked task in `progress.md`, then check off and re-run `phase.py`. **Unit:** flavor `execute` policy (see `references/superpowers-execute.md`). **Spike:** intrinsic research loop — store-scoped, repo read-only except umbrella `design:`; writes to `artifacts/` and the design spec only. |
+| `loop` | `hook-ws-resume-loop-before` (once per invocation, when not just cleared plan-pause) | Work the first unchecked task in `progress.md`, check off, re-run `phase.py`. **Unit:** flavor `execute` policy (see `references/superpowers-execute.md`). **Spike:** intrinsic research loop — store-scoped, repo read-only except umbrella `design:`; writes to `artifacts/` and the design spec only. Scoped work complete when all tasks (and unit follow-ups) are checked — `phase.py` decides; no kind fork in the loop. |
 | `blocked` | — | Blocked-awareness guard; stop. |
 | `done` | — | Chain to `ws-next`. |
 
@@ -61,25 +64,6 @@ receipt are atomic in `confirm_plan.py`.
 User picks by number. Option **1** is preselected on dismiss. Colloquial
 proceed words are not numbered picks — re-show the picker. Never number
 task previews in the relay.
-
-## Execute loop
-
-After each loop action, check off the completed item in `progress.md`
-before re-running `phase.py`. Gate phases stop for the user; `loop`
-repeats until scoped work is complete.
-
-### Scoped work
-
-One loop path for both kinds (`resume.mmd` → **Scoped work complete?**).
-`phase.py` owns the check — no kind fork in the execute loop.
-
-| Kind | Scoped work complete when |
-|------|---------------------------|
-| unit | All tasks and in-unit follow-ups checked |
-| spike | All tasks checked |
-
-When scoped work is complete, `phase.py` may emit post-loop extension
-gates (units only, per flavor / `gates.json`), then `done`.
 
 ## Next
 
