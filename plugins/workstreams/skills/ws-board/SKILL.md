@@ -3,7 +3,7 @@ name: ws-board
 description: Use when the user wants to see or share where a workstream stands — "show the board", "what's done", "workstream status", "what's blocked", "what's waiting on what".
 argument-hint: "[ws-id] [unit-id]"
 metadata:
-  version: "0.7.2"
+  version: "0.7.3"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -16,7 +16,7 @@ Read-only. A bundled script parses the store, resolves the active `forge` flavor
 
 ## Run it
 
-`scripts/board.py`, relative to this skill's directory (`${CLAUDE_PLUGIN_ROOT}/skills/ws-board/scripts/board.py` when set). Pass `$ARGUMENTS` through — `[ws-id] [unit-id]`, both optional; a bare workstream slug works (date prefix optional). With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC §Command scope); otherwise `MANY_WORKSTREAMS`:
+Pass `$ARGUMENTS` through — `[ws-id] [unit-id]`, both optional; a bare workstream slug works (date prefix optional). With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC §Command scope); otherwise `MANY_WORKSTREAMS`:
 
 ```
 python3 <this-skill-dir>/scripts/board.py [ws-id] [unit-id]

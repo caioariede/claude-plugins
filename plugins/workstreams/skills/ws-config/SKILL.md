@@ -4,7 +4,7 @@ description: Use to view or change workstream flavors — which external tool ba
 argument-hint: "[show | set <group> <flavor> | set-config <key> <value> | add <group> <flavor> | set-overrides <path> | list [group]]"
 compatibility: requires python3
 metadata:
-  version: "0.7.3"
+  version: "0.7.4"
   author: Caio Ariede
 ---
 
@@ -12,7 +12,9 @@ metadata:
 
 **Required first:** load the `ws` skill — SPEC §Flavors defines the groups, operations, file layers, resolution, and Availability this skill works with.
 
-Every verb runs through the bundled engine (relative to this skill's directory; `${CLAUDE_PLUGIN_ROOT}/skills/ws-config/scripts/config.py` when set):
+## Run it
+
+No arguments = `show`.
 
 ```
 python3 <this-skill-dir>/scripts/config.py [show | set <group> <flavor> | set-config <key> <value> | add <group> <flavor> | set-overrides <path> | list [group]]

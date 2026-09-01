@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.22.1"
+  version: "0.22.2"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -12,15 +12,13 @@ compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 
 **Required first:** load the `ws` skill.
 
-**Flow reference:** see visual decision diagrams and terminal states in `skills/ws/references/flows/diagrams/next-terminal.mmd`.
-
 **Read-only, and derives nothing by hand.** A bundled script parses the store, resolves the active `forge` flavor and queries PR status per unit in parallel, scans live units read-only for shipped-elsewhere evidence, derives each unit's and spike's status, and ranks every move runnable right now — one per unit or spike, default first. It never appends log lines or mutates `progress.md`; the commands behind those moves — separate skills — perform any change. Listing a move is not running it.
 
 **Two carve-outs.** Ranked moves always came out of code. **Propose a unit** is the only place you compose new work — in full `suggest` (no moves) or when the user picks a **Propose from …** option from Chain (non-restack moves plus proposal material from the script).
 
-## Run the script
+## Run it
 
-Bundled at `scripts/next.py` relative to this skill's directory (when set, `${CLAUDE_PLUGIN_ROOT}/skills/ws-next/scripts/next.py`). Pass `$ARGUMENTS` — `[ws-id]`, optional; a bare workstream slug works, the date prefix is optional. With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC §Command scope):
+Pass `$ARGUMENTS` — `[ws-id]`, optional; a bare workstream slug works, the date prefix is optional. With no args, the cwd branch selects the workstream when it matches a ledger unit (SPEC §Command scope):
 
 ```
 python3 <this-skill-dir>/scripts/next.py [ws-id]

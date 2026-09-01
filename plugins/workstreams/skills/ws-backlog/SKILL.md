@@ -9,7 +9,7 @@ description: >-
   abandoning a unit (ws-drop), or dependencies (ws-block).
 argument-hint: '"<what>" [--defer | --here | --plan --base <x> [--needs a,b]] [--to <unit>] [--ws <ws-id>]'
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
   author: Caio Ariede
 ---
 
@@ -17,7 +17,7 @@ metadata:
 
 **Required first:** load the `ws` skill — SPEC §Follow-up placement defines the F/WF fork; SPEC §File formats defines the line shapes.
 
-`ws-backlog` captures work you are **not** doing right now and routes it to the one correct home, so nothing orphans. Three destinations: a unit's `progress.md` `## Follow-ups` (`F<n>`, in-flight — fixed before this unit's PR merges), the workstream's `backlog.md` `## Follow-ups` (`WF<n>`, deferred), or `backlog.md` `## Planned units` (a dependency reservation for a future unit — records `base=`/`needs=`, not a roadmap slice). It **never** writes `## Tasks` (`T<n>`) — the plan is owned by the `spec-driven-development` flavor, not hand-added. Workstream-scoped, runs from any session (SPEC §Command scope).
+`ws-backlog` captures work you are **not** doing right now and routes it to the one correct home, so nothing orphans. Three destinations: a unit's `progress.md` `## Follow-ups` (`F<n>`, in-flight — fixed before this unit's PR merges), the workstream's `backlog.md` `## Follow-ups` (`WF<n>`, deferred), or `backlog.md` `## Planned units` (a dependency reservation for a future unit — records `base=`/`needs=`, not a roadmap slice). It **never** writes `## Tasks` (`T<n>`) — the plan is owned by the `spec-driven-development` flavor, not hand-added.
 
 **Input:** `$ARGUMENTS` = `"<what>"` plus optional placement flags:
 - `--defer` → `WF<n>` (deferred follow-up) · `--here` → `F<n>` in the target unit · `--plan` → a planned unit (dependency reservation; does not route `ws-next`).
@@ -30,9 +30,6 @@ metadata:
 4. **`--defer` → `WF<n>`.** Append `- [ ] WF<n>  <what>  (from <origin>, <ts>)` to `backlog.md` `## Follow-ups` (create if absent). `<origin>` = the current / `--to` unit-id, else the `<ws-id>` when captured outside any unit (SPEC §File formats). `WF<n>` = next monotonic per workstream (high-water = max `WF` ever in `backlog.md`; resolved lines are checked off, never deleted, so the counter can't regress).
 5. **`--plan` → planned unit.** Append `- [ ] <slug>  base=<base>  [needs=<a>[,<b>]]  — <what>` to `## Planned units`. This is a **dependency reservation** — it records stack/need fields for a future `ws-start`, not a roadmap entry that `ws-next` will auto-start. `slug = slug(what)`; `base` = `--base` (a unit-id stacks, else a branch), default the active `forge` flavor's `default-branch`. Validate each `--needs` target for self-need / cycle as `ws-start` does — skip and warn on a bad one. **Refuse** if a ledger unit already matches `<slug>` (already started; the line would derive-done at once — SPEC §Invariants).
 6. **Dedup.** Before appending any follow-up, scan the target section for a near-duplicate (normalized `<what>`); on a match, warn and confirm rather than writing a twin.
-
-## Scope
-Workstream-scoped (SPEC §Command scope) — store-only, runs from any session. `--here` writes a unit's `progress.md` / `log.md` **in the store**, never a worktree; the only git touch is reading the current branch to self-locate.
 
 ## Chain
 Fire `hook-ws-backlog-after` (SPEC §Flavor hooks). No active flavor defines it → default chaining (SPEC §Next-step chaining): a **planned unit** was added → offer **`ws-next`** now (a new startable item may re-route); a follow-up (`F`/`WF`) → offer **`ws-board`** to see where it landed. Name the target unit / workstream so a parallel-session user knows which.

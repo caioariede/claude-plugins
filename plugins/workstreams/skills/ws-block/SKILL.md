@@ -11,7 +11,7 @@ description: >-
   onto a merged base (ws-restack).
 argument-hint: '<unit> needs <target> ["note"] | <unit> clear N<n>'
 metadata:
-  version: "0.2.2"
+  version: "0.2.3"
   author: Caio Ariede
 ---
 
@@ -19,9 +19,7 @@ metadata:
 
 **Required first:** load the `ws` skill — SPEC §Dependencies defines needs, targets, `code-complete`, and `blocked`.
 
-**Flow reference:** see visual execution flow in `skills/ws/references/flows/diagrams/block.mmd`.
-
-`ws-block` edits a unit's or spike's **needs** — the dependencies that gate it. `blocked` is the *derived* state (SPEC §Dependencies), never hand-set here: you add or clear needs, and the board/router derive the rest. Workstream-scoped — it touches only the store, runs from any session, and can target a unit or spike other than the one you are in. It targets a **started** (ledger) unit or spike; a not-yet-started planned unit's dependencies live in `backlog.md` `needs=` — edit that line directly (`ws-start` seeds it into `## Needs` once the unit starts, SPEC §File formats).
+`blocked` is derived (SPEC §Dependencies) — add or clear needs here, never hand-set `blocked`. Targets a **started** ledger unit or spike; a not-yet-started planned unit's dependencies live in `backlog.md` `needs=` — edit that line directly (`ws-start` seeds into `## Needs` once started).
 
 **Input:** `$ARGUMENTS` =
 - `<unit|spike> needs <target> ["note"]` — add a need.
@@ -41,9 +39,6 @@ metadata:
 1. Resolve `<unit|spike>`; find the `N<n>` line in its `progress.md` `## Needs`. Missing → error.
 2. Remove that line. Do **not** renumber survivors — ids are monotonic and never reused.
 3. Append `decision  cleared need N<n> (<target>)` to `log.md`. Clearing is a deliberate scope change (the dependency no longer applies) — not a way to mark a need satisfied; satisfaction is derived and needs no action.
-
-## Scope
-Workstream-scoped (SPEC §Command scope) — store-only, runs from any session. It never touches a worktree or git.
 
 ## Chain
 After the edit, fire `hook-ws-block-after` (SPEC §Flavor hooks) — fills `<unit>`/`<branch>` from the target unit, `<command>` = `ws-next <ws-id>`. No active flavor defines it → default chaining (SPEC §Next-step chaining): offer to run **`ws-next`** now — dependencies changed, so re-route. Mention the affected unit so a parallel-session user knows which one.
