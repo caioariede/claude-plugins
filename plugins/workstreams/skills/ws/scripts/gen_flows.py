@@ -104,7 +104,7 @@ def generate_resume_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     blocked_guard --> phase_py[phase.py --emit-gate]
 
     phase_py --> check_terminal{{Dropped or complete?}}
-    check_terminal -- Yes --> ws_next([done → chain ws-next])
+    check_terminal -- Yes --> done_gate(["done action gate — chain_ws_next"])
     check_terminal -- No --> check_needs{{Unmet needs?}}
 
     check_needs -- Yes --> blocked[blocked]
@@ -132,7 +132,8 @@ def generate_resume_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     check_scope -- Yes --> post_loop_ext{{Extension gate before done?}}
     post_loop_ext -- Yes --> post_loop_gate(["Flavor extension gate — gates.json"])
     post_loop_gate --> post_loop_ext
-    post_loop_ext -- No --> ws_next
+    post_loop_ext -- No --> done_gate
+    done_gate --> ws_next([chain ws-next — hard stop])
 
     classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
     classDef action_stop fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
@@ -141,7 +142,7 @@ def generate_resume_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
     classDef guard fill:#fef08a,stroke:#ca8a04,stroke-width:2px;
 
-    class pre_plan_gate,post_loop_gate,plan_pause action_stop;
+    class pre_plan_gate,post_loop_gate,plan_pause,done_gate action_stop;
     class ws_next,stop_blocked terminal;
     class kind,check_terminal,check_needs,check_zero_tasks,check_plan_line,pre_plan_ext,check_scope,post_loop_ext condition;
     class resolve,unit_prep,spike_prep,blocked_guard,phase_py,plan,plan_save,confirm_plan,loop,work,check_off,blocked action;

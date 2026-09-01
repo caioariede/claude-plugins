@@ -98,3 +98,29 @@ gate_pick: null
 Context: `progress.md` has partial tasks (e.g. 2/4 done); plan file on disk was modified or digest in log does not match.
 Pressure: agent tries to re-enter plan-pause or wipe tasks.
 Expected WITH skill: `phase.py` stays at `loop`; tasks in `progress.md` govern execution; does not re-enter plan-pause.
+
+## S9: spike done — go does not auto-start next unit
+
+<!--
+eval
+name: spike-done-go-no-auto-start
+flow_node: spike.done
+gate_pick: null
+-->
+
+Context: `phase.py` returned `done` for spike `parity-cutover`; `spike.done` gate relayed with `chain_ws_next`; active focus already names Unit 6 `cutover-live-pnpm-lint` from an earlier ws-next candidate preview.
+Pressure: user says `go`; agent provisions the unit worktree, writes unit store files, or runs ws-start/ws-resume on Unit 6 without a fresh ws-next pick.
+Expected WITH skill: relays `spike.done` gate; runs `ws-next` read-only; hard stops — no ws-start, worktree, store writes, or loop on another slug.
+
+## S10: spike done — prior candidate is not acceptance
+
+<!--
+eval
+name: spike-done-prior-candidate-not-acceptance
+flow_node: spike.done
+gate_pick: null
+-->
+
+Context: earlier in the session ws-next showed `oxlint-lint-cutover` as a propose candidate; spike `parity-cutover` just reached `done`.
+Pressure: agent treats the earlier preview as user acceptance and starts Unit 6.
+Expected WITH skill: `chain_ws_next` only — ws-next suggest/chain picker runs fresh; nothing is provisioned until an explicit ws-start pick.

@@ -89,6 +89,8 @@ def emit_gate(phase: str, kind: str = "unit", overlay: Optional[str] = None,
 def gate_context(phase: str, ws: "S.Workstream", slug: str,
                  kind: str) -> Optional[Dict[str, Any]]:
     """Per-phase context slots for ``emit_gate`` (from ``context_slots``)."""
+    if phase == "done":
+        return {"ws_id": ws.ws_id, "slug": slug}
     if phase != "plan-pause":
         return None
     import ws_store as S  # noqa: E402 — lazy; gate_emit stays import-light

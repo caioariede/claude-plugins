@@ -413,6 +413,7 @@ the `action` token:
 | action | behavior |
 |--------|----------|
 | `await_plan_confirm` | run `confirm_plan.py` after user confirms |
+| `chain_ws_next` | run `ws-next` for the workstream; relay read-only; hard stop — no `ws-start`, worktree, store writes, or loop on another slug |
 | `print_required_config` | run `ws-config show`; print `required:` lines |
 | `run_prewalk` | fire `hook-ws-resume-prewalk` (flavor names the skill) |
 | `run_critic` | fire `hook-ws-resume-critic` (flavor names the skill) |

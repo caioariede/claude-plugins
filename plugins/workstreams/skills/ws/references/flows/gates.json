@@ -59,6 +59,24 @@
         { "n": 1, "label": "Stop (default)" },
         { "n": 2, "label": "Override and resume anyway" }
       ]
+    },
+    {
+      "id": "unit.done",
+      "kind": "action",
+      "trigger": { "phase": "done", "kind": "unit" },
+      "context_slots": ["ws_id", "slug"],
+      "prompt": "Target complete. Run ws-next to route — do not ws-start, provision, or implement another slug.",
+      "action": "chain_ws_next",
+      "stop": true
+    },
+    {
+      "id": "spike.done",
+      "kind": "action",
+      "trigger": { "phase": "done", "kind": "spike" },
+      "context_slots": ["ws_id", "slug"],
+      "prompt": "Target complete. Run ws-next to route — do not ws-start, provision, or implement another slug.",
+      "action": "chain_ws_next",
+      "stop": true
     }
   ]
 }

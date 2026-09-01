@@ -13,22 +13,33 @@ sys.path.insert(0, str(ROOT / "skills" / "ws" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "ws-resume" / "scripts"))
 
 import gate_emit as GE  # noqa: E402
-import phase as P      # noqa: E402
-import ws_store as S   # noqa: E402
-from test_ws_board import ledger, write_ws  # noqa: E402
+from test_ws_board import ledger, spike_ledger, write_ws  # noqa: E402
+
+PHASE_PY = ROOT / "skills" / "ws-resume" / "scripts" / "phase.py"
+
+
+def _phase_emit(store_td: str, target_id: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(PHASE_PY), target_id, "--emit-gate"],
+        env={**os.environ, "WS_STORE": store_td},
+        capture_output=True,
+        text=True,
+    )
 
 
 class GateEmitTests(unittest.TestCase):
     def test_load_catalog(self):
         gates = GE.load_catalog()
-        self.assertGreaterEqual(len(gates), 7)
+        self.assertGreaterEqual(len(gates), 9)
         ids = {g["id"] for g in gates}
         self.assertIn("unit.plan-pause", ids)
         self.assertIn("unit.blocked-override", ids)
         self.assertIn("unit.prewalk", ids)
         self.assertIn("unit.critic", ids)
+        self.assertIn("unit.done", ids)
         self.assertIn("spike.plan-pause", ids)
         self.assertIn("spike.blocked-override", ids)
+        self.assertIn("spike.done", ids)
 
     def test_find_gate(self):
         g = GE.find_gate("plan-pause", kind="unit")
@@ -48,6 +59,14 @@ class GateEmitTests(unittest.TestCase):
         self.assertEqual(g["kind"], "action")
         self.assertTrue(g["stop"])
         self.assertNotIn("options", g)
+
+    def test_done_is_action_gate(self):
+        for kind in ("unit", "spike"):
+            g = GE.find_gate("done", kind=kind)
+            self.assertIsNotNone(g)
+            self.assertEqual(g["kind"], "action")
+            self.assertTrue(g["stop"])
+            self.assertEqual(g["action"], "chain_ws_next")
 
     def test_format_gate_block_with_context(self):
         gate = {
@@ -84,14 +103,7 @@ class GateEmitTests(unittest.TestCase):
                 },
             )
 
-            cmd = [
-                sys.executable,
-                str(ROOT / "skills" / "ws-resume" / "scripts" / "phase.py"),
-                "u1",
-                "--emit-gate",
-            ]
-            env = dict(os.environ, WS_STORE=td)
-            res = subprocess.run(cmd, env=env, capture_output=True, text=True)
+            res = _phase_emit(td, "u1")
             self.assertEqual(res.returncode, 0, f"stderr: {res.stderr}")
             lines = res.stdout.strip().splitlines()
             self.assertEqual(lines[0], "plan-pause")
@@ -102,6 +114,68 @@ class GateEmitTests(unittest.TestCase):
             self.assertIn("stop: true", res.stdout)
             self.assertIn("Setup", res.stdout)
             self.assertIn("Build", res.stdout)
+
+    def test_done_gate_emit_unit(self):
+        with tempfile.TemporaryDirectory() as td:
+            write_ws(
+                Path(td),
+                "2026-01-01-demo",
+                units_md=ledger('u1  "Unit 1"  repo=o/r'),
+                units={
+                    "u1": {
+                        "progress": "## Tasks\n- [x] T1  Setup\n",
+                        "log": "# log\n",
+                    },
+                },
+            )
+
+            res = _phase_emit(td, "u1")
+            self.assertEqual(res.returncode, 0, f"stderr: {res.stderr}")
+            self.assertEqual(res.stdout.strip().splitlines()[0], "done")
+            self.assertIn("--- GATE: unit.done ---", res.stdout)
+            self.assertIn("ws_id: 2026-01-01-demo", res.stdout)
+            self.assertIn("slug: u1", res.stdout)
+
+    def test_done_gate_emit_spike(self):
+        with tempfile.TemporaryDirectory() as td:
+            write_ws(
+                Path(td),
+                "2026-01-01-demo",
+                spikes_md=spike_ledger('audit  "Audit"  repo=o/r'),
+                spikes={
+                    "audit": {
+                        "progress": "## Tasks\n- [x] T1  Research\n",
+                        "log": "# log\n",
+                    },
+                },
+            )
+
+            res = _phase_emit(td, "audit")
+            self.assertEqual(res.returncode, 0, f"stderr: {res.stderr}")
+            self.assertEqual(res.stdout.strip().splitlines()[0], "done")
+            self.assertIn("--- GATE: spike.done ---", res.stdout)
+
+    def test_loop_phase_emits_no_done_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            write_ws(
+                Path(td),
+                "2026-01-01-demo",
+                units_md=ledger('u1  "Unit 1"  repo=o/r'),
+                units={
+                    "u1": {
+                        "progress": "## Tasks\n- [x] T1  Setup\n- [ ] T2  Build\n",
+                        "log": (
+                            "# log\n"
+                            "- 2026-01-01T00:00Z  plan  /tmp/plan.md\n"
+                        ),
+                    },
+                },
+            )
+
+            res = _phase_emit(td, "u1")
+            self.assertEqual(res.returncode, 0, f"stderr: {res.stderr}")
+            self.assertEqual(res.stdout.strip().splitlines()[0], "loop")
+            self.assertNotIn("--- GATE:", res.stdout)
 
 
 if __name__ == "__main__":
