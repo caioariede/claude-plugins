@@ -40,7 +40,7 @@ def scenario(name: str):
         d = S.decide_next(ws)
         return d, next_mod.render_decision(d)
 
-    if name == "restack-blocks-propose":
+    if name == "restack-keeps-propose":
         drift = S.Unit(slug="top", tasks_total=1, tasks_done=1,
                        pr=pr(5, "OPEN", False, "master"),
                        log=[("t", "created", "base=feat-base")])
@@ -97,13 +97,16 @@ def grade(name: str, d: S.Decision, rendered: str) -> list[dict]:
             ("single propose option",
              opts == ["Propose from design spec"], f"opts={opts}"),
         ]
-    elif name == "restack-blocks-propose":
+    elif name == "restack-keeps-propose":
+        opts = chain_propose_options(d)
         checks = [
-            ("no propose in chain", not chain_offers_propose(d),
-             f"design={d.design!r} material empty"),
             ("rule is restack", d.rule == "restack", f"rule={d.rule}"),
-            ("no design emitted", not d.design,
-             f"design={d.design!r}"),
+            ("propose offered alongside restack", chain_offers_propose(d),
+             f"design={d.design!r} covered={len(d.covered)}"),
+            ("chain picker runs", chain_runs_unit_picker(d),
+             f"moves={len(d.moves)}"),
+            ("single propose option",
+             opts == ["Propose from design spec"], f"opts={opts}"),
         ]
     elif name == "mixed-ship-mid-flight-chain":
         checks = [
@@ -144,7 +147,7 @@ def grade(name: str, d: S.Decision, rendered: str) -> list[dict]:
 def main() -> int:
     evals = json.loads((EVALS / "evals.json").read_text())["evals"]
     focus = {5: "mid-flight-single-move-chain",
-             6: "restack-blocks-propose",
+             6: "restack-keeps-propose",
              7: "mixed-ship-mid-flight-chain",
              8: "chain-many-followups-summary",
              1: "blocking-wf-solo-first",

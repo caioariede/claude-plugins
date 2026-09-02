@@ -106,14 +106,15 @@ class TestDecideNextStackable(unittest.TestCase):
         d = S.decide_next(ws, proposal_repo="o/r")
         self.assertIsNone(d.stackable)
 
-    def test_restack_suppresses_stackable(self):
+    def test_drifted_unit_is_not_a_stackable_base(self):
         inflight = u("a", done=1, total=2, repo="o/r",
                      pr_obj=pr(1, "OPEN", True, "master"),
                      log=[("t", "created", "base=feat-a")])
         ws = S.Workstream(ws_id="w", name="w", units=[inflight],
                           design="~/specs/x.md")
         d = S.decide_next(ws, proposal_repo="o/r")
-        self.assertIsNone(d.stackable)
+        self.assertEqual(d.rule, "restack")
+        self.assertEqual(d.stackable, [])
 
 
 class TestRenderStackable(unittest.TestCase):

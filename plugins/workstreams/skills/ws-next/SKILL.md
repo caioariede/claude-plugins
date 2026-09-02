@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.22.3"
+  version: "0.23.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -44,7 +44,7 @@ Move lines read `<unit> — <verb>: <why>` (verb `restack` or `advance`), ranked
 
 ## Propose a unit
 
-Enter in full `suggest` (no moves), or when the user picks a **Propose from …** option in Chain. Never while a `restack` move exists.
+Enter in full `suggest` (no moves), or when the user picks a **Propose from …** option in Chain.
 
 Material comes from the script: `Proposable:` follow-ups no live unit claims (`blocks=` names the units one blocks; `WF<n>` are workstream follow-ups, `<slug>:F<n>` unit follow-ups), `Design:` (read the spec at that path — not a URL or user paste — and diff it against `Covered:`), and `ActiveFocus:` / `FocusQueue:` (the active outcome and the queued ones).
 

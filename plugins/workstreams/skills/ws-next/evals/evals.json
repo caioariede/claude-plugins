@@ -33,9 +33,9 @@
     },
     {
       "id": 6,
-      "name": "restack-blocks-propose",
+      "name": "restack-keeps-propose",
       "prompt": "Run ws-next when a unit needs restack and design exists",
-      "expected_output": "No Propose next unit in Chain; hook for restack only"
+      "expected_output": "Chain picker runs: Not now, restack move [default], Propose from design spec last; picking the restack fires the hook, picking the lane goes to the candidate picker"
     },
     {
       "id": 8,

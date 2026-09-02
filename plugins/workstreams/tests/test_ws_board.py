@@ -899,14 +899,15 @@ class TerminalFork(unittest.TestCase):
         self.assertEqual(d.design, "~/specs/x-design.md")
         self.assertTrue(d.covered)
 
-    def test_restack_suppresses_proposal_alongside(self):
+    def test_restack_keeps_proposal_alongside(self):
         drift = S.Unit(slug="top", tasks_total=1, tasks_done=1,
                        pr=pr(5, "OPEN", False, "master"),
                        log=[("t", "created", "base=feat-base")])
         ws = mkws([drift], design="~/specs/x-design.md")
         d = S.decide_next(ws)
         self.assertEqual(d.rule, "restack")
-        self.assertEqual((d.proposable, d.covered, d.design), ([], [], ""))
+        self.assertEqual(d.design, "~/specs/x-design.md")
+        self.assertTrue(d.covered)
 
     def test_all_complete_no_material_without_source(self):
         done = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)

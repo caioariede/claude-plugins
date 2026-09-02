@@ -63,14 +63,17 @@ class StrategyLaneEvals(unittest.TestCase):
         self.assertTrue(chain_offers_propose(d))
         self.assertTrue(chain_runs_unit_picker(d))
 
-    def test_restack_suppresses_chain_propose(self):
+    def test_restack_keeps_chain_propose(self):
         drift = S.Unit(slug="top", tasks_total=1, tasks_done=1,
                        pr=pr(5, "OPEN", False, "master"),
                        log=[("t", "created", "base=feat-base")])
         ws = mkws([drift], design="~/specs/x-design.md")
         d = S.decide_next(ws)
-        self.assertFalse(chain_offers_propose(d))
-        self.assertFalse(chain_runs_unit_picker(d))
+        self.assertEqual(d.rule, "restack")
+        self.assertTrue(chain_offers_propose(d))
+        self.assertTrue(chain_runs_unit_picker(d))
+        self.assertEqual(chain_propose_options(d),
+                         ["Propose from design spec"])
 
     def test_mixed_ship_and_mid_flight_offers_propose(self):
         ship = S.Unit(slug="done1", tasks_total=1, tasks_done=1, pr=None)

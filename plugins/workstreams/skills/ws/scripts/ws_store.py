@@ -1460,7 +1460,7 @@ class Decision:
     open_items: List[str] = field(default_factory=list)
     headline: str = ""
     # Proposal material for the skill — full `suggest` or alongside
-    # non-restack moves when `_proposal_attachable` holds.
+    # moves whenever a proposal source exists.
     proposable: List[Proposable] = field(default_factory=list)
     covered: List[str] = field(default_factory=list)   # "<slug> — <title>"
     design: str = ""
@@ -1579,11 +1579,6 @@ def _has_proposal_source(ws: Workstream,
     return bool(proposable or ws.design or ws.active_focus)
 
 
-def _proposal_attachable(moves: List[Move]) -> bool:
-    """True when no move is restack — proposal may ride alongside."""
-    return not any(m.rule == "restack" for m in moves)
-
-
 def decide_next(ws: Workstream,
                 proposal_repo: Optional[str] = None,
                 *,
@@ -1633,8 +1628,7 @@ def decide_next(ws: Workstream,
     if moves:
         top = moves[0]
         proposable, covered, design = _proposal_material(ws, by_slug)
-        attach = (_proposal_attachable(moves)
-                  and _has_proposal_source(ws, proposable))
+        attach = _has_proposal_source(ws, proposable)
         headline = (top.why if top.rule == "resume" and top.why
                     else _RULE_HEADLINE[top.rule])
         return out(top.rule, top.command, top.unit, top.branch, moves,

@@ -8,7 +8,7 @@ Reference of machine-readable data blocks emitted by `next.py` for consumption b
 |---|---|---|
 | `run=<command>` | Suffix on each runnable move line | Fully resolved execution command for the move. |
 | `branch=<branch>` | Suffix on move line (when unit has worktree) | Target branch associated with the unit. |
-| `Proposable:` | Strategy lanes exist (suggest or non-restack moves) | Follow-up candidates (`WF<n>` or `<slug>:F<n>`) open for proposal. |
+| `Proposable:` | Strategy lanes exist (suggest or alongside moves) | Follow-up candidates (`WF<n>` or `<slug>:F<n>`) open for proposal. |
 | `Covered:` | Follow-up / design proposal active | Ledger slugs, titles, and planned units already accounted for in the store. |
 | `Design:` | Spec-driven workstream with design path | Path to umbrella design spec from `workstream.md`. |
 | `ActiveFocus:` | Focus queue is non-empty and has an active item | The active focus item (`<slug> — <outcome>`). |
