@@ -66,8 +66,9 @@ SPIKE_PHASES = [
     "done",
 ]
 
-NEXT_TERMINAL_STATES = [
+NEXT_STATES = [
     "moves",
+    "blocker dropped/removed",
     "suggest",
     "open backlog remains",
     "no units yet",
@@ -150,49 +151,68 @@ def generate_resume_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
 """
 
 
-def _deprecated_resume_diagrams() -> Set[str]:
-    return {"resume-unit.mmd", "resume-spike.mmd"}
+# Removed on regenerate so a stale checkout converges on the current set.
+_DEPRECATED_DIAGRAMS = {"resume-unit.mmd", "resume-spike.mmd", "next-terminal.mmd"}
 
 
-def generate_next_terminal_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
-    gates = gates or {}
+def generate_next_mmd(gates: Optional[Dict[str, Any]] = None) -> str:
     return """flowchart TD
-    %% ws-next decision engine and terminal states
+    %% ws-next — run, relay, settle a unit, chain
 
-    start([Start / ws-next]) --> derive[Derive status across units & spikes]
-    derive --> check_moves{Runnable moves exist?}
-    
-    check_moves -- Yes --> rank_moves[Rank moves: restack > resume > start]
-    rank_moves --> moves[Emit move list: default leading + Chain options]
-    moves --> chain_pick{User selection in Chain}
-    chain_pick -- Run move --> execute_move[Execute ws-resume / restack / start]
-    chain_pick -- Propose lane --> propose_picker[Propose candidate picker]
-    chain_pick -- Not now --> stop_moves([stop])
-    
-    check_moves -- No --> check_triage{Blocker dropped/removed only?}
-    check_triage -- Yes --> triage_drop[blocker dropped/removed: route to ws-block]
-    
-    check_triage -- No --> check_unresolvable{Open backlog / unresolvable needs?}
-    check_unresolvable -- Yes --> backlog_remains["open backlog remains / advance a blocker"]
-    
-    check_unresolvable -- No --> check_propose{Active focus, design, or open follow-ups?}
-    check_propose -- Yes --> suggest["suggest: Propose next unit (strategy & candidate pickers)"]
-    
-    check_propose -- No --> check_empty_store{Empty workstream & no design?}
-    check_empty_store -- Yes --> no_units["no units yet: offer ws-start"]
-    check_empty_store -- No --> check_all_terminal{All units/spikes terminal & backlog empty?}
-    check_all_terminal -- Yes --> ws_done["workstream done: offer to close"]
-    check_all_terminal -- No --> fallback_suggest[suggest]
+    start([Start / ws-next]) --> run["python3 next.py [ws-id]"]
+    run --> exit2{Exit 2?}
+    exit2 -- "MANY_WORKSTREAMS / AMBIGUOUS" --> ask_ws[Ask which workstream, re-run]
+    ask_ws --> run
+    exit2 -- "NO_MATCH / NO_STORE" --> report([Report plainly])
+    exit2 -- No --> relay[Relay stdout minus run= tails and machine blocks]
+    relay --> has_moves{Runnable moves?}
+
+    %% Moves are ranked in code — restack before advance, first is default
+    has_moves -- Yes --> material{Proposable / Covered / Design emitted?}
+    material -- Yes --> propose_opts[One Propose from … option per lane]
+    material -- No --> settle
+    propose_opts --> settle{2+ moves, or 1 move + propose options?}
+    settle -- No --> hook
+    settle -- Yes --> unit_picker["Unit picker: Not now · top 3 moves · Propose from …"]
+    unit_picker -- Not now --> print_default([Print the default move's resolved command])
+    unit_picker -- unit --> hook
+    unit_picker -- "Propose from …" --> candidate_picker
+
+    hook[Fire hook-ws-next-after with unit, branch, command] --> hook_defined{Active flavor defines it?}
+    hook_defined -- No --> run_here["Offer: Not now · run here"]
+    hook_defined -- Yes --> flavor_choices["Flavor choices — Not now first"]
+    run_here -- run here --> run_cmd[Run the command in this session]
+    run_here -- Not now --> print_picked
+    flavor_choices -- resolves to command --> run_cmd
+    flavor_choices -- other --> handoff["Flavor handoff: run it, re-emit the command, stop"]
+    flavor_choices -- Not now --> print_picked
+    run_cmd --> print_picked([Print the picked unit's resolved command])
+    handoff --> print_picked
+
+    %% No moves — the headline names the state
+    has_moves -- No --> headline{Headline}
+    headline -- "blocker dropped/removed" --> triage_drop(["Relay the Next: command"])
+    headline -- "no store work left / focus: slug — suggest" --> strategy_picker["Strategy picker: Not now · lanes with material"]
+    headline -- "open backlog remains / advance a blocker" --> backlog(["Work the listed items; invent no command"])
+    headline -- "no units yet" --> empty([Name ws-start])
+    headline -- "workstream done" --> done([Offer to close])
+
+    %% Propose a unit — nothing is written until ws-start runs
+    strategy_picker -- Not now --> untouched(["Store untouched — in Chain, also print the default move's command"])
+    strategy_picker -- lane --> candidate_picker["Candidate picker: Not now · up to 3 candidates"]
+    candidate_picker -- Not now --> untouched
+    candidate_picker -- candidate --> ws_start["ws-start ws-id what [--claims] [--base slug]"]
+    ws_start -- "start move, no branch yet" --> hook
 
     classDef terminal fill:#f3f4f6,stroke:#4b5563,stroke-width:2px;
     classDef condition fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px;
     classDef action fill:#dcfce7,stroke:#16a34a,stroke-width:2px;
-    classDef state fill:#fef3c7,stroke:#d97706,stroke-width:2px;
+    classDef picker fill:#fef3c7,stroke:#d97706,stroke-width:2px;
 
-    class done,stop_moves terminal;
-    class check_moves,check_triage,check_unresolvable,check_propose,check_empty_store,check_all_terminal,chain_pick condition;
-    class derive,rank_moves,moves,execute_move,propose_picker action;
-    class triage_drop,backlog_remains,suggest,no_units,ws_done,fallback_suggest state;
+    class report,print_default,print_picked,triage_drop,backlog,empty,done,untouched terminal;
+    class exit2,has_moves,material,settle,hook_defined,headline condition;
+    class run,ask_ws,relay,propose_opts,hook,run_cmd,handoff,ws_start action;
+    class unit_picker,run_here,flavor_choices,strategy_picker,candidate_picker picker;
 """
 
 
@@ -305,7 +325,7 @@ def get_all_diagrams() -> Dict[str, str]:
     gates = load_gates_catalog()
     return {
         "resume.mmd": generate_resume_mmd(gates),
-        "next-terminal.mmd": generate_next_terminal_mmd(gates),
+        "next.mmd": generate_next_mmd(gates),
         "oneshot.mmd": generate_oneshot_mmd(gates),
         "start.mmd": generate_start_mmd(gates),
         "spike.mmd": generate_spike_mmd(gates),
@@ -318,7 +338,7 @@ def get_all_diagrams() -> Dict[str, str]:
 def write_diagrams() -> None:
     DIAGRAMS_DIR.mkdir(parents=True, exist_ok=True)
     diagrams = get_all_diagrams()
-    for stale in _deprecated_resume_diagrams():
+    for stale in _DEPRECATED_DIAGRAMS:
         path = DIAGRAMS_DIR / stale
         if path.exists():
             path.unlink()

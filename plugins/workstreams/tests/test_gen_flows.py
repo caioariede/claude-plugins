@@ -39,21 +39,21 @@ class GenFlowsTests(unittest.TestCase):
         self.assertNotIn("resume-unit.mmd", resume_mmd)
         self.assertNotIn("resume-spike.mmd", resume_mmd)
 
-    def test_next_terminal_states_in_diagram(self):
+    def test_next_states_in_diagram(self):
         diagrams = GF.get_all_diagrams()
-        next_mmd = diagrams["next-terminal.mmd"]
-        for state in GF.NEXT_TERMINAL_STATES:
+        next_mmd = diagrams["next.mmd"]
+        for state in GF.NEXT_STATES:
             self.assertIn(
                 state,
                 next_mmd,
-                f"Expected state {state!r} to appear in next-terminal.mmd",
+                f"Expected state {state!r} to appear in next.mmd",
             )
 
     def test_all_diagrams_generated(self):
         diagrams = GF.get_all_diagrams()
         expected_diagrams = {
             "resume.mmd",
-            "next-terminal.mmd",
+            "next.mmd",
             "oneshot.mmd",
             "start.mmd",
             "spike.mmd",
