@@ -15,11 +15,12 @@ flowchart TD
     material -- No --> settle
     propose_opts --> settle{2+ moves, or 1 move + propose options?}
     settle -- No --> hook
-    settle -- Yes --> unit_picker["Unit picker: Not now · top 3 moves · Propose from …"]
-    unit_picker -- Not now --> print_default([Print the default move's resolved command])
+    settle -- Yes --> unit_picker["Unit picker: top 3 moves · Propose from …"]
+    unit_picker -- dismiss --> print_default([Print the default move's resolved command])
     unit_picker -- unit --> hook
     unit_picker -- "Propose from …" --> candidate_picker
 
+    %% The hook is the only gate — its first choice is the safe one
     hook[Fire hook-ws-next-after with unit, branch, command] --> hook_defined{Active flavor defines it?}
     hook_defined -- No --> run_here["Offer: Not now · run here"]
     hook_defined -- Yes --> flavor_choices["Flavor choices — Not now first"]
@@ -34,15 +35,15 @@ flowchart TD
     %% No moves — the headline names the state
     has_moves -- No --> headline{Headline}
     headline -- "blocker dropped/removed" --> triage_drop(["Relay the Next: command"])
-    headline -- "no store work left / focus: slug — suggest" --> strategy_picker["Strategy picker: Not now · lanes with material"]
+    headline -- "no store work left / focus: slug — suggest" --> strategy_picker["Strategy picker: lanes with material"]
     headline -- "open backlog remains / advance a blocker" --> backlog(["Work the listed items; invent no command"])
     headline -- "no units yet" --> empty([Name ws-start])
     headline -- "workstream done" --> done([Offer to close])
 
     %% Propose a unit — nothing is written until ws-start runs
-    strategy_picker -- Not now --> untouched(["Store untouched — in Chain, also print the default move's command"])
-    strategy_picker -- lane --> candidate_picker["Candidate picker: Not now · up to 3 candidates"]
-    candidate_picker -- Not now --> untouched
+    strategy_picker -- dismiss --> untouched(["Store untouched — in Chain, also print the default move's command"])
+    strategy_picker -- lane --> candidate_picker["Candidate picker: up to 3 candidates"]
+    candidate_picker -- dismiss --> untouched
     candidate_picker -- candidate --> ws_start["ws-start ws-id what [--claims] [--base slug]"]
     ws_start -- "start move, no branch yet" --> hook
 

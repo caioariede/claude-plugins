@@ -3,7 +3,7 @@ name: ws-next
 description: Use when unsure which ws-* command or which unit to act on next in a workstream — after finishing a unit, when a PR merges, or any "what now?" moment across units. Lists every unit that can move right now and marks one as the default; it does not do the work (that's ws-resume).
 argument-hint: "[ws-id]"
 metadata:
-  version: "0.23.0"
+  version: "0.24.0"
   author: Caio Ariede
 compatibility: requires python3 and the active forge CLI (gh by default) on PATH
 ---
@@ -50,7 +50,7 @@ Material comes from the script: `Proposable:` follow-ups no live unit claims (`b
 
 ### Strategy picker
 
-Full `suggest` only — a lane picked in Chain skips this. `Not now` first and preselected, then only lanes with material, in this order:
+Full `suggest` only — a lane picked in Chain skips this. Offer only lanes with material, in this order:
 
 | Lane | When shown |
 |------|-----------|
@@ -73,15 +73,15 @@ Compose up to 3 candidates. Never re-propose `Covered:` scope — dropped and su
 - A `--base` candidate's label ends `(stacks on <slug> - <readiness>)`, dropping ` - <readiness>` when the line has none; no annotation otherwise.
 - `Stackable:` present but empty → unstacked only; if design implies stacking, say no same-repo in-flight base is available.
 
-Present with `Not now` first (opt-in, SPEC §Next-step chaining). Pick → `ws-start <ws-id> "<what>"`, plus `--claims` listing **every** follow-up the candidate closes (an omitted one stays open and keeps its dependent blocked), plus `--base <slug>` when stacking. Nothing is written until that runs.
+A pick → `ws-start <ws-id> "<what>"`, plus `--claims` listing **every** follow-up the candidate closes (an omitted one stays open and keeps its dependent blocked), plus `--base <slug>` when stacking. Nothing is written until that command runs from the hook.
 
-Declining at any proposal step leaves the store untouched. During Chain, also print the default move's resolved command — same as dismissing the unit question. An accepted proposal is a `start` move for Chain: a unit, a command, no branch yet.
+Declining at any proposal step — dismissing the picker — leaves the store untouched. During Chain, also print the default move's resolved command — same as dismissing the unit question. An accepted proposal is a `start` move for Chain: a unit, a command, no branch yet.
 
 ## Chain
 
 **Propose options.** When moves exist and the script emitted any of `Proposable:` / `Covered:` / `Design:`, build one **Propose from …** option per strategy-picker lane — same labels and order, prefixed `Propose from `, a leading `From ` dropped: `Propose from design spec`, `Propose from Workstream follow-ups`, `Propose from WF4 — harden it (blocks dep)`. Never a generic **Propose next unit**. `ProposeSummary:` is informational only.
 
-**Settle the unit.** Two or more moves, or one move with propose options → ask which one moves: `Not now` first and preselected; then the top three moves in script order, labelled by slug with `<verb>: <why>` as description, the first marked default; then the **Propose from …** options last, never preselected. Moves past the third stay in the relayed list and are picked by naming the unit. One move and no propose options → skip the question. Picking a unit runs nothing; a dismissal reads as `Not now` and ends by printing the default move's resolved command. A **Propose from …** pick goes to the candidate picker for that lane.
+**Settle the unit.** Two or more moves, or one move with propose options → ask which one moves: the top three moves in script order, labelled by slug with `<verb>: <why>` as description, the first marked default; then the **Propose from …** options last, never default. Moves past the third stay in the relayed list and are picked by naming the unit. One move and no propose options → skip the question. Picking a unit runs nothing — the hook below is the only gate; a dismissal ends by printing the default move's resolved command. A **Propose from …** pick goes to the candidate picker for that lane.
 
 With `ActiveFocus:` and 2+ moves, prefer the unit whose charter/tasks serve the focus and say why when that overrides the default — never over a `restack` move, and never over a move that unblocks dependents unless the user picks otherwise.
 

@@ -11,12 +11,12 @@
       "id": 2,
       "name": "design-only-suggest",
       "prompt": "Run ws-next on empty workstream with design spec only",
-      "expected_output": "Strategy picker shows From design spec lane only (plus Not now)"
+      "expected_output": "Strategy picker shows From design spec lane only"
     },
     {
       "id": 3,
       "name": "chain-decline-prints-command",
-      "prompt": "User picks Propose from design spec then Not now at candidate picker during Chain",
+      "prompt": "User picks Propose from design spec then dismisses the candidate picker during Chain",
       "expected_output": "Skill requires printing default move resolved command; store untouched"
     },
     {
@@ -29,13 +29,13 @@
       "id": 5,
       "name": "mid-flight-single-move-chain",
       "prompt": "Run ws-next when one unit is mid-flight (1 of 6 tasks left) and a design spec exists; another agent owns the in-flight work",
-      "expected_output": "Chain picker runs (does not skip to hook): Not now, in-flight move [default], Propose from design spec last — not preselected"
+      "expected_output": "Chain picker runs (does not skip to hook): in-flight move [default], Propose from design spec last — never default"
     },
     {
       "id": 6,
       "name": "restack-keeps-propose",
       "prompt": "Run ws-next when a unit needs restack and design exists",
-      "expected_output": "Chain picker runs: Not now, restack move [default], Propose from design spec last; picking the restack fires the hook, picking the lane goes to the candidate picker"
+      "expected_output": "Chain picker runs: restack move [default], Propose from design spec last; picking the restack fires the hook, picking the lane goes to the candidate picker"
     },
     {
       "id": 8,
