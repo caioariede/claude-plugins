@@ -15,10 +15,8 @@ Reference of machine-readable data blocks emitted by `next.py` for consumption b
 | `FocusQueue:` | Queued focuses exist | Pending focus items following the active one. |
 | `Stackable:` | Focus / design proposal with active in-flight units | Eligible base units for stacking proposals (`<slug> repo=<o/r> branch=<b> [readiness=...]`). |
 | `ProposeSummary:` | Proposal lanes available | Informational summary of composable proposal lanes. |
-| `ReconcileCandidates:` | Ship evidence found on default branch | Units that must be reconciled via `ws-resume <slug>` before proposing new work. |
 
 ## Consumption Rules
 
 1. **Strip Before Display**: Never output raw machine blocks to the user.
 2. **Deterministic Derivation**: Use `Stackable:` to validate `--base` candidates and ensure same-repo constraints.
-3. **Reconcile Gating**: When `ReconcileCandidates:` is emitted, hard-gate `Propose a unit` until candidates are cleared.

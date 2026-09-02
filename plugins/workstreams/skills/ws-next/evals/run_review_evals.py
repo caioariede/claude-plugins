@@ -192,7 +192,7 @@ def main() -> int:
 
 def has_proposal(d: S.Decision) -> bool:
     return bool(d.proposable or d.covered or d.design
-                or d.rule in ("suggest", "reconcile-pending"))
+                or d.rule == "suggest")
 
 
 if __name__ == "__main__":

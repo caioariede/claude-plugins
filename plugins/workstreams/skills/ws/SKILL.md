@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.28.1"
+  version: "0.29.0"
   author: Caio Ariede
 ---
 
@@ -22,7 +22,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
   units/<unit-id>/
     charter.md           # static: why this unit exists (unit-level workstream.md); set at ws-start, read by ws-resume
     progress.md          # MUTABLE current-state: Tasks + Follow-ups checklists (work-state SoT)
-    log.md               # APPEND-ONLY: created, dropped, restack, decision, note, merged-via
+    log.md               # APPEND-ONLY: created, dropped, restack, decision, note
     prewalk.md           # optional: exploration digest (superpowers-prewalk)
     critic.md            # optional: post-complete review (review/ws-critic)
   spikes/<slug>/
@@ -38,7 +38,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | current branch | git (the worktree) | `git rev-parse --abbrev-ref HEAD` |
 | base / did GitHub retarget | GitHub | active `forge` flavor `pr-status` (§Flavors) |
 | PR number + draft/ready/merged | GitHub | active `forge` flavor `pr-status` |
-| status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. `merged-via` log or PR merged → `merged` · 3. has an unmet need (§Dependencies) → `blocked` · 4. PR ready → `in-review` · 5. PR draft or no PR → `building` |
+| status | **derived — first match wins** | 1. `dropped` line in log → `dropped` · 2. has an unmet need (§Dependencies) → `blocked` · 3. code-complete (§Dependencies) → `complete` · 4. else → `building` |
 | unit ↔ repo/branch | `units.md` ledger | set once at `ws-start` |
 | unit purpose / scope (why it exists) | unit `charter.md` | set once at `ws-start`; read by `ws-resume` |
 | tasks + in-flight follow-ups | unit `progress.md` | resolved before this unit's PR merges |
@@ -48,7 +48,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
 | is a follow-up claimed (being closed by a unit) | **derived** | a non-dropped ledger unit's `claims=` names it (§Follow-up units) |
 | decisions / notes / drop / restack history | `log.md` | append-only |
 
-**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (active = derived status `building`, `blocked`, or `in-review`) — every ledger unit is terminal (`merged` or `dropped`) — **and** no spike is **active** (`researching` or `blocked`) — every ledger spike is terminal (`complete` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>` — an unchecked follow-up a live unit **claims** is that unit's work, not an open item (§Follow-up units). Any open item ⇒ **not done**. Dropped units and dropped spikes are terminal, not blockers.
+**Workstream done** (derived — single source; `ws-next` and `ws-board` reference this, never restate it): no unit is **active** (`building` or `blocked`) — every ledger unit is terminal (`complete` or `dropped`) — **and** no spike is **active** (`researching` or `blocked`) — every ledger spike is terminal (`complete` or `dropped`) — **and** `backlog.md` carries no open work: no `## Planned units` line without a matching ledger unit, no unchecked `## Follow-ups` (`WF<n>`), and no unit `progress.md` with an unchecked in-flight `F<n>` — an unchecked follow-up a live unit **claims** is that unit's work, not an open item (§Follow-up units). Any open item ⇒ **not done**. Dropped units and dropped spikes are terminal, not blockers.
 
 This predicate reads the store only, so it cannot know whether the `design:` spec still holds unbuilt scope. A workstream can therefore be **done** here while `ws-next` still proposes a unit from the design — the judgment layers on top of the derived answer rather than contradicting it, which is why `ws-next` says "no store work left" instead of claiming done.
 
@@ -67,22 +67,11 @@ A unit's **needs** = `{ base, when base is a unit-id }` ∪ `{ explicit needs }`
 - a **spike** (bare slug in `spikes.md`) — **satisfied** when that spike is *spike-complete*.
 - a **follow-up** (`<unit-id>:F<n>` or `WF<n>`) — when a live unit **claims** it (§Follow-up units), satisfied through that unit exactly as a unit target; otherwise **satisfied** when the box is checked in its source file.
 
-**code-complete** (derived predicate; never a printed status label): a unit has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. `## Follow-ups` are ignored; zero tasks is *not* code-complete. `merged` implies code-complete.
+**code-complete** (derived predicate): a unit has ≥1 task in `progress.md` `## Tasks`, every `## Tasks` box is checked, **and** every `## Follow-ups` box is checked — an open in-flight `F<n>` keeps the unit `building`. Zero tasks is *not* code-complete. Used for need satisfaction and terminal `complete` status — a code-complete unit with unmet needs is still **blocked**, not Done.
 
-**spike-complete** (derived predicate; never a printed status label): a spike has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. Zero tasks is *not* spike-complete. Used for need satisfaction and terminal `complete` status — a spike-complete spike with unmet needs is still **blocked**, not Done.
+**spike-complete** (derived predicate): a spike has ≥1 task in `progress.md` `## Tasks` **and** every `## Tasks` box is checked. Zero tasks is *not* spike-complete. Used for need satisfaction and terminal `complete` status — a spike-complete spike with unmet needs is still **blocked**, not Done.
 
-**Merge task reconcile:** when a unit is terminal-merged (`merged-via`
-log or forge `MERGED` on the ledger branch), open `## Tasks` boxes are
-invalid bookkeeping — `ws-resume` checks them and appends a `decision
-reconciled tasks from merged-via branch=<b> pr=<n>: …` or `reconciled
-tasks from merged PR #<n>: …` line to `log.md`. `## Follow-ups` are
-never auto-checked. `ws-board` does not write; `ws-next` scans live
-units read-only for shipped-elsewhere evidence and classifies an
-in-memory overlay but never appends log lines or mutates
-`progress.md`. `ws-resume` writes `merged-via`, task reconcile, and
-`ship-detect-dismissed`. Both derive `merged` / code-complete from the
-log and live PR state.
-`phase.py` gathers PR state for every ledger unit (same as board/next).
+**PR state never drives status.** `ws-board`, `ws-next` and `phase.py` gather live PR state for every ledger unit (`forge` `pr-status`, §Flavors) to show `#<n>` and to detect base drift (§Restack reconciliation); status derives from the store alone. `ws-board` and `ws-next` never write.
 
 **blocked** (derived status): a unit has ≥1 need whose target is not satisfied. A **dropped** target is never code-complete → the dependent is stuck: flag it `(dropped)` and route to triage, never auto-resolve. A follow-up target that is *removed* (deleted, not checked) is likewise unresolvable → same triage.
 
@@ -206,7 +195,7 @@ No `## Follow-ups` — deferred discoveries go to `backlog.md` via `ws-backlog`.
 
 **`spikes/<slug>/log.md`** (append-only): `- <ts>  <kind>  <payload>`
 kinds: `created` · `dropped <reason>` · `decision <text>` · `note <text>` · `plan <absolute-path>`
-No `merged-via`, `restack`, or `completed` kind — terminal spike = derived `complete`.
+No `restack` or `completed` kind — terminal spike = derived `complete`.
 `decision spec-amended <summary>` records the umbrella design amend.
 
 **`units/<unit-id>/progress.md`** (mutable current-state — no branch/status/PR, those derive):
@@ -221,11 +210,8 @@ No `merged-via`, `restack`, or `completed` kind — terminal spike = derived `co
 `T<n>`/`F<n>`/`N<n>` ids are monotonic per unit and never reused, even after check-off or removal. `## Needs` lines have **no checkbox** — a need's satisfied/open state is *derived* from its target (§Dependencies), never hand-marked; remove a line only on a genuine scope change (append a `decision` to `log.md`). `<target>` = a unit-id/bare-slug or a follow-up id (`<unit-id>:F<n>` / `WF<n>`); the note is optional free text.
 
 **`units/<unit-id>/log.md`** (append-only): `- <ts>  <kind>  <payload>`
-kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>` · `plan <absolute-path>` · `merged-via branch=<b> sha=<full> [pr=<n>]` · `ship-detect-dismissed sha=<full>`
-
-`merged-via` records where the unit's work shipped when the ledger
-`branch=` is not forge-MERGED (another branch, replaced PR, or manual
-squash-gap fix). Latest line wins; append-only.
+kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>` · `plan <absolute-path>`
+No `completed` kind — terminal unit = derived `complete`.
 
 `plan` records the unit implementation plan path (superpowers flavor);
 append once at first save. `decision plan=done plan=<abs-path> digest=<8-hex> [reason=<reason>]`
