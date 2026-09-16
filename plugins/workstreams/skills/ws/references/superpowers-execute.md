@@ -22,4 +22,5 @@ When `phase.py` enters `loop`:
 - **Units:** check `log.md` for the latest `context spec-driven-development=<mode>` line. `mode=inline` → `superpowers:executing-plans` once across tasks. `mode=subagent-driven` (or no context line) → `superpowers:subagent-driven-development` per task.
 - **Spikes:** intrinsic research loop per ws-resume — work plan tasks, write `artifacts/`, amend design on the final task. No flavor execute op.
 
-Check off completed tasks in `progress.md` as work completes.
+Check off via `python3 <ws-resume-skill-dir>/scripts/check_progress.py
+<target-id> T<n>` as work completes.

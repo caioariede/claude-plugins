@@ -416,6 +416,96 @@ def _plan_done_payload(plan_path: str, digest: str, *,
     return " ".join(bits)
 
 
+def _latest_context_value(log: List[Tuple[str, str, str]],
+                          group: str) -> Optional[str]:
+    val: Optional[str] = None
+    prefix = f"context {group}="
+    for _ts, kind, payload in log:
+        if kind == "decision" and payload.startswith(prefix):
+            val = payload[len(prefix):]
+    return val
+
+
+def _maybe_append_context(log_path: Path,
+                          context: Tuple[str, str]) -> None:
+    group, value = context
+    if _latest_context_value(_read_log_entries(log_path), group) == value:
+        return
+    _append_log_lines(log_path, [
+        ("decision", f"context {group}={value}")])
+
+
+def unchecked_task_ids(raw: str) -> List[str]:
+    """Unchecked ``T<n>`` ids in ``## Tasks``."""
+    headings = {"Tasks": "tasks", "Follow-ups": "followups",
+                "Needs": "needs"}
+    section: Optional[str] = None
+    ids: List[str] = []
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        sec = _section_of(line, headings)
+        if sec is not None:
+            section = sec
+            continue
+        if section != "tasks":
+            continue
+        m = _TASK_LINE_RE.match(line)
+        if m and m.group(2) not in ("x", "X"):
+            ids.append(m.group(4))
+    return ids
+
+
+def apply_check_progress(ws_dir: Path, slug: str, ids: List[str], *,
+                         kind: str = "unit") -> Tuple[str, List[str]]:
+    """Mark ``T<n>`` / ``F<n>`` lines checked in ``progress.md``."""
+    if not ids:
+        return "refused empty-ids", []
+    edir = _entity_dir(ws_dir, slug, kind=kind)
+    prog_path = edir / "progress.md"
+    if not prog_path.is_file():
+        return "refused no-progress", []
+    raw = _read(prog_path)
+    requested = list(dict.fromkeys(ids))
+    allow_fu = kind == "unit"
+    found: Dict[str, str] = {}
+    new_lines: List[str] = []
+    for line in raw.splitlines():
+        new_line = line
+        stripped = line.strip()
+        m = _TASK_LINE_RE.match(stripped)
+        if m:
+            tid = m.group(4)
+            if tid in requested:
+                if m.group(2) in ("x", "X"):
+                    found[tid] = "already-checked"
+                else:
+                    indent = line[: len(line) - len(line.lstrip())]
+                    new_line = f"{indent}- [x] {tid}  {m.group(5)}"
+                    found[tid] = "checked"
+        elif allow_fu:
+            m = _FU_RE.match(stripped)
+            if m and m.group(2) in requested:
+                fid = m.group(2)
+                if m.group(1) in ("x", "X"):
+                    found[fid] = "already-checked"
+                else:
+                    indent = line[: len(line) - len(line.lstrip())]
+                    new_line = f"{indent}- [x] {fid}  {m.group(3)}"
+                    found[fid] = "checked"
+        new_lines.append(new_line)
+    for rid in requested:
+        if rid not in found:
+            return f"refused missing:{rid}", []
+    newly = [i for i in requested if found[i] == "checked"]
+    if newly:
+        text = "\n".join(new_lines)
+        if raw.endswith("\n"):
+            text += "\n"
+        prog_path.write_text(text, encoding="utf-8")
+        return "checked", newly
+    return "already-checked", requested
+
+
 def apply_confirm_plan(ws_dir: Path, slug: str, plan_path: Path, *,
                        kind: str = "unit",
                        reason: Optional[str] = None,
@@ -443,6 +533,8 @@ def apply_confirm_plan(ws_dir: Path, slug: str, plan_path: Path, *,
             ("decision", _plan_done_payload(plan_str, digest))])
         return "migrated", [f"T{n}" for n in range(1, total + 1)]
     if total > 0:
+        if context and not migrate_only:
+            _maybe_append_context(log_path, context)
         return "already-has-tasks", []
     try:
         plan_text = plan_path.read_text(encoding="utf-8")
@@ -1278,6 +1370,11 @@ def _drifted(u: Unit) -> bool:
         return False
     rb = recorded_base(u)
     return rb is not None and u.pr.base != rb
+
+
+def unit_drifted(u: Unit) -> bool:
+    """Public wrapper for external executors."""
+    return _drifted(u)
 
 
 def unit_readiness(u: Unit, *, phase: Optional[str] = None) -> Optional[str]:

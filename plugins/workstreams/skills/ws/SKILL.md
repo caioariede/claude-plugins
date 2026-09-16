@@ -230,6 +230,8 @@ Derive at plan-pause confirmation via `confirm_plan.py`, not at plan save.
 
 **`ws-resume` is idempotent:** its actions are conditioned on the state it finds, and it appends a log line only on a *genuine* transition (plan / restack / decision / work note) — a no-op resume writes nothing. Never append a bare "resumed" line; the append-only log must not grow per invocation.
 
+**External executors:** any tool outside the `ws-resume` loop that implements a unit must locate it via exact ledger `branch=` match on `git` HEAD (same as `resolve_branch` / `infer_workstream`). Never hand-edit `progress.md`. Write the store only through `confirm_plan.py` (derive tasks when `tasks_total == 0`) and `check_progress.py` (check off `T<n>` / `F<n>`). Pre-flight with `exec_guard.py` — `abort:*` means run `ws-resume` / `ws-restack` first; `ok:loop|plan-pause|done` is safe to proceed. Executors must use the plan path recorded in `log.md`, not a diverging in-chat copy. Checking all `T<n>` does not make a unit code-complete while `## Follow-ups` boxes stay open.
+
 ## Plan path
 Resolve via `resolve_plan_path(design, slug)` in `ws_store.py` —
 `<design-dir>/<bare-slug>-plan.md` where `design-dir` is the directory
