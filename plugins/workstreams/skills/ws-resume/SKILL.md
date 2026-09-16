@@ -3,7 +3,7 @@ name: ws-resume
 description: The single verb for advancing a unit or spike at any stage — run it right after ws-start or ws-spike, to continue half-done tasks, finish scoped work, or run a store-only research spike to spec amend. Idempotent — safe to run anytime. For deciding which target comes next, use ws-next.
 argument-hint: "[unit-id|spike-id]"
 metadata:
-  version: "0.28.0"
+  version: "0.29.0"
   author: Caio Ariede
 ---
 
@@ -40,7 +40,7 @@ When `phase.py` prints `--- GATE: ... ---`, relay it, run the gate
 | `plan` | `hook-ws-resume-unplanned-before`, `hook-ws-resume-unplanned-after` | **Plan only — no code, no tasks.** Read charter + design (unit: `charter.md` + its `design:`; spike: `charter.md` + umbrella `design:`). Resolve plan path via SPEC §Plan path. Append `plan <absolute-path>` when absent. Run flavor `plan` op through plan save (`writing-plans` for superpowers — **stop before its Execution Handoff**). Re-run `phase.py`. **`none` flavor (units):** writes `T1..` inline and skips plan-pause. **Headless:** append `plan`, run `confirm_plan.py --kind <kind> --reason headless --context spec-driven-development=subagent`. |
 | *extension* | per gate / active flavor (SPEC §Flavor hooks) | Relay gate, run `action`, fire hooks, stop when `stop: true`, re-run `phase.py` on resume. |
 | `plan-pause` | `hook-ws-resume-plan-pause` | Relay `<kind>.plan-pause` gate. On confirmation run `confirm_plan.py <slug> --kind <kind>` (`--type` alias). Re-run `phase.py` → `loop`. Never derive tasks without confirmation. **Headless:** `confirm_plan.py --kind <kind> --reason headless --context spec-driven-development=subagent`. |
-| `loop` | `hook-ws-resume-loop-before` (once per invocation, when not just cleared plan-pause) | Work the first unchecked task in `progress.md`, check off, re-run `phase.py`. **Unit:** flavor `execute` policy (see `references/superpowers-execute.md`). **Spike:** store-scoped research loop; repo read-only except umbrella `design:`; writes to `artifacts/` and design spec only. |
+| `loop` | `hook-ws-resume-loop-before` (once per invocation, when not just cleared plan-pause) | Work the first unchecked task in `progress.md`, then `python3 <this-skill-dir>/scripts/check_progress.py <target-id> T<n>`, re-run `phase.py`. **Unit:** flavor `execute` policy (see `references/superpowers-execute.md`). **Spike:** store-scoped research loop; repo read-only except umbrella `design:`; writes to `artifacts/` and design spec only. |
 | `blocked` | — | Blocked-awareness guard; stop. |
 | `done` | — | Relay `<kind>.done` gate; run `chain_ws_next` (SPEC §Gate actions); **hard stop**. Colloquial **go** does not override. `loop` never emits this gate. |
 

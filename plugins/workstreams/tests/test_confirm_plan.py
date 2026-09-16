@@ -180,6 +180,39 @@ class ConfirmPlanTests(unittest.TestCase):
                 ws_dir, "u", plan, migrate_only=True)
             self.assertEqual(status2, "already-has-tasks")
 
+    def test_already_has_tasks_appends_stale_context(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            plan = store / "plan.md"
+            plan.write_text("### Task 1: Foo\n", encoding="utf-8")
+            write_ws(
+                store,
+                "2026-01-01-demo",
+                units_md=ledger('u  "U"  repo=o/r  branch=u'),
+                units={
+                    "u": {
+                        "progress": "## Tasks\n- [ ] T1  Foo\n\n## Follow-ups\n\n## Needs\n",
+                        "log": (
+                            f"- 2026-01-01T00:00Z  plan  {plan}\n"
+                            "- 2026-01-01T00:01Z  decision  "
+                            "context spec-driven-development=subagent\n"
+                        ),
+                    },
+                },
+            )
+            ws_dir = store / "2026-01-01-demo"
+            status, ids = S.apply_confirm_plan(
+                ws_dir,
+                "u",
+                plan,
+                context=("spec-driven-development", "inline"),
+            )
+            self.assertEqual(status, "already-has-tasks")
+            self.assertEqual(ids, [])
+            log_text = (ws_dir / "units" / "u" / "log.md").read_text(
+                encoding="utf-8")
+            self.assertIn("context spec-driven-development=inline", log_text)
+
 
 if __name__ == "__main__":
     unittest.main()
