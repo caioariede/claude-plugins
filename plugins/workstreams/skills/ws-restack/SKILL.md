@@ -3,7 +3,7 @@ name: ws-restack
 description: Use when a unit's base PR merged and its branch must move onto a new base, or when GitHub auto-retargeted a dependent PR and the local branch needs realigning.
 argument-hint: "[unit-id] [new-base]"
 metadata:
-  version: "0.3.1"
+  version: "0.3.2"
   author: Caio Ariede
 ---
 
@@ -19,3 +19,8 @@ metadata:
 3. Reconcile per SPEC §Restack reconciliation. When *we* initiate (the PR's base is unchanged remotely), also run the active `forge` flavor's `pr-retarget` first. On conflicts, stop and report.
 
 Auto case (GitHub already retargeted): skip the `pr-retarget` — SPEC §Restack reconciliation.
+
+Automatic restack (ws-next / ws-resume prepare / exec_guard)
+only fires for an OPEN PR whose GitHub base left the recorded
+base. This command is explicit: it still rebases when invoked,
+even if the live PR is MERGED or CLOSED.

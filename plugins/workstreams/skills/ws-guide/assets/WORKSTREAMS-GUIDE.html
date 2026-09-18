@@ -439,7 +439,7 @@
     <h1>Workstreams</h1>
     <p class="subtitle">Parallel, disposable worktrees with a durable ledger</p>
     <p class="tagline">Spin up isolated worktrees for every unit of work, throw them away when they merge, and keep one ledger that always knows where each branch stands.</p>
-    <p class="version">Version 0.41.0 · September 2026</p>
+    <p class="version">Version 0.42.1 · September 2026</p>
   </div>
 
   <!-- TABLE OF CONTENTS -->
@@ -473,7 +473,7 @@
   units/&lt;unit-id&gt;/
     charter.md           # STATIC: why this unit exists — the north star
     progress.md          # MUTABLE current state: Tasks + Follow-ups checklists
-    log.md               # APPEND-ONLY: created, dropped, restack, decision, note
+    log.md               # APPEND-ONLY: created, dropped, restack, merged, decision, note
     prewalk.md           # optional: read-only exploration digest (superpowers-prewalk)
     critic.md            # optional: post-complete review (review/ws-critic)
   spikes/&lt;slug&gt;/
@@ -576,7 +576,7 @@ Creates a spike sibling to units: appends <code>spikes.md</code>, seeds <code>sp
 <div class="cmd-head" id="cmd-ws-resume"><span class="cmd-name">ws-resume</span><span class="cmd-sig">[unit-id|spike-id]</span></div>
 <p class="cmd-when"><b>Use when</b> resuming or continuing an existing unit or spike, or picking work back up from inside its worktree (units only).</p>
 <div class="cmd-body">
-Dispatches by kind after resolving the bare slug against both ledgers. <b>Units:</b> with no argument, infers from the current worktree's branch; ensures the worktree exists, reconciles base drift, then plans/executes/ships via flavor ops. When <code>spec-driven-development=superpowers-prewalk</code>, unit phases run <code>plan</code> → <code>ws-prewalk</code> → hard stop → <code>plan-pause</code> → <code>loop</code> — see <a href="#prewalk-flavor">Prewalk</a>. When <code>review=ws-critic</code>, completed units run a fresh read-only review between <code>loop</code> and <code>ship-pause</code> — see <a href="#critic-flavor">Critic</a>. Pass <code>phase.py --skip-extension prewalk</code> or <code>--skip-extension critic</code> to bypass those phases once. <code>/ws-resume</code> must run in the parent session, not a subagent. <b>Spikes:</b> always need an explicit id; store-scoped research loop — no worktree, no ship phase — plan tasks, work in <code>artifacts/</code>, amend the umbrella design spec on the final task, then route via <code>ws-next</code> when spike-complete. Spikes skip prewalk and critic.
+Dispatches by kind after resolving the bare slug against both ledgers. <b>Units:</b> with no argument, infers from the current worktree's branch; ensures the worktree exists; runs <code>record_merged.py</code> (append <code>merged pr=&lt;n&gt;</code> audit on first MERGED sighting); runs <code>exec_guard.py</code> — restack only on <code>abort:drifted</code> (OPEN PR whose GitHub base left the recorded base; MERGED/CLOSED are not drifted); then plans/executes via flavor ops. When <code>spec-driven-development=superpowers-prewalk</code>, unit phases run <code>plan</code> → <code>ws-prewalk</code> → hard stop → <code>plan-pause</code> → <code>loop</code> — see <a href="#prewalk-flavor">Prewalk</a>. When <code>review=ws-critic</code>, completed units run a fresh read-only review between <code>loop</code> and <code>ship-pause</code> — see <a href="#critic-flavor">Critic</a>. Pass <code>phase.py --skip-extension prewalk</code> or <code>--skip-extension critic</code> to bypass those phases once. <code>/ws-resume</code> must run in the parent session, not a subagent. <b>Spikes:</b> always need an explicit id; store-scoped research loop — no worktree, no ship phase — plan tasks, work in <code>artifacts/</code>, amend the umbrella design spec on the final task, then route via <code>ws-next</code> when spike-complete. Spikes skip prewalk and critic.
 </div>
 <pre class="cmd-ex">$ /ws-resume add-is-template-flag
 $ /ws-resume audit-auth-flows</pre>
@@ -875,7 +875,7 @@ checklist, diff, and tests, and records the missing plan context.</p>
 │   └── &lt;unit-id&gt;/
 │       ├── charter.md      # STATIC: why this unit exists (the north star)
 │       ├── progress.md     # MUTABLE work-state: Tasks + Follow-ups checklists
-│       ├── log.md          # APPEND-ONLY: created · dropped · restack · decision · note
+│       ├── log.md          # APPEND-ONLY: created · dropped · restack · merged · decision · note
 │       └── prewalk.md      # optional: exploration digest (superpowers-prewalk)
 └── spikes/
     └── &lt;slug&gt;/
@@ -895,11 +895,11 @@ checklist, diff, and tests, and records the missing plan context.</p>
 </aside>
 
 <aside class="note note-rule">
-<b>log.md = append-only.</b> One line per event — <code>created</code>, <code>dropped</code>, <code>restack</code>, <code>decision</code>, <code>note</code>. Never edit or delete prior lines; the log never stores current state.
+<b>log.md = append-only.</b> One line per event — <code>created</code>, <code>dropped</code>, <code>restack</code>, <code>merged pr=&lt;n&gt;</code>, <code>decision</code>, <code>note</code>. <code>merged</code> is per-PR audit only; it does not drive status or drift. Never edit or delete prior lines; the log never stores current state.
 </aside>
 
 <aside class="note note-rule">
-<b>Nothing volatile is stored — derive it live.</b> Current branch comes from git, base and retargeting from <code>gh pr view --json baseRefName</code>, PR number and draft/ready/merged from GitHub, and status from a first-match cascade: dropped → merged → blocked → in-review → building.
+<b>Nothing volatile is stored — derive it live.</b> Current branch comes from git, base and retargeting from <code>gh pr view --json baseRefName</code>, PR number and draft/ready/merged from GitHub, and status from a first-match cascade: dropped → blocked → complete (all tasks and follow-ups checked) → building. Automatic restack (<code>ws-next</code>, <code>ws-resume</code> prepare, <code>exec_guard</code>) runs only when the live PR is <code>OPEN</code> and its base differs from the recorded base.
 </aside>
 </section>
 <section id="faq"><h2>Gotchas &amp; FAQ</h2>
@@ -932,7 +932,7 @@ checklist, diff, and tests, and records the missing plan context.</p>
 </tr>
 <tr>
 <td><b>Q:</b> GitHub auto-retargeted my dependent PR — do I still restack?</td>
-<td><b>A:</b> The realign still happens, but the <code>gh pr edit</code> step is skipped since GitHub already moved the base. <code>/ws-resume</code> also auto-reconciles: if the live <code>baseRefName</code> differs from the recorded base, it realigns and records a <code>restack</code> line before continuing.</td>
+<td><b>A:</b> For an <b>OPEN</b> dependent PR, the realign still happens, but the <code>gh pr edit</code> step is skipped since GitHub already moved the base. <code>/ws-resume</code> auto-reconciles only when <code>exec_guard</code> reports <code>abort:drifted</code>. Once the PR is <code>MERGED</code> or <code>CLOSED</code>, automatic restack stops — use explicit <code>/ws-restack</code> if you need to rebase the branch before opening the next PR.</td>
 </tr>
 <tr>
 <td><b>Q:</b> I opened a per-unit window and it didn't auto-start the agent.</td>
@@ -950,12 +950,16 @@ checklist, diff, and tests, and records the missing plan context.</p>
 <td><b>Q:</b> Can a workstream span multiple repos?</td>
 <td><b>A:</b> Yes. The store is global, not per-repo. Each unit records its own <code>repo=&lt;org/repo&gt;</code> (and branch) on its ledger line in <code>units.md</code>, so units of one workstream can live in different repositories.</td>
 </tr>
+<tr>
+<td><b>Q:</b> <code>ws-next</code> keeps suggesting restack on a merged PR.</td>
+<td><b>A:</b> After merge, GitHub retargets the PR onto the default branch while <code>log.md</code> still records the old stacked base — that used to look like forever-drift. Automatic restack now requires an <code>OPEN</code> PR; merged units route to resume or propose instead. Run <code>/ws-resume</code> once if you want a <code>merged pr=&lt;n&gt;</code> audit line in the log.</td>
+</tr>
 </tbody>
 </table>
 
 <aside class="note note-tip"><b>Optional window.</b> A per-unit window is optional — run <code>ws-resume</code> in your current session instead. If you do open one and it doesn't start the agent, run <code>claude</code> manually (a window only autostarts when the <code>worktree-management</code> flavor is configured to).</aside>
 
-<aside class="note note-tip"><b>Tip.</b> Read-only by design: <code>ws-board</code> never reconciles a base. Only <code>ws-restack</code> (explicit) and <code>ws-resume</code> (on detecting drift) move a branch onto a new base.</aside>
+<aside class="note note-tip"><b>Tip.</b> Read-only by design: <code>ws-board</code> and <code>ws-next</code> never reconcile a base. Automatic restack needs an <code>OPEN</code> PR with base drift; explicit <code>ws-restack</code> still rebases when you ask.</aside>
 </section>
 
 </body>

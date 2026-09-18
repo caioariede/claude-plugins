@@ -502,6 +502,36 @@ class EnumerateMoves(unittest.TestCase):
         ms = moves_of(mkws([u]))
         self.assertEqual([(m.unit, m.rule) for m in ms], [("a", "restack")])
 
+    def test_merged_pr_base_mismatch_does_not_restack(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
+                   pr=pr(12, "MERGED", False, "master"),
+                   log=[("t", "created", "base=feat-base")])
+        self.assertFalse(S.unit_drifted(u))
+        self.assertEqual(moves_of(mkws([u])), [])
+
+    def test_merged_pr_with_tasks_left_resumes(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=1,
+                   pr=pr(12, "MERGED", False, "master"),
+                   log=[("t", "created", "base=feat-base")])
+        ms = moves_of(mkws([u]))
+        self.assertEqual([(m.unit, m.rule) for m in ms], [("a", "resume")])
+
+    def test_closed_pr_base_mismatch_does_not_restack(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=2, tasks_done=1,
+                   pr=pr(12, "CLOSED", False, "master"),
+                   log=[("t", "created", "base=feat-base")])
+        self.assertFalse(S.unit_drifted(u))
+        self.assertEqual([(m.unit, m.rule) for m in moves_of(mkws([u]))],
+                         [("a", "resume")])
+
+    def test_open_draft_base_mismatch_still_restacks(self):
+        u = S.Unit(slug="a", branch="a", tasks_total=1, tasks_done=1,
+                   pr=pr(12, "OPEN", True, "master"),
+                   log=[("t", "created", "base=feat-base")])
+        self.assertTrue(S.unit_drifted(u))
+        ms = moves_of(mkws([u]))
+        self.assertEqual([(m.unit, m.rule) for m in ms], [("a", "restack")])
+
     def test_unit_without_tasks_says_so(self):
         u = S.Unit(slug="a", branch="a")
         self.assertEqual(moves_of(mkws([u]))[0].why, "no tasks planned yet")

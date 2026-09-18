@@ -2,7 +2,7 @@
 name: ws
 description: The shared contract (SPEC) for all ws-* workstream skills — store layout, file formats, IDs, status derivation, restack, and flavors. REQUIRED reading before any ws-* skill acts; every ws-* skill loads this first. Also use when asked how workstreams work, where workstream state lives, or when debugging the workstream store.
 metadata:
-  version: "0.30.0"
+  version: "0.31.0"
   author: Caio Ariede
 ---
 
@@ -22,7 +22,7 @@ Durable, cross-repo tracking for multi-unit work. **Worktrees are disposable cod
   units/<unit-id>/
     charter.md           # static: why this unit exists (unit-level workstream.md); set at ws-start, read by ws-resume
     progress.md          # MUTABLE current-state: Tasks + Follow-ups checklists (work-state SoT)
-    log.md               # APPEND-ONLY: created, dropped, restack, decision, note
+    log.md               # APPEND-ONLY: created, dropped, restack, merged, decision, note
     prewalk.md           # optional: exploration digest (superpowers-prewalk)
     critic.md            # optional: post-complete review (review/ws-critic)
   spikes/<slug>/
@@ -210,8 +210,13 @@ No `restack` or `completed` kind — terminal spike = derived `complete`.
 `T<n>`/`F<n>`/`N<n>` ids are monotonic per unit and never reused, even after check-off or removal. `## Needs` lines have **no checkbox** — a need's satisfied/open state is *derived* from its target (§Dependencies), never hand-marked; remove a line only on a genuine scope change (append a `decision` to `log.md`). `<target>` = a unit-id/bare-slug or a follow-up id (`<unit-id>:F<n>` / `WF<n>`); the note is optional free text.
 
 **`units/<unit-id>/log.md`** (append-only): `- <ts>  <kind>  <payload>`
-kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `decision <text>` · `note <text>` · `plan <absolute-path>`
+kinds: `created base=<b>` · `dropped <reason>` · `restack base=<new> was=<old>` · `merged pr=<n>` · `decision <text>` · `note <text>` · `plan <absolute-path>`
 No `completed` kind — terminal unit = derived `complete`.
+
+`merged pr=<n>` is audit: the forge PR number that reached MERGED.
+It does not drive status, needs, recorded base, or drift. One line
+per PR number; `ws-resume` appends via `record_merged.py` when live
+`pr-status` is MERGED and that `pr=` is not already a `merged` line.
 
 `plan` records the unit implementation plan path (superpowers flavor);
 append once at first save. `decision plan=done plan=<abs-path> digest=<8-hex> [reason=<reason>]`
@@ -228,9 +233,9 @@ heading in the unit plan file — `- [ ] T<n>  <Task N title>`,
 monotonic `T1..`. Last task owns verification (ws-resume plan convention).
 Derive at plan-pause confirmation via `confirm_plan.py`, not at plan save.
 
-**`ws-resume` is idempotent:** its actions are conditioned on the state it finds, and it appends a log line only on a *genuine* transition (plan / restack / decision / work note) — a no-op resume writes nothing. Never append a bare "resumed" line; the append-only log must not grow per invocation.
+**`ws-resume` is idempotent:** its actions are conditioned on the state it finds, and it appends a log line only on a *genuine* transition (plan / restack / merged / decision / work note) — a no-op resume writes nothing. Never append a bare "resumed" line; the append-only log must not grow per invocation.
 
-**External executors:** any tool outside the `ws-resume` loop that implements a unit must locate it via exact ledger `branch=` match on `git` HEAD (same as `resolve_branch` / `infer_workstream`). Never hand-edit `progress.md`. Write the store only through `confirm_plan.py` (derive tasks when `tasks_total == 0`) and `check_progress.py` (check off `T<n>` / `F<n>`). Pre-flight with `exec_guard.py` — `abort:*` means run `ws-resume` / `ws-restack` first; `ok:loop|plan-pause|done` is safe to proceed. Executors must use the plan path recorded in `log.md`, not a diverging in-chat copy. Checking all `T<n>` does not make a unit code-complete while `## Follow-ups` boxes stay open.
+**External executors:** any tool outside the `ws-resume` loop that implements a unit must locate it via exact ledger `branch=` match on `git` HEAD (same as `resolve_branch` / `infer_workstream`). Never hand-edit `progress.md`. Write the store only through `confirm_plan.py` (derive tasks when `tasks_total == 0`) and `check_progress.py` (check off `T<n>` / `F<n>`). `record_merged.py` is resume-only; executors do not write `merged` lines. Pre-flight with `exec_guard.py` — `abort:*` means run `ws-resume` / `ws-restack` first; `ok:loop|plan-pause|done` is safe to proceed. Executors must use the plan path recorded in `log.md`, not a diverging in-chat copy. Checking all `T<n>` does not make a unit code-complete while `## Follow-ups` boxes stay open.
 
 ## Plan path
 Resolve via `resolve_plan_path(design, slug)` in `ws_store.py` —
@@ -276,7 +281,20 @@ git rebase --onto origin/<new-base> $OLD
 ```
 Then append `restack base=<new-base> was=<recorded-base>` to `log.md`.
 
-**Gate:** compare the active `forge` flavor's `pr-status` base to the recorded base. If it is **unchanged** remotely, we are initiating — also run the `forge` flavor's `pr-retarget` first. If it has **already changed** (GitHub auto-retargeted when a base PR merged), skip the `pr-retarget`. Only `ws-restack` (explicit) and `ws-resume` (on detecting drift) reconcile; `ws-board` is read-only and never reconciles.
+**Gate:** automatic restack (ws-next restack move, ws-resume
+prepare, exec_guard `abort:drifted`) runs only when the unit is
+**drifted**: live `pr-status` `state` is `OPEN` and its base
+differs from the recorded base. `MERGED`, `CLOSED`, and missing
+PR are not drifted. When reconciling an OPEN drifted unit,
+compare the active `forge` flavor's `pr-status` base to the
+recorded base. If it is **unchanged** remotely, we are
+initiating — also run the `forge` flavor's `pr-retarget` first.
+If it has **already changed** (GitHub auto-retargeted when a
+base PR merged), skip the `pr-retarget`. Only `ws-restack`
+(explicit) and `ws-resume` (on detecting drift) reconcile;
+`ws-board` and `ws-next` are read-only and never reconcile.
+Explicit `ws-restack` still rebases when the user asks,
+including after merge, to prepare the branch for a later PR.
 
 ## Command scope
 

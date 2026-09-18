@@ -1363,10 +1363,17 @@ def _spike_readiness(sp: Spike) -> Optional[str]:
     return "no tasks planned yet"
 
 
+def pr_state(pr: Optional[PR]) -> str:
+    return (pr.state or "").upper() if pr else ""
+
+
 def _drifted(u: Unit) -> bool:
-    """PR base moved off the recorded base (GitHub retargeted, or the base
-    merged) with no restack reconciling it yet."""
+    # Automatic restack is an OPEN PR whose GitHub base
+    # left the recorded base. MERGED/CLOSED/missing PRs
+    # are not rebase work.
     if not (u.pr and u.pr.base):
+        return False
+    if pr_state(u.pr) != "OPEN":
         return False
     rb = recorded_base(u)
     return rb is not None and u.pr.base != rb
@@ -1375,6 +1382,32 @@ def _drifted(u: Unit) -> bool:
 def unit_drifted(u: Unit) -> bool:
     """Public wrapper for external executors."""
     return _drifted(u)
+
+
+_PR_FIELD_RE = re.compile(r'(?:^|\s)pr=(\d+)(?:\s|$)')
+
+
+def merged_logged(u: Unit, number: int) -> bool:
+    """True when log has kind `merged` with field pr=<number>."""
+    for _ts, kind, payload in u.log:
+        if kind != "merged":
+            continue
+        m = _PR_FIELD_RE.search(payload)
+        if m and int(m.group(1)) == number:
+            return True
+    return False
+
+
+def merged_pr_to_record(u: Unit) -> Optional[int]:
+    """PR number to append as `merged pr=<n>`, or None."""
+    if pr_state(u.pr) != "MERGED":
+        return None
+    n = u.pr.number
+    if not isinstance(n, int) or n < 1:
+        return None
+    if merged_logged(u, n):
+        return None
+    return n
 
 
 def unit_readiness(u: Unit, *, phase: Optional[str] = None) -> Optional[str]:
